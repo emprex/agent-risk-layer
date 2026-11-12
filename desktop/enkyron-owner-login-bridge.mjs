@@ -8,6 +8,7 @@ import path from 'node:path';
 import * as fs from 'node:fs/promises';
 import {constants as C} from 'node:fs';
 import pg from 'pg';
+import { resolveEnkyronDatabase } from './enkyron-uat-database.mjs';
 import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
 import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
 import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
@@ -85,9 +86,13 @@ async function main(){
   const operation=process.argv[2];
   if(!OPERATIONS.has(operation)||process.argv.length!==3)
     throw new Error('Unsupported Owner operation');
+  const dbTarget=resolveEnkyronDatabase();
+  // Owner credentials and provider-connected mail are OUT of scope for UAT.
+  // Never reach the live owner database in synthetic preview mode.
+  if(dbTarget.uat) throw new Error('ENKYRON UAT blocks Owner login and mail');
   const operator=os.userInfo().username;
   const pool=new pg.Pool({
-    host:'/var/run/postgresql',database:'arl_local',user:operator,
+    host:'/var/run/postgresql',database:dbTarget.database,user:operator,
     connectionTimeoutMillis:5000,max:1,
     options:"-c statement_timeout=10000 -c lock_timeout=4000"
   });

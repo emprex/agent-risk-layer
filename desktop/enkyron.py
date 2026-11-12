@@ -6,6 +6,7 @@ import hashlib
 from email.utils import parseaddr
 from datetime import datetime, timezone
 import json
+import os
 import re
 from decimal import Decimal, InvalidOperation
 import sys
@@ -195,6 +196,14 @@ class DesktopBridge:
         self.running = set()
 
     def call(self, action, arg="", payload=None, callback=None):
+        # ARL master readers use separate Python adapters. They must not
+        # accidentally inspect the live assessment DB during synthetic UAT.
+        if (os.environ.get("ENKYRON_UAT_DATABASE") is not None
+                or os.environ.get("ENKYRON_UAT_GUARD") is not None):
+            if action in ("operator-state", "evidence-summary", "evidence-pack"):
+                if callback:
+                    callback(None, "Assessment adapters disabled in ENK-03 UAT")
+                return
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
         if action in ("operator-state", "evidence-summary", "evidence-pack"):
@@ -985,9 +994,6 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_search.setPlaceholderText("Search registered companies…")
         self.crm_company_search.setMaxLength(100)
         company_toolbar.addWidget(self.crm_company_search, 1)
-        company_refresh = QPushButton("Refresh")
-        company_refresh.clicked.connect(self.load_companies)
-        company_toolbar.addWidget(company_refresh)
         self.crm_company_add = QPushButton("+ Add company")
         self.crm_company_add.setObjectName("primary")
         self.crm_company_add.setEnabled(False)
@@ -3698,9 +3704,10 @@ class EnkyronWindow(QMainWindow):
         if index == 0:
             self.load_sales_overview()
         if index == 2:
+            # Returning to CRM automatically reloads companies once.
+            # Canonical-ID selection is preserved across list reloads.
             self.crm_tabs.setCurrentIndex(0)
-            if not self.crm_company_loaded:
-                self.load_companies()
+            self.load_companies()
             if not self.crm_loaded:
                 self.load_prospects()
             if not self.crm_followup_loaded:
@@ -4096,6 +4103,20 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
+        self.refresh_selected_company_contacts(company_id)
+
+    def refresh_selected_company_contacts(self, company_id):
+        """Re-read contacts for the EXACT currently selected CRM company.
+
+        Used after a confirmed dossier contact save. Stale callbacks must
+        never render another company's contacts, including same-name firms.
+        """
+        row = self.crm_company_table.currentRow()
+        if (not company_id or company_id != self.crm_company_id
+                or row < 0 or row >= len(self.crm_company_items)
+                or self.crm_company_items[row].get("id") != company_id):
+            return
+        company = self.crm_company_items[row]
         self.crm_contact_seq += 1
         seq = self.crm_contact_seq
         self.crm_contacts_table.setRowCount(0)
@@ -5327,7 +5348,7 @@ class EnkyronWindow(QMainWindow):
         next_action_layout = QVBoxLayout(next_action_card)
         next_action_layout.setContentsMargins(16, 10, 16, 12)
         next_action_layout.setSpacing(5)
-        next_action_title = QLabel("RECORDED FOLLOW-UP")
+        next_action_title = QLabel("NEXT ACTION")
         next_action_title.setObjectName("crmDossierNextActionTitle")
         next_action_title.setStyleSheet(
             "font-size: 11px; font-weight: bold; color: #176e81; border: 0;"
@@ -5356,8 +5377,8 @@ class EnkyronWindow(QMainWindow):
         # Frequent tasks stay visible; extra sections are always one toggle away.
         self.crm_dossier_show_all = QCheckBox("Show all sections")
         self.crm_dossier_show_all.setToolTip(
-            "Include research links, commercial documents, ticket history "
-            "and audit sections, even when empty."
+            "Include optional research and commercial sections, even when empty. "
+            "Company History remains visible separately."
         )
         self.crm_dossier_show_all.toggled.connect(
             self.update_dossier_section_visibility
@@ -5422,6 +5443,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_snapshot = None
         self.crm_dossier_company_editor = None
         self.crm_dossier_company_pending = False
+        self.crm_dossier_opportunity_saving = False
+        self.crm_dossier_opportunity_check_id = None
+        # Transport errors may hide a committed write: keep this dossier
+        # fail-closed until the operator reviews and reopens it.
+        self.crm_dossier_opportunity_uncertain = False
         dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
@@ -5531,6 +5557,8 @@ class EnkyronWindow(QMainWindow):
             def received(data, error):
                 if (not dialog.isVisible() or sequence != state["seq"]):
                     return
+                previous_item = selected()
+                previous_id = previous_item.get("id") if previous_item else None
                 state["items"] = []
                 table.setRowCount(0)
                 if error or not data or not data.get("available"):
@@ -5560,6 +5588,16 @@ class EnkyronWindow(QMainWindow):
                     )
                     for col, value in enumerate(values):
                         table.setItem(row, col, QTableWidgetItem(str(value)))
+                if company_id:
+                    restore_row = next(
+                        (index for index, item in enumerate(state["items"])
+                         if previous_id and item.get("id") == previous_id),
+                        -1
+                    )
+                    if restore_row < 0 and len(state["items"]) == 1:
+                        restore_row = 0
+                    if restore_row >= 0:
+                        table.selectRow(restore_row)
                 notice.setText(
                     "Showing {} company follow-ups{}".format(
                         len(state["items"]),
@@ -5571,13 +5609,17 @@ class EnkyronWindow(QMainWindow):
 
         def load_selected():
             item = selected()
-            if company_id and item is not None:
-                action.setText(item.get("action_text") or "")
-                date = QDate.fromString(
-                    str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
-                )
-                if date.isValid():
-                    due.setDate(date)
+            if company_id:
+                if item is None:
+                    action.clear()
+                    due.setDate(QDate.currentDate().addDays(7))
+                else:
+                    action.setText(item.get("action_text") or "")
+                    date = QDate.fromString(
+                        str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
+                    )
+                    if date.isValid():
+                        due.setDate(date)
                 confirmation.setChecked(False)
             controls()
 
@@ -5845,7 +5887,8 @@ class EnkyronWindow(QMainWindow):
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
-                or self.crm_dossier_company_pending):
+                or self.crm_dossier_company_pending
+                or getattr(self, "crm_dossier_opportunity_saving", False)):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
         if self.crm_dossier_company_editor is not None:
@@ -5925,7 +5968,7 @@ class EnkyronWindow(QMainWindow):
         if not getattr(self, "crm_dossier_nav", None):
             return
         show_all = self.crm_dossier_show_all.isChecked()
-        primary = {"contacts", "opportunities", "qualifications", "activities"}
+        primary = {"contacts", "opportunities", "qualifications", "activities", "company_history"}
         # When folding advanced sections away, do not leave the content of a
         # hidden section on screen with no visible corresponding selection.
         if not show_all:
@@ -5942,6 +5985,12 @@ class EnkyronWindow(QMainWindow):
         dialog = self.crm_dossier_dialog
         company_id = self.crm_dossier_company_id
         if not dialog or not dialog.isVisible() or not company_id:
+            return
+        if self.crm_dossier_opportunity_saving:
+            QMessageBox.information(
+                dialog, "CRM save in progress",
+                "Review the opportunity save result before refreshing."
+            )
             return
         if self.crm_dossier_followup_editor is not None:
             QMessageBox.information(
@@ -5976,6 +6025,28 @@ class EnkyronWindow(QMainWindow):
                         "notice", "Company dossier is unavailable."
                     )
                 )
+                if getattr(self, "crm_dossier_opportunity_check_id", None):
+                    self.status.setText(
+                        "Opportunity write acknowledged; dossier re-read unavailable. "
+                        "Inspect CRM records before retrying."
+                    )
+                if self.crm_dossier_opportunity_uncertain:
+                    self.status.setText(
+                        "Opportunity save outcome uncertain; dossier unavailable. "
+                        "Inspect company records before another attempt."
+                    )
+                return
+            if (not isinstance(data.get("company"), dict)
+                    or data["company"].get("id") != company_id):
+                self.crm_dossier_notice.setText(
+                    "CRM dossier identity mismatch. No company details loaded."
+                )
+                if (self.crm_dossier_opportunity_check_id is not None
+                        or self.crm_dossier_opportunity_uncertain):
+                    self.status.setText(
+                        "Opportunity save not verified: company identity mismatch. "
+                        "Review company records before retrying."
+                    )
                 return
             company = data["company"]
             self.crm_dossier_company_snapshot = dict(company)
@@ -6014,16 +6085,43 @@ class EnkyronWindow(QMainWindow):
                     section_count("activities"), section_count("commercial_docs")
                 )
             )
-            opportunities = (sections.get("opportunities") or {}).get("items") or []
+            opportunity_section = sections.get("opportunities") or {}
+            opportunities = opportunity_section.get("items") or []
+            if self.crm_dossier_opportunity_uncertain:
+                self.status.setText(
+                    "Previous opportunity save outcome uncertain; review the "
+                    "visible company records and history before retrying."
+                )
+            awaiting_id = getattr(self, "crm_dossier_opportunity_check_id", None)
+            if awaiting_id:
+                verified = any(
+                    item.get("opportunity_id") == awaiting_id
+                    and item.get("company_id") == company_id
+                    for item in opportunities
+                )
+                if verified:
+                    self.crm_dossier_opportunity_check_id = None
+                    self.status.setText(
+                        "CRM opportunity verified in this company dossier. "
+                        "No service ticket created."
+                    )
+                else:
+                    self.status.setText(
+                        "Opportunity write acknowledged, but not confirmed in this "
+                        "dossier preview. Review the full CRM record before retrying."
+                    )
             next_action = next(
                 (str(item.get("next_action")).strip() for item in opportunities
                  if item.get("next_action") and str(item.get("next_action")).strip()),
                 None
             )
-            self.crm_dossier_next_action.setText(
-                "Latest recorded follow-up: " + next_action
+            opportunity_action = (
+                "Opportunity next action: " + next_action
                 if next_action else
-                "No next action recorded in the visible opportunities."
+                "No opportunity next action recorded."
+            )
+            self.crm_dossier_next_action.setText(
+                "Checking company follow-ups… " + opportunity_action
             )
             # Company tasks are independent of commercial opportunities.
             # Guard against stale callbacks when a dossier is refreshed.
@@ -6032,6 +6130,10 @@ class EnkyronWindow(QMainWindow):
                         or company_id != self.crm_dossier_company_id):
                     return
                 if error or not result or not result.get("available"):
+                    self.crm_dossier_next_action.setText(
+                        "Company follow-up status unavailable. "
+                        + opportunity_action
+                    )
                     return
                 open_tasks = [
                     item for item in result.get("items", [])
@@ -6044,6 +6146,10 @@ class EnkyronWindow(QMainWindow):
                             format_followup_due(task.get("due_date"), "research"),
                             task.get("action_text") or ""
                         )
+                    )
+                else:
+                    self.crm_dossier_next_action.setText(
+                        "No open company follow-ups. " + opportunity_action
                     )
             self.bridge.call(
                 "crm-company-followups", company_id,
@@ -6089,20 +6195,13 @@ class EnkyronWindow(QMainWindow):
                     ("Status", "status"), ("Revision", "revision"),
                     ("Recorded", "recorded_at"), ("Proposal ID", "proposal_id")
                 ]),
-                ("ticket_history", "Ticket history", [
-                    ("Ticket", "ticket_number"), ("Record", "record_kind"),
-                    ("Type", "record_type"), ("Operator", "actor"),
-                    ("Recorded", "recorded_at"), ("Source ID", "source_id")
-                ]),
-                ("audit_events", "CRM audit", [
-                    ("Record", "resource_kind"), ("Action", "event_type"),
-                    ("Record ID", "resource_id"), ("Operator", "actor_local"),
-                    ("Recorded", "created_at")
-                ]),
-                ("audit_changes", "Field changes", [
-                    ("Record", "resource_kind"), ("Record ID", "resource_id"),
-                    ("Version", "new_version"), ("Fields", "changed_fields"),
-                    ("Operator", "actor_local"), ("Recorded", "recorded_at")
+                # One human-readable chronological audit per company.
+                # Original source events remain append-only and independent.
+                ("company_history", "Company History", [
+                    ("Recorded", "recorded_at"), ("Record", "resource_kind"),
+                    ("Action", "action"), ("Summary", "summary"),
+                    ("Operator", "actor_local"), ("Record ID", "resource_id"),
+                    ("Event ID", "event_id")
                 ])
             ]
             # Keep an unsaved activity draft when the operator refreshes.
@@ -6142,7 +6241,7 @@ class EnkyronWindow(QMainWindow):
                     )
                     ticket_notice.setWordWrap(True)
                     page_layout.addWidget(ticket_notice)
-                if section.get("more"):
+                if section.get("more") and section_id != "company_history":
                     limit_notice = QLabel(
                         "Showing first {} of {} records. "
                         "Use the corresponding CRM view for more.".format(
@@ -6342,6 +6441,48 @@ class EnkyronWindow(QMainWindow):
                             page_layout.addWidget(
                                 add_contact, alignment=Qt.AlignmentFlag.AlignRight
                             )
+                        else:
+                            # ENK-03: reuse the existing company-only write path.
+                            # No ticket, contact or assessment is created.
+                            add_opportunity = QPushButton("New opportunity")
+                            add_opportunity.setObjectName("crmDossierNewOpportunity")
+                            add_opportunity.setMaximumWidth(190)
+                            # Mirror the backend's company-only uniqueness rule
+                            # for visible records; backend remains authoritative.
+                            direct_exists = any(
+                                item.get("company_id") == company_id
+                                and item.get("source_ticket_id") is None
+                                for item in rows
+                            )
+                            add_opportunity.setEnabled(
+                                not self.crm_dossier_opportunity_saving
+                                and self.crm_dossier_opportunity_check_id is None
+                                and not self.crm_dossier_opportunity_uncertain
+                                and not direct_exists
+                            )
+                            if direct_exists:
+                                add_opportunity.setText("Opportunity already recorded")
+                                # The disabled label is longer than the 190px action
+                                # control. Fit this one status to its real font size;
+                                # do not enlarge the regular New opportunity button.
+                                add_opportunity.setFixedWidth(max(
+                                    add_opportunity.sizeHint().width(),
+                                    add_opportunity.fontMetrics().horizontalAdvance(
+                                        add_opportunity.text()
+                                    ) + 44
+                                ))
+                                add_opportunity.setToolTip(
+                                    "Use the existing opportunity above. "
+                                    "No duplicate company-only lead is created."
+                                )
+                            add_opportunity.clicked.connect(
+                                lambda _checked=False, scoped_company=company_id:
+                                self.open_dossier_direct_opportunity(scoped_company)
+                            )
+                            page_layout.addWidget(
+                                add_opportunity,
+                                alignment=Qt.AlignmentFlag.AlignRight
+                            )
                         if not rows:
                             empty = QLabel(
                                 "No contacts recorded for this company yet."
@@ -6445,9 +6586,261 @@ class EnkyronWindow(QMainWindow):
                                 )
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
+                    elif section_id == "company_history":
+                        # A readable, expandable story: one company, one history,
+                        # chronological by default. Page reads are scoped by
+                        # immutable IDs; no interpretation of a contact's name.
+                        state = {
+                            "items": list(reversed(rows)) if count <= 20 else [],
+                            "page": 0, "total": count, "order": "oldest",
+                            "pending": False, "request": 0,
+                            "expanded": None
+                        }
+                        story_header = QHBoxLayout()
+                        story_title = QLabel("COMPANY STORY")
+                        story_title.setStyleSheet("font-weight: bold;")
+                        story_header.addWidget(story_title)
+                        story_header.addStretch()
+                        story_order = QComboBox()
+                        story_order.setObjectName("crmCompanyHistoryOrder")
+                        story_order.addItem("Oldest first", "oldest")
+                        story_order.addItem("Newest first", "newest")
+                        story_order.setToolTip(
+                            "Change reading order without changing stored events."
+                        )
+                        story_header.addWidget(story_order)
+                        page_layout.addLayout(story_header)
+
+                        story_scroll = QScrollArea()
+                        story_scroll.setObjectName("crmCompanyHistoryStory")
+                        story_scroll.setWidgetResizable(True)
+                        story_scroll.setFrameShape(QFrame.Shape.NoFrame)
+                        story_container = QWidget()
+                        story_cards = QVBoxLayout(story_container)
+                        story_cards.setContentsMargins(5, 4, 5, 4)
+                        story_cards.setSpacing(9)
+                        story_scroll.setWidget(story_container)
+                        page_layout.addWidget(story_scroll, 1)
+
+                        controls = QHBoxLayout()
+                        previous = QPushButton("Previous page")
+                        previous.setObjectName("crmCompanyHistoryPrevious")
+                        following = QPushButton("Next page")
+                        following.setObjectName("crmCompanyHistoryNext")
+                        page_status = QLabel("")
+                        page_status.setObjectName("crmCompanyHistoryPageStatus")
+                        controls.addWidget(previous)
+                        controls.addWidget(page_status)
+                        controls.addWidget(following)
+                        controls.addStretch()
+                        page_layout.addLayout(controls)
+
+                        def render_story(data=state, cards=story_cards):
+                            while cards.count():
+                                item = cards.takeAt(0)
+                                widget = item.widget()
+                                if widget is not None:
+                                    widget.setParent(None)
+                                    widget.deleteLater()
+                            if not data["items"]:
+                                info = QLabel(
+                                    "Loading history…" if data["pending"]
+                                    else "No recorded events on this page."
+                                )
+                                info.setObjectName("crmCompanyHistoryEmpty")
+                                cards.addWidget(info)
+                            for index, event in enumerate(data["items"]):
+                                event_id = str(event.get("event_id") or "")
+                                absolute_number = data["page"] * 20 + index + 1
+                                record_kind = str(event.get("resource_kind") or "Record")
+                                action = str(event.get("action") or "recorded")
+                                date = display_date(event.get("recorded_at"))
+                                actor = str(event.get("actor_local") or "Unknown")
+                                summary = str(event.get("summary") or "")
+                                card = QFrame()
+                                card.setObjectName("crmCompanyHistoryCard")
+                                card.setStyleSheet(
+                                    "QFrame#crmCompanyHistoryCard { "
+                                    "background: #f7fafc; border: 1px solid #d5e2ea; "
+                                    "border-radius: 6px; }"
+                                )
+                                content = QVBoxLayout(card)
+                                content.setContentsMargins(12, 8, 12, 9)
+                                content.setSpacing(4)
+                                heading = QPushButton(
+                                    "{}. {} · {}     {}".format(
+                                        absolute_number,
+                                        record_kind.replace("_", " ").title(),
+                                        action.replace("_", " ").title(), date
+                                    )
+                                )
+                                heading.setObjectName("crmCompanyHistoryExpand")
+                                heading.setToolTip("Click to expand or collapse this event")
+                                heading.setStyleSheet(
+                                    "text-align: left; font-weight: bold;"
+                                )
+                                content.addWidget(heading)
+                                short = QLabel(
+                                    summary if len(summary) <= 140
+                                    else summary[:137] + "…"
+                                )
+                                short.setObjectName("crmCompanyHistoryPreview")
+                                short.setTextFormat(Qt.TextFormat.PlainText)
+                                short.setWordWrap(True)
+                                content.addWidget(short)
+                                if data["expanded"] == event_id:
+                                    full = QLabel(
+                                        "Recorded by: {}\n\n"
+                                        "Full recorded summary:\n{}\n\n"
+                                        "Record ID: {}\nEvent ID: {}".format(
+                                            actor, summary,
+                                            event.get("resource_id") or "", event_id
+                                        )
+                                    )
+                                    full.setObjectName("crmCompanyHistoryDetail")
+                                    full.setTextFormat(Qt.TextFormat.PlainText)
+                                    full.setWordWrap(True)
+                                    full.setTextInteractionFlags(
+                                        Qt.TextInteractionFlag.TextSelectableByMouse
+                                    )
+                                    full.setStyleSheet(
+                                        "background: white; padding: 8px; "
+                                        "border-radius: 4px;"
+                                    )
+                                    content.addWidget(full)
+                                heading.clicked.connect(
+                                    lambda _checked=False, ident=event_id,
+                                           data_ref=data:
+                                    expand_event(ident, data_ref)
+                                )
+                                cards.addWidget(card)
+                            cards.addStretch()
+
+                        def expand_event(ident, data=state):
+                            data["expanded"] = (
+                                None if data["expanded"] == ident else ident
+                            )
+                            render_story()
+
+                        def update_history_navigation(
+                                data=state, prev=previous, nex=following,
+                                status=page_status):
+                            start = data["page"] * 20
+                            end = start + len(data["items"])
+                            status.setText(
+                                "Loading events…" if data["pending"] else
+                                "Events {}–{} of {}".format(
+                                    start + 1 if end else 0, end, data["total"]
+                                )
+                            )
+                            prev.setEnabled(
+                                not data["pending"] and data["page"] > 0
+                            )
+                            nex.setEnabled(
+                                not data["pending"] and end < data["total"]
+                            )
+
+                        def load_history_page(
+                                target, data=state, company_scope=company_id,
+                                window=dialog, load_seq=seq):
+                            if target < 0 or target > 10000:
+                                return
+                            if data["pending"]:
+                                return
+                            data["pending"] = True
+                            data["request"] += 1
+                            request = data["request"]
+                            order = data["order"]
+                            update_history_navigation()
+                            if not data["items"]:
+                                render_story()
+
+                            def received_page(result, error):
+                                if (not window.isVisible()
+                                        or load_seq != self.crm_dossier_seq
+                                        or company_scope != self.crm_dossier_company_id
+                                        or data["request"] != request
+                                        or data["order"] != order):
+                                    return
+                                data["pending"] = False
+                                if (error or not isinstance(result, dict)
+                                        or not result.get("available")
+                                        or result.get("page") != target
+                                        or result.get("order") != order
+                                        or not isinstance(result.get("items"), list)):
+                                    data["items"] = []
+                                    render_story()
+                                    update_history_navigation()
+                                    page_status.setText(
+                                        "History unavailable — no data changed."
+                                    )
+                                    return
+                                data["page"] = target
+                                data["items"] = result["items"]
+                                data["total"] = int(result.get("total", 0))
+                                data["expanded"] = (
+                                    str(data["items"][0].get("event_id"))
+                                    if data["items"] else None
+                                )
+                                render_story()
+                                update_history_navigation()
+
+                            self.bridge.call(
+                                "crm-company-history",
+                                payload={"company_id": company_scope,
+                                         "page": target, "order": order},
+                                callback=received_page
+                            )
+
+                        def change_history_order(
+                                _index, data=state, initial=rows):
+                            requested = story_order.currentData()
+                            if requested == data["order"]:
+                                return
+                            data["request"] += 1  # Invalidate old callbacks.
+                            data["pending"] = False
+                            data["order"] = requested
+                            data["page"] = 0
+                            data["expanded"] = None
+                            if data["total"] <= 20:
+                                data["items"] = (
+                                    list(reversed(initial))
+                                    if requested == "oldest" else list(initial)
+                                )
+                                data["expanded"] = (
+                                    str(data["items"][0].get("event_id"))
+                                    if data["items"] else None
+                                )
+                                render_story()
+                                update_history_navigation()
+                            else:
+                                data["items"] = []
+                                render_story()
+                                load_history_page(0)
+
+                        story_order.currentIndexChanged.connect(
+                            change_history_order
+                        )
+                        previous.clicked.connect(
+                            lambda _checked=False: load_history_page(
+                                state["page"] - 1
+                            )
+                        )
+                        following.clicked.connect(
+                            lambda _checked=False: load_history_page(
+                                state["page"] + 1
+                            )
+                        )
+                        if state["items"]:
+                            state["expanded"] = str(
+                                state["items"][0].get("event_id")
+                            )
+                        render_story()
+                        update_history_navigation()
+                        if count > 20:
+                            load_history_page(0)
                     elif section_id in {
-                        "prospects", "tickets", "drafts",
-                        "ticket_history", "audit_events", "audit_changes"
+                        "prospects", "tickets", "drafts"
                     } and len(rows) <= 4:
                         if not rows:
                             empty_hints = {
@@ -6996,6 +7389,9 @@ class EnkyronWindow(QMainWindow):
                 return
             finish()
             self.refresh_company_dossier()
+            # After a confirmed save, keep the parent Companies & Contacts
+            # pane consistent without asking the operator to press Refresh.
+            self.refresh_selected_company_contacts(company_id)
 
         def submit():
             if (state["pending"] or state["failed"] or
@@ -7531,6 +7927,135 @@ class EnkyronWindow(QMainWindow):
         self.crm_ticket_opportunity_button.setEnabled(
             active and self.crm_ticket_items[row].get("status") != "closed"
             if active else False
+        )
+
+    def open_dossier_direct_opportunity(self, company_id):
+        """Create one company-only opportunity without leaving the 360 dossier."""
+        dialog = self.crm_dossier_dialog
+        company = self.crm_dossier_company_snapshot
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or not isinstance(company, dict)
+                or company.get("id") != company_id
+                or self.crm_dossier_opportunity_saving):
+            return
+        if self.crm_dossier_opportunity_uncertain:
+            QMessageBox.information(
+                dialog, "Review uncertain save",
+                "The previous save response was uncertain. Inspect the "
+                "company's opportunities and history before starting another "
+                "attempt. Close and reopen the dossier after review."
+            )
+            return
+        if self.crm_dossier_opportunity_check_id is not None:
+            QMessageBox.information(
+                dialog, "Verify previous opportunity",
+                "The previous save response has not been verified in this "
+                "dossier. Review the CRM record before trying again."
+            )
+            return
+        if (self.crm_dossier_company_editor is not None
+                or self.crm_dossier_contact_editor is not None
+                or self.crm_dossier_followup_editor is not None):
+            QMessageBox.information(
+                dialog, "Finish current edit",
+                "Save or cancel the open company, contact or next-action edit first."
+            )
+            return
+        busy, drafts = self.company_dossier_pending_or_unsaved()
+        if busy or drafts:
+            QMessageBox.information(
+                dialog, "Finish current work",
+                "Finish pending saves or unsaved dossier work first."
+            )
+            return
+        name = str(company.get("name") or "")
+        if not 1 <= len(name) <= 300:
+            QMessageBox.warning(
+                dialog, "Company identity unavailable",
+                "Refresh the company dossier before creating an opportunity."
+            )
+            return
+        action, accepted = QInputDialog.getMultiLineText(
+            dialog, "ENKYRON · New company opportunity",
+            "Company: {}\n\nNext commercial action (5–1000 characters):".format(name),
+            "Prepare a written introduction and record replies in the CRM."
+        )
+        if not accepted:
+            return
+        action = action.strip()
+        if not 5 <= len(action) <= 1000:
+            QMessageBox.warning(
+                dialog, "Next action required",
+                "Enter a specific next step in 5–1000 characters."
+            )
+            return
+        if QMessageBox.question(
+            dialog, "Confirm commercial opportunity",
+            ("Create one internal CRM opportunity for {}?\n\n"
+             "No service ticket, email, contract, testing authorisation "
+             "or assessment is created.").format(name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        # Modal dialogs can process asynchronous callbacks while open.
+        # Never submit an action for a dossier that has changed underneath us.
+        if (dialog is not self.crm_dossier_dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or (self.crm_dossier_company_snapshot or {}).get("id") != company_id
+                or (self.crm_dossier_company_snapshot or {}).get("name") != name
+                or self.crm_dossier_opportunity_saving):
+            return
+        self.crm_dossier_opportunity_saving = True
+        button = dialog.findChild(QPushButton, "crmDossierNewOpportunity")
+        if button is not None:
+            button.setEnabled(False)
+        payload = {
+            "company_id": company_id,
+            "company_name_at_review": name,
+            "next_action": action,
+            "due_date": None,
+            "confirmed": True
+        }
+
+        def received(result, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or company_id != self.crm_dossier_company_id
+                    or not dialog.isVisible()):
+                return
+            self.crm_dossier_opportunity_saving = False
+            if (error or not isinstance(result, dict)
+                    or not result.get("id")
+                    or result.get("company_id") != company_id
+                    or result.get("source_ticket_id") is not None):
+                # The server might have committed before the transport failed.
+                # No second create from this open dossier until manual review.
+                self.crm_dossier_opportunity_uncertain = True
+                if button is not None:
+                    button.setEnabled(False)
+                self.status.setText(
+                    "Opportunity save outcome uncertain; inspect the company "
+                    "record before another attempt. No retry performed."
+                )
+                QMessageBox.warning(
+                    dialog, "Opportunity save not confirmed",
+                    "The outcome may be uncertain. Inspect the company "
+                    "opportunities and history before trying again; close and "
+                    "reopen the dossier only after that review. "
+                    + str(error or "")
+                )
+                return
+            self.crm_dossier_opportunity_check_id = result["id"]
+            self.status.setText(
+                "Opportunity write acknowledged; checking the company dossier…"
+            )
+            # Success is reported only after an exact-ID canonical readback.
+            self.refresh_company_dossier()
+
+        self.bridge.call(
+            "crm-company-direct-opportunity-create",
+            payload=payload, callback=received
         )
 
     def open_company_direct_opportunity(self):

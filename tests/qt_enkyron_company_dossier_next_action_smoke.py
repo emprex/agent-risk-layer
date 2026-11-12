@@ -20,6 +20,64 @@ class CompanyDossierNextActionSmoke(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_completed_company_followup_does_not_look_open(self):
+        old_call = DesktopBridge.call
+        calls = []
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.crm_company_id = COMPANY
+            window.open_company_dossier()
+            dossier_call = next(x for x in reversed(calls)
+                                if x[0] == "crm-company-dossier")
+            dossier_call[3]({
+                "available": True,
+                "company": {
+                    "id": COMPANY, "name": "Synthetic Ltd",
+                    "record_version": 1, "relationship_state": "prospect",
+                },
+                "sections": {
+                    "opportunities": {
+                        "items": [{
+                            "opportunity_id": "11111111-2222-4333-8444-777777777777",
+                            "company_id": COMPANY, "stage": "research",
+                            "next_action": "Discuss synthetic assessment scope",
+                        }], "total": 1, "more": False,
+                    },
+                    "company_history": {"items": [], "total": 0, "more": False}
+                },
+            }, None)
+            next_action = window.crm_dossier_next_action
+            self.assertIn("Checking company follow-ups", next_action.text())
+            company_call = next(x for x in reversed(calls)
+                                if x[0] == "crm-company-followups")
+            self.assertEqual(company_call[1], COMPANY)
+            company_call[3]({
+                "available": True, "items": [{
+                    "id": "99999999-2222-4333-8444-888888888888",
+                    "company_id": COMPANY, "status": "completed",
+                    "due_date": "2026-11-20",
+                    "action_text": "Prior reminder already completed",
+                }], "more": False,
+            }, None)
+            self.assertIn("No open company follow-ups", next_action.text())
+            self.assertIn("Opportunity next action", next_action.text())
+            self.assertNotIn("Prior reminder already completed", next_action.text())
+        finally:
+            if window:
+                if window.crm_dossier_dialog:
+                    window.crm_dossier_dialog.close_guard = lambda: True
+                    window.crm_dossier_dialog.reject()
+                window.close()
+                window.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.app.processEvents()
+                gc.collect()
+            DesktopBridge.call = old_call
+
     def test_follow_up_card_preserves_existing_records_and_actions(self):
         previous = DesktopBridge.call
         commands = []
@@ -45,7 +103,7 @@ class CompanyDossierNextActionSmoke(unittest.TestCase):
             self.assertIsNotNone(card)
             self.assertIsNotNone(title)
             self.assertIsNotNone(text)
-            self.assertEqual(title.text(), "RECORDED FOLLOW-UP")
+            self.assertEqual(title.text(), "NEXT ACTION")
             self.assertIs(text, window.crm_dossier_next_action)
             self.assertEqual(text.textFormat(), Qt.TextFormat.PlainText)
             self.assertTrue(text.wordWrap())
