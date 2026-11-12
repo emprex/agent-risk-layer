@@ -5949,7 +5949,7 @@ class EnkyronWindow(QMainWindow):
         if not getattr(self, "crm_dossier_nav", None):
             return
         show_all = self.crm_dossier_show_all.isChecked()
-        primary = {"contacts", "opportunities", "qualifications", "activities"}
+        primary = {"contacts", "opportunities", "qualifications", "activities", "company_history"}
         # When folding advanced sections away, do not leave the content of a
         # hidden section on screen with no visible corresponding selection.
         if not show_all:
@@ -6143,20 +6143,13 @@ class EnkyronWindow(QMainWindow):
                     ("Status", "status"), ("Revision", "revision"),
                     ("Recorded", "recorded_at"), ("Proposal ID", "proposal_id")
                 ]),
-                ("ticket_history", "Ticket history", [
-                    ("Ticket", "ticket_number"), ("Record", "record_kind"),
-                    ("Type", "record_type"), ("Operator", "actor"),
-                    ("Recorded", "recorded_at"), ("Source ID", "source_id")
-                ]),
-                ("audit_events", "CRM audit", [
-                    ("Record", "resource_kind"), ("Action", "event_type"),
-                    ("Record ID", "resource_id"), ("Operator", "actor_local"),
-                    ("Recorded", "created_at")
-                ]),
-                ("audit_changes", "Field changes", [
-                    ("Record", "resource_kind"), ("Record ID", "resource_id"),
-                    ("Version", "new_version"), ("Fields", "changed_fields"),
-                    ("Operator", "actor_local"), ("Recorded", "recorded_at")
+                # One human-readable chronological audit per company.
+                # Original source events remain append-only and independent.
+                ("company_history", "Company History", [
+                    ("Recorded", "recorded_at"), ("Record", "resource_kind"),
+                    ("Action", "action"), ("Summary", "summary"),
+                    ("Operator", "actor_local"), ("Record ID", "resource_id"),
+                    ("Event ID", "event_id")
                 ])
             ]
             # Keep an unsaved activity draft when the operator refreshes.
@@ -6198,8 +6191,11 @@ class EnkyronWindow(QMainWindow):
                     page_layout.addWidget(ticket_notice)
                 if section.get("more"):
                     limit_notice = QLabel(
-                        "Showing first {} of {} records. "
-                        "Use the corresponding CRM view for more.".format(
+                        ("Showing newest {} of {} recorded events. "
+                         "Older history exists but is not shown in this preview."
+                         if section_id == "company_history" else
+                         "Showing first {} of {} records. "
+                         "Use the corresponding CRM view for more.").format(
                             len(rows), count
                         )
                     )
@@ -6532,8 +6528,7 @@ class EnkyronWindow(QMainWindow):
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
                     elif section_id in {
-                        "prospects", "tickets", "drafts",
-                        "ticket_history", "audit_events", "audit_changes"
+                        "prospects", "tickets", "drafts", "company_history"
                     } and len(rows) <= 4:
                         if not rows:
                             empty_hints = {
