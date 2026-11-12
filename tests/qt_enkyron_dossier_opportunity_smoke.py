@@ -133,7 +133,7 @@ class DossierOpportunitySmoke(unittest.TestCase):
             callback("crm-company-dossier")(dossier_data(), None)
             self.assertIn("not confirmed", window.status.text())
             self.assertEqual(window.crm_dossier_opportunity_check_id, OPPORTUNITY)
-            unverified_button = dialog.findChild(
+            unverified_button = window.crm_dossier_tabs.widget(3).findChild(
                 QPushButton, "crmDossierNewOpportunity"
             )
             self.assertFalse(unverified_button.isEnabled())
@@ -156,7 +156,7 @@ class DossierOpportunitySmoke(unittest.TestCase):
             self.assertIn("1", window.crm_dossier_nav.item(3).text())
             # Existing direct opportunity is visible; creating a duplicate
             # is disabled in UI and independently rejected by the backend.
-            final_button = dialog.findChild(
+            final_button = window.crm_dossier_tabs.widget(3).findChild(
                 QPushButton, "crmDossierNewOpportunity"
             )
             self.assertFalse(final_button.isEnabled())
