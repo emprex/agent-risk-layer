@@ -190,5 +190,162 @@ class DossierOpportunitySmoke(unittest.TestCase):
             DesktopBridge.call = previous
 
 
+    def test_ambiguous_save_failure_blocks_retry_even_after_refresh(self):
+        calls = []
+        previous = DesktopBridge.call
+
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+
+        def latest(command):
+            return next(c for c in reversed(calls) if c[0] == command)
+
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.crm_company_id = COMPANY
+            window.open_company_dossier()
+            initial = {
+                "available": True, "company": dict(COMPANY_DATA),
+                "sections": {"opportunities": {
+                    "items": [], "total": 0, "more": False
+                }}
+            }
+            latest("crm-company-dossier")[3](initial, None)
+            dialog = window.crm_dossier_dialog
+            new = dialog.findChild(QPushButton, "crmDossierNewOpportunity")
+            self.assertTrue(new.isEnabled())
+            with patch("desktop.enkyron.QInputDialog.getMultiLineText",
+                       return_value=("Review synthetic follow-up", True)), \\
+                 patch("desktop.enkyron.QMessageBox.question",
+                       return_value=QMessageBox.StandardButton.Yes):
+                new.click()
+            self.assertEqual(len([c for c in calls
+                                  if c[0] == "crm-company-direct-opportunity-create"]), 1)
+            # The bridge can lose the response *after* PostgreSQL committed.
+            # In this state immediate retry could create a duplicate.
+            with patch("desktop.enkyron.QMessageBox.warning") as warning:
+                latest("crm-company-direct-opportunity-create")[3](
+                    None, "synthetic transport failure after possible commit"
+                )
+                warning.assert_called_once()
+            self.assertFalse(window.crm_dossier_opportunity_saving)
+            self.assertTrue(window.crm_dossier_opportunity_uncertain)
+            self.assertFalse(new.isEnabled())
+            self.assertIn("uncertain", window.status.text().lower())
+            # Re-read showing zero records must NOT silently unlock a retry.
+            window.refresh_company_dossier()
+            latest("crm-company-dossier")[3](initial, None)
+            rebuilt = window.crm_dossier_tabs.widget(3).findChild(
+                QPushButton, "crmDossierNewOpportunity"
+            )
+            self.assertFalse(rebuilt.isEnabled())
+            with patch("desktop.enkyron.QMessageBox.information") as info:
+                window.open_dossier_direct_opportunity(COMPANY)
+                info.assert_called_once()
+            self.assertEqual(len([c for c in calls
+                                  if c[0] == "crm-company-direct-opportunity-create"]), 1)
+            self.assertIsNone(window.crm_dossier_opportunity_check_id)
+        finally:
+            if window:
+                if window.crm_dossier_dialog:
+                    window.crm_dossier_dialog.close_guard = lambda: True
+                    window.crm_dossier_dialog.reject()
+                window.close()
+                window.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.app.processEvents()
+                gc.collect()
+            DesktopBridge.call = previous
+
+    def test_selection_changes_cannot_cross_company_readback_scope(self):
+        calls = []
+        previous = DesktopBridge.call
+        other = "33333333-4444-4555-8666-777777777777"
+
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+
+        def latest(command):
+            return next(c for c in reversed(calls) if c[0] == command)
+
+        def dossier(company_id=COMPANY, has_opportunity=False):
+            company = dict(COMPANY_DATA)
+            company["id"] = company_id
+            company["name"] = ("Synthetic Other Ltd" if company_id == other
+                               else COMPANY_DATA["name"])
+            item = {
+                "opportunity_id": OPPORTUNITY, "company_id": company_id,
+                "source_ticket_id": None, "stage": "research",
+                "next_action": "Review the scoped introduction", "version": 1,
+                "due_date": None,
+            }
+            records = [item] if has_opportunity else []
+            return {
+                "available": True, "company": company,
+                "sections": {"opportunities": {
+                    "items": records, "total": len(records), "more": False
+                }}
+            }
+
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.crm_company_id = COMPANY
+            window.open_company_dossier()
+            latest("crm-company-dossier")[3](dossier(), None)
+            button = window.crm_dossier_dialog.findChild(
+                QPushButton, "crmDossierNewOpportunity"
+            )
+            with patch("desktop.enkyron.QInputDialog.getMultiLineText",
+                       return_value=("Review the scoped introduction", True)), \\
+                 patch("desktop.enkyron.QMessageBox.question",
+                       return_value=QMessageBox.StandardButton.Yes):
+                button.click()
+            write = latest("crm-company-direct-opportunity-create")
+            self.assertEqual(write[2]["company_id"], COMPANY)
+            # The parent CRM selection changes while the A dossier is open.
+            # A's existing request must never be retargeted to company B.
+            window.crm_company_id = other
+            write[3]({
+                "id": OPPORTUNITY, "company_id": COMPANY,
+                "source_ticket_id": None, "stage": "research", "version": 1,
+            }, None)
+            self.assertEqual(latest("crm-company-dossier")[1], COMPANY)
+            self.assertEqual(window.crm_dossier_opportunity_check_id, OPPORTUNITY)
+
+            # Even a faulty bridge callback carrying B's company record
+            # must be ignored, not painted into A's dossier or verified.
+            latest("crm-company-dossier")[3](dossier(other, True), None)
+            self.assertEqual(window.crm_dossier_company_snapshot["id"], COMPANY)
+            self.assertEqual(window.crm_dossier_opportunity_check_id, OPPORTUNITY)
+            self.assertIn("identity mismatch",
+                          window.crm_dossier_notice.text().lower())
+            self.assertNotIn("verified in this company", window.status.text().lower())
+            self.assertEqual(window.crm_company_id, other)
+            # A later correct exact-ID readback is allowed to verify A alone.
+            window.refresh_company_dossier()
+            self.assertEqual(latest("crm-company-dossier")[1], COMPANY)
+            latest("crm-company-dossier")[3](dossier(COMPANY, True), None)
+            self.assertIsNone(window.crm_dossier_opportunity_check_id)
+            self.assertIn("verified in this company", window.status.text().lower())
+            self.assertEqual(window.crm_company_id, other)
+            self.assertEqual(len([c for c in calls
+                                  if c[0] == "crm-company-direct-opportunity-create"]), 1)
+        finally:
+            if window:
+                if window.crm_dossier_dialog:
+                    window.crm_dossier_dialog.close_guard = lambda: True
+                    window.crm_dossier_dialog.reject()
+                window.close()
+                window.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.app.processEvents()
+                gc.collect()
+            DesktopBridge.call = previous
+
+
 if __name__ == "__main__":
     unittest.main()
