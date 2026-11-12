@@ -358,3 +358,26 @@ Real network fault injection and complete multi-user security testing
 remain out of scope. PR #583 stays draft/unmerged until explicit
 human acceptance.
 
+## Operator confirmation — ENK-03 three simulated failure tests (12 November 2026)
+
+The operator provided terminal evidence after safely updating the isolated Debian
+preview from `e2a23531` to `066f59b9440f0c10c37801601beb787a26ff2ca0`.
+Command run in `~/enkyron-ux-preview-583`:
+`QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -p 'qt_enkyron_dossier_opportunity_smoke.py' -v`.
+
+All **three tests PASS** on Debian:
+- `test_ambiguous_save_failure_blocks_retry_even_after_refresh`: ok
+- `test_company_only_creation_requires_confirmation_and_reloads_same_dossier`: ok
+- `test_selection_changes_cannot_cross_company_readback_scope`: ok
+
+Terminal summary: `Ran 3 tests in 0.513s` / `OK`.
+GitHub exact-head `066f59b9` ENKYRON Desktop and CI (including
+PostgreSQL integration) both SUCCESS.
+
+**Acceptance boundary:** this demonstrates repeatable *simulated native Qt
+fault paths* plus the earlier functional UAT and read-only PostgreSQL evidence.
+The test stubs the bridge: it does not prove real transport failure under
+server/network fault injection, complete cross-operator access control, or
+production readiness. No UAT or production database was written by these
+tests. Functional ENK-03 evidence is PASS; **formal human UAT-01 acceptance
+and PR merge remain separate decisions**, still pending.
