@@ -350,6 +350,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_uncertain = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
+        self.crm_qualification_saving = False
+        self.crm_qualification_uncertain = False
+        self.crm_qualification_flash = ""
         self.crm_ticket_seq = 0
         self.crm_ticket_items = []
         self.crm_link_dialog = None
@@ -5436,6 +5439,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_uncertain = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
+        self.crm_qualification_saving = False
+        self.crm_qualification_uncertain = False
+        self.crm_qualification_flash = ""
         self.crm_dossier_followup_editor = None
         self.crm_dossier_followup_saving = False
         self.crm_dossier_contact_editor = None
@@ -5887,6 +5893,7 @@ class EnkyronWindow(QMainWindow):
                 ("provider_submitted", "external_send_reported")):
             return True, ["Finish the open email draft before closing the dossier"]
         if (self.crm_dossier_activity_saving
+                or self.crm_qualification_saving
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
                 or self.crm_dossier_company_pending
@@ -6346,6 +6353,13 @@ class EnkyronWindow(QMainWindow):
                     )
                     qualification_hint.setWordWrap(True)
                     page_layout.addWidget(qualification_hint)
+                    if self.crm_qualification_flash:
+                        verified_note = QLabel(self.crm_qualification_flash)
+                        verified_note.setObjectName("crmQualificationVerifiedNotice")
+                        verified_note.setTextFormat(Qt.TextFormat.PlainText)
+                        verified_note.setWordWrap(True)
+                        page_layout.addWidget(verified_note)
+                        self.crm_qualification_flash = ""
                     review_form = QFormLayout()
                     self.crm_qualification_subject = QComboBox()
                     self.crm_qualification_subject.addItem(
@@ -6407,6 +6421,10 @@ class EnkyronWindow(QMainWindow):
                     review_footer.addStretch()
                     self.crm_qualification_save = QPushButton("Record review")
                     self.crm_qualification_save.setObjectName("primary")
+                    self.crm_qualification_save.setEnabled(
+                        not self.crm_qualification_saving
+                        and not self.crm_qualification_uncertain
+                    )
                     self.crm_qualification_save.clicked.connect(
                         self.record_company_qualification
                     )
@@ -7841,8 +7859,11 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call(command, draft_id, callback=received)
 
     def record_company_qualification(self):
+        """Record the manual commercial decision with exact company readback."""
         dialog = self.crm_dossier_dialog
-        if not dialog or not dialog.isVisible() or not self.crm_dossier_company_id:
+        if (not dialog or not dialog.isVisible() or not self.crm_dossier_company_id
+                or self.crm_qualification_saving or self.crm_qualification_uncertain
+                or not self.crm_qualification_save.isEnabled()):
             return
         rationale = self.crm_qualification_rationale.toPlainText().strip()
         if not 20 <= len(rationale) <= 1500:
@@ -7857,8 +7878,9 @@ class EnkyronWindow(QMainWindow):
                 "Please confirm that this is your own commercial review."
             )
             return
+        company_id = self.crm_dossier_company_id
         payload = {
-            "company_id": self.crm_dossier_company_id,
+            "company_id": company_id,
             "contact_id": self.crm_qualification_subject.currentData(),
             "fit_status": self.crm_qualification_fit.currentData(),
             "priority": self.crm_qualification_priority.currentData(),
@@ -7867,20 +7889,75 @@ class EnkyronWindow(QMainWindow):
             "next_action": self.crm_qualification_next.text().strip(),
             "confirmed": True
         }
+        self.crm_qualification_saving = True
         self.crm_qualification_save.setEnabled(False)
-        company_id = self.crm_dossier_company_id
 
         def received(data, error):
             if not dialog.isVisible() or company_id != self.crm_dossier_company_id:
                 return
-            if error or not data or not data.get("id"):
-                self.crm_qualification_save.setEnabled(True)
+            record_id = data.get("id") if isinstance(data, dict) else None
+            valid_ack = (
+                not error and isinstance(record_id, str)
+                and data.get("company_id") == company_id
+                and data.get("contact_id") == payload["contact_id"]
+                and data.get("fit_status") == payload["fit_status"]
+                and data.get("priority") == payload["priority"]
+            )
+            if not valid_ack:
+                self.crm_qualification_saving = False
+                self.crm_qualification_uncertain = True
+                self.crm_qualification_save.setEnabled(False)
                 QMessageBox.warning(
-                    dialog, "Review not saved",
-                    error or "Unable to record the qualification."
+                    dialog, "Qualification save not verified",
+                    "The outcome may be committed. Inspect Qualification and "
+                    "Company History before another attempt. No retry was sent. "
+                    + str(error or "")
                 )
                 return
-            self.refresh_company_dossier()
+
+            def verified(latest, check_error):
+                if not dialog.isVisible() or company_id != self.crm_dossier_company_id:
+                    return
+                company = latest.get("company") if isinstance(latest, dict) else None
+                sections = latest.get("sections") if isinstance(latest, dict) else None
+                quals = (sections or {}).get("qualifications") or {}
+                rows = quals.get("items") or []
+                matches = [
+                    item for item in rows
+                    if isinstance(item, dict) and item.get("id") == record_id
+                ] if isinstance(rows, list) else []
+                valid = (
+                    not check_error and latest.get("available") is True
+                    and isinstance(company, dict) and company.get("id") == company_id
+                    and len(matches) == 1
+                    and matches[0].get("contact_id") == payload["contact_id"]
+                    and matches[0].get("fit_status") == payload["fit_status"]
+                    and matches[0].get("priority") == payload["priority"]
+                    and matches[0].get("rationale") == payload["rationale"]
+                    and matches[0].get("next_action") ==
+                        (payload["next_action"] or None)
+                    and matches[0].get("source_reference") ==
+                        (payload["source_reference"] or None)
+                ) if isinstance(latest, dict) else False
+                self.crm_qualification_saving = False
+                if not valid:
+                    self.crm_qualification_uncertain = True
+                    self.crm_qualification_save.setEnabled(False)
+                    QMessageBox.warning(
+                        dialog, "Qualification readback not verified",
+                        "The exact review and company could not be confirmed "
+                        "from PostgreSQL. Inspect records before another attempt. "
+                        "No retry was sent."
+                    )
+                    return
+                self.crm_qualification_uncertain = False
+                self.crm_qualification_flash = (
+                    "Qualification verified in this company dossier. "
+                    "Manual commercial review only; no customer status changed."
+                )
+                self.refresh_company_dossier()
+
+            self.bridge.call("crm-company-dossier", company_id, callback=verified)
 
         self.bridge.call(
             "crm-record-qualification", payload=payload, callback=received
