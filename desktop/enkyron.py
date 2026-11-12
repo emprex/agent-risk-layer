@@ -371,6 +371,8 @@ class EnkyronWindow(QMainWindow):
         self._sent_followup_context = None
         self.mail_detached_window = None
         self.calendar_detached_window = None
+        self.batch_review_detached_window = None
+        self.batch_review_detach_placeholder = None
         self.mail_detach_placeholder = None
         self.calendar_detach_placeholder = None
         self.crm_company_followups_dialog = None
@@ -873,10 +875,20 @@ class EnkyronWindow(QMainWindow):
         self.batch_replay_results.setMaximumHeight(205)
         self.batch_replay_results.setVisible(False)
         evidence_l.addWidget(self.batch_replay_results)
+        # Preserve one live Qt matrix widget whether embedded or detached.
+        self.batch_review_panel = QWidget()
+        self.batch_review_panel.setObjectName("batchEvidenceReviewPanel")
+        review_layout = QVBoxLayout(self.batch_review_panel)
+        review_head = QHBoxLayout()
         self.batch_review_heading = section_title(
             "108-CONTROL EVIDENCE REVIEW MATRIX · READ-ONLY")
-        self.batch_review_heading.setVisible(False)
-        evidence_l.addWidget(self.batch_review_heading)
+        review_head.addWidget(self.batch_review_heading)
+        review_head.addStretch()
+        self.batch_review_detach_button = QPushButton("Open matrix in window")
+        self.batch_review_detach_button.setObjectName("batchEvidenceDetach")
+        self.batch_review_detach_button.clicked.connect(self.toggle_batch_review_window)
+        review_head.addWidget(self.batch_review_detach_button)
+        review_layout.addLayout(review_head)
         self.batch_review_table = QTableWidget(0, 6)
         self.batch_review_table.setObjectName("batchEvidenceReviewMatrix")
         self.batch_review_table.setHorizontalHeaderLabels(
@@ -888,17 +900,29 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.SelectionMode.SingleSelection)
         self.batch_review_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.batch_review_table.setMaximumHeight(260)
-        self.batch_review_table.setVisible(False)
+        self.batch_review_table.setWordWrap(False)
+        self.batch_review_table.verticalHeader().setDefaultSectionSize(31)
+        self.batch_review_table.setMinimumHeight(325)
+        self.batch_review_table.setMaximumHeight(390)
+        # Fill the unused width; keep long titles legible. The same settings
+        # apply when the actual table moves to a second monitor.
+        header = self.batch_review_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for index, width in [(0, 112), (2, 195), (3, 135),
+                             (4, 158), (5, 120)]:
+            self.batch_review_table.setColumnWidth(index, width)
         self.batch_review_table.itemSelectionChanged.connect(
             self.select_batch_review_control)
-        evidence_l.addWidget(self.batch_review_table)
+        review_layout.addWidget(self.batch_review_table, 1)
         self.batch_review_open = QPushButton(
             "Review selected control · no automatic decision…")
-        self.batch_review_open.setVisible(False)
         self.batch_review_open.setEnabled(False)
         self.batch_review_open.clicked.connect(self.open_control_review)
-        evidence_l.addWidget(self.batch_review_open)
+        review_layout.addWidget(self.batch_review_open)
+        self.batch_review_panel.setVisible(False)
+        self.evidence_layout = evidence_l
+        evidence_l.addWidget(self.batch_review_panel)
         self.static_collect_results = make_text_area()
         self.static_collect_results.setObjectName("ticketStaticCandidatePreview")
         self.static_collect_results.setMaximumHeight(165)
@@ -15878,9 +15902,7 @@ class EnkyronWindow(QMainWindow):
         self.batch_replay_results.clear()
         self.batch_replay_results.setVisible(False)
         self.batch_review_table.setRowCount(0)
-        self.batch_review_table.setVisible(False)
-        self.batch_review_heading.setVisible(False)
-        self.batch_review_open.setVisible(False)
+        self.batch_review_panel.setVisible(False)
         self.batch_review_open.setEnabled(False)
         self.kb001_candidate = None
         self.kb001_record_button.setEnabled(False)
@@ -16381,9 +16403,7 @@ class EnkyronWindow(QMainWindow):
             return
         self.batch_replay_button.setEnabled(False)
         self.batch_review_table.setRowCount(0)
-        self.batch_review_table.setVisible(False)
-        self.batch_review_heading.setVisible(False)
-        self.batch_review_open.setVisible(False)
+        self.batch_review_panel.setVisible(False)
         self.batch_review_open.setEnabled(False)
         self.batch_replay_results.setVisible(True)
         self.batch_replay_results.setPlainText(
@@ -16495,9 +16515,7 @@ class EnkyronWindow(QMainWindow):
                     if column == 1:
                         cell.setToolTip(str(item.get("category") or ""))
                     self.batch_review_table.setItem(index, column, cell)
-            self.batch_review_heading.setVisible(True)
-            self.batch_review_table.setVisible(True)
-            self.batch_review_open.setVisible(True)
+            self.batch_review_panel.setVisible(True)
             self.batch_review_open.setEnabled(False)
 
         self.bridge.call("batch-source-replay", ticket_id, callback=received)
