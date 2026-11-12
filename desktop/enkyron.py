@@ -5847,7 +5847,7 @@ class EnkyronWindow(QMainWindow):
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
                 or self.crm_dossier_company_pending
-                or self.crm_dossier_opportunity_saving):
+                or getattr(self, "crm_dossier_opportunity_saving", False)):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
         if self.crm_dossier_company_editor is not None:
