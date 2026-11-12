@@ -60,6 +60,86 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
             self.assertFalse(w.kb001_record_button.isVisible())
             self.assertFalse(w.kb001_record_button.isEnabled())
             self.assertIsNone(w.kb001_candidate)
+            # The recorded-evidence index begins with KB-001, not a legacy
+            # pilot control number. Every other control remains selectable.
+            self.assertEqual(w.record_control.value(), 1)
+            self.assertEqual(w.record_control.maximum(), 108)
+            w.record_control.setValue(13)
+            self.assertEqual(w.record_control.value(), 13)
+        finally:
+            self.dispose(w)
+
+    def test_active_assessment_control_drives_register_and_returns_to_same_control(self):
+        """KB-015 and KB-002 are followed, without writing control decisions."""
+        w = self.make_window()
+        operations = []
+        def fake(_bridge, action, arg="", payload=None, callback=None):
+            operations.append((action, payload))
+            if action == "control-queue":
+                callback({
+                    "available": True, "ticket_id": TICKET, "total": 108,
+                    "project_id": PROJECT, "snapshot_id": SNAP,
+                    "target_sha": SHA,
+                    "items": [
+                        {"control_id": "ARL-KB-{:03d}".format(n),
+                         "title": "Synthetic control", "stage": "applicability"}
+                        for n in range(1, 109)
+                    ],
+                    "stages": {"applicability": 108},
+                }, None)
+            elif action == "control-detail":
+                callback({
+                    "available": True, "control_id": payload["control_id"],
+                    "snapshot_id": SNAP, "stage": "applicability",
+                    "applicability_status": "context_required",
+                    "confirmed_facts": [],
+                }, None)
+            elif action == "evidence-register":
+                callback({
+                    "available": True, "control_id": payload["control_id"],
+                    "integrity": "master_verified", "snapshot_id": SNAP,
+                    "items": [], "tests": []
+                }, None)
+            else:
+                raise AssertionError("Unexpected IPC in control navigation: "+action)
+        try:
+            with patch.object(DesktopBridge, "call", new=fake):
+                w.show()
+                w.open_control_review()
+                dialog = w.control_review_dialog
+                self.assertTrue(dialog.isVisible())
+                dialog.controls.setCurrentRow(14)
+                self.assertEqual(w.active_control_by_ticket[TICKET], 15)
+                dialog.reject()
+                w.tabs.setCurrentIndex(6)
+                self.assertEqual(w.record_control.value(), 15)
+                self.assertEqual(operations[-1], (
+                    "evidence-register", {"ticket_id": TICKET,
+                                          "control_id": "ARL-KB-015"}))
+                self.assertIn("ARL-KB-015", w.records_notice.text())
+
+                w.tabs.setCurrentIndex(0)
+                w.open_control_review()
+                dialog = w.control_review_dialog
+                self.assertEqual(dialog.controls.currentRow(), 14)
+                dialog.controls.setCurrentRow(1)
+                self.assertEqual(w.active_control_by_ticket[TICKET], 2)
+                dialog.reject()
+                w.tabs.setCurrentIndex(6)
+                self.assertEqual(w.record_control.value(), 2)
+                self.assertEqual(operations[-1], (
+                    "evidence-register", {"ticket_id": TICKET,
+                                          "control_id": "ARL-KB-002"}))
+
+                other_ticket = "1445aa99-e08a-4471-b8e5-9d0b36a8412b"
+                w.current_id = other_ticket
+                w.set_active_ticket_control(TICKET, "ARL-KB-015")
+                self.assertEqual(w.record_control.value(), 2)
+                self.assertEqual(w.active_control_by_ticket[TICKET], 2)
+                w.set_active_ticket_control(other_ticket, "ARL-KB-015")
+                self.assertEqual(w.record_control.value(), 15)
+                self.assertEqual(w.active_control_by_ticket[TICKET], 2)
+                self.assertEqual(w.active_control_by_ticket[other_ticket], 15)
         finally:
             self.dispose(w)
 
@@ -87,6 +167,9 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
                 self.assertTrue(w.kb001_record_button.isEnabled())
                 self.assertIn("Not declared / not verified",
                               w.static_collect_results.toPlainText())
+                # Explicit recording of KB-001 switches current context away
+                # from a prior control only after the confirmed write.
+                w.record_control.setValue(15)
                 with patch.object(
                     QInputDialog, "getMultiLineText",
                     return_value=("I inspected the exact frozen Git SHA. "
@@ -113,6 +196,8 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
                               w.static_collect_results.toPlainText())
                 self.assertIn("UNVERIFIED",
                               w.static_collect_results.toPlainText())
+                self.assertEqual(w.record_control.value(), 1)
+                self.assertEqual(w.active_control_by_ticket[TICKET], 1)
                 self.assertIsNone(w.kb001_candidate)
         finally:
             self.dispose(w)

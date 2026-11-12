@@ -1911,6 +1911,10 @@ jobs:
           }, None)
           assert "ARL-KB-013" in window.evidence_details.toPlainText()
           assert not window.evidence_next.isEnabled()
+          # This historical fixture examines KB-013 explicitly; the default
+          # for a new ticket is now KB-001.
+          assert window.record_control.value() == 1
+          window.record_control.setValue(13)
           window.inspect_records()
           assert calls[-1][0] == "evidence-register"
           assert calls[-1][2] == {
