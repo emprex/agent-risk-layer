@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {intelligenceDigest,canonicalJson} from '../src/control-intelligence-core.js';
+import {intelligenceDigest,canonicalJson} from '../src/canonical-intelligence-digest.mjs';
 import {
  validateKb001IntegrityRequest,inspectKb001EvidenceRow,readKb001EvidenceIntegrity
 } from '../desktop/enkyron-evidence-integrity.mjs';
