@@ -114,6 +114,8 @@ company was created, and `Alex Martin` was saved and visible in its Company
 parent CRM pane remained stale until the operator manually clicked `Refresh`.
 The operator requested automatic synchronization and one fewer button.
 
+**Operator retest on corrected preview:** after updating to `885ae7e`, the operator confirmed the top Companies `Refresh` button is gone, **Alex Martin** remains visible, and added a second synthetic contact, **Sam Taylor**, using the **main Companies & Contacts → Add contact** form (not the in-dossier editor). Both contacts appeared in the Company 360 dossier and persisted after a manual `Refresh dossier` and close/reopen. **PASS for the main CRM contact-add path and persistence**; **in-dossier contact-save → automatic parent-pane readback remains NOT TESTED by the operator**, despite passing synthetic Qt regression. Do not overstate this as full acceptance.
+
 Correction in this PR: after an acknowledged dossier contact creation or
 correction, re-read contacts for the **exact selected company ID** in the main
 pane; on entering the CRM module, automatically reload the company list once.
