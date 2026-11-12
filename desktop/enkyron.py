@@ -14505,6 +14505,16 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_scope.setPlainText(proposal.get("scope_text") or "")
         layout.addWidget(section_title("SCOPE AND DELIVERABLES"))
         layout.addWidget(self.crm_proposal_scope, 1)
+        if proposal.get("company_id") and not existing:
+            self.crm_company_draft_confirm = QCheckBox(
+                "I reviewed this company's internal draft scope and price. "
+                "No quote, contract, client contact or test is authorised."
+            )
+            self.crm_company_draft_confirm.setObjectName(
+                "crmCompanyDraftHumanConfirmation"
+            )
+            self.crm_company_draft_confirm.setChecked(False)
+            layout.addWidget(self.crm_company_draft_confirm)
         footer = QHBoxLayout()
         cancel = QPushButton("Close without saving")
         cancel.clicked.connect(dialog.reject)
@@ -14518,7 +14528,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_context = {
             "id": proposal.get("id"),
             "expected_revision": proposal.get("revision"),
-            "opportunity_id": proposal["opportunity_id"]
+            "opportunity_id": proposal["opportunity_id"],
+            "company_id": proposal.get("company_id"),
+            "qualification_id": proposal.get("qualification_id"),
+            "expected_opportunity_version": proposal.get(
+                "expected_opportunity_version"
+            ),
         }
         self.crm_proposal_dialog = dialog
         dialog.open()
@@ -14553,6 +14568,29 @@ class EnkyronWindow(QMainWindow):
             )
             return
         context = self.crm_proposal_context
+        company_draft = bool(context.get("company_id") and not context.get("id"))
+        if company_draft:
+            if (not hasattr(self, "crm_company_draft_confirm")
+                    or not self.crm_company_draft_confirm.isChecked()):
+                QMessageBox.warning(
+                    dialog, "Human review required",
+                    "Read the full scope, verify your own proposed fee and "
+                    "confirm this is an unsent internal draft."
+                )
+                return
+            reply = QMessageBox.question(
+                dialog, "Confirm internal draft only",
+                "Company: " + str(context["company_id"]) + "\n"
+                "Title: " + title + "\n"
+                "Your proposed fee: " + currency + " " + fee + "\n\n"
+                "This will save ONE internal draft; no email, quote, "
+                "contract or authorisation to test is created. "
+                "Save this exact scope and fee?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
         fields = {
             "title": title, "scope_text": scope,
             "currency": currency, "amount_minor": amount_minor
@@ -14563,6 +14601,18 @@ class EnkyronWindow(QMainWindow):
                 **fields, "id": context["id"],
                 "expected_revision": context["expected_revision"]
             }
+        elif company_draft:
+            command = "crm-company-proposal-create"
+            payload = {
+                **fields,
+                "company_id": context["company_id"],
+                "opportunity_id": context["opportunity_id"],
+                "qualification_id": context["qualification_id"],
+                "expected_opportunity_version": context[
+                    "expected_opportunity_version"
+                ],
+                "confirmed": True
+            }
         else:
             command = "crm-proposal-create"
             payload = {**fields, "opportunity_id": context["opportunity_id"]}
@@ -14570,6 +14620,64 @@ class EnkyronWindow(QMainWindow):
 
         def received(data, error):
             if not dialog.isVisible():
+                return
+            if company_draft:
+                record_id = data.get("id") if isinstance(data, dict) else None
+                acknowledged = (
+                    not error and isinstance(data, dict)
+                    and isinstance(record_id, str)
+                    and data.get("revision") == 1
+                    and data.get("company_id") == context["company_id"]
+                    and data.get("opportunity_id") == context["opportunity_id"]
+                    and data.get("qualification_id") == context["qualification_id"]
+                )
+                if not acknowledged:
+                    # May have COMMITted before transport failure: no blind retry.
+                    QMessageBox.warning(
+                        dialog, "Internal draft save not verified",
+                        "The write outcome is uncertain. Inspect Commercial "
+                        "drafts before another attempt. No retry was sent."
+                    )
+                    return
+
+                def verified(latest, read_error):
+                    if not dialog.isVisible():
+                        return
+                    proposal = (latest or {}).get("proposal") if isinstance(latest, dict) else None
+                    exact = (
+                        not read_error and isinstance(latest, dict)
+                        and latest.get("available") is True
+                        and isinstance(proposal, dict)
+                        and proposal.get("id") == record_id
+                        and proposal.get("company_id") == context["company_id"]
+                        and proposal.get("opportunity_id") == context["opportunity_id"]
+                        and proposal.get("revision") == 1
+                        and proposal.get("title") == fields["title"]
+                        and proposal.get("scope_text") == fields["scope_text"]
+                        and proposal.get("currency") == fields["currency"]
+                        and str(proposal.get("amount_minor")) == str(fields["amount_minor"])
+                    )
+                    if not exact:
+                        QMessageBox.warning(
+                            dialog, "Internal draft readback not verified",
+                            "The exact draft ID, company, scope or fee did not "
+                            "match the stored record. Inspect Commercial drafts "
+                            "before another attempt. No retry was sent."
+                        )
+                        return
+                    dialog.accept()
+                    if (self.crm_dossier_dialog
+                            and self.crm_dossier_dialog.isVisible()
+                            and self.crm_dossier_company_id == context["company_id"]):
+                        self.refresh_company_dossier()
+                    self.load_proposals()
+                    QMessageBox.information(
+                        self, "Internal draft verified",
+                        "Saved and verified one internal proposal draft. "
+                        "No message, contract, quote or invoice was issued."
+                    )
+
+                self.bridge.call("crm-proposal", record_id, callback=verified)
                 return
             if error or not data or not data.get("id"):
                 self.crm_proposal_save.setEnabled(True)
