@@ -347,6 +347,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
         self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_uncertain = False
+        self.crm_dossier_activity_check = None
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
         self.crm_ticket_seq = 0
@@ -5432,6 +5434,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
         self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_uncertain = False
+        self.crm_dossier_activity_check = None
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
         self.crm_dossier_followup_editor = None
@@ -6035,6 +6039,11 @@ class EnkyronWindow(QMainWindow):
                         "Opportunity save outcome uncertain; dossier unavailable. "
                         "Inspect company records before another attempt."
                     )
+                if self.crm_dossier_activity_check:
+                    self.status.setText(
+                        "Activity write acknowledged but canonical dossier unavailable. "
+                        "Inspect history before any retry."
+                    )
                 return
             if (not isinstance(data.get("company"), dict)
                     or data["company"].get("id") != company_id):
@@ -6046,6 +6055,11 @@ class EnkyronWindow(QMainWindow):
                     self.status.setText(
                         "Opportunity save not verified: company identity mismatch. "
                         "Review company records before retrying."
+                    )
+                if self.crm_dossier_activity_check:
+                    self.status.setText(
+                        "Activity not verified: company identity mismatch. "
+                        "Review the correct company before retrying."
                     )
                 return
             company = data["company"]
@@ -6075,6 +6089,35 @@ class EnkyronWindow(QMainWindow):
                 )
             )
             sections = data.get("sections", {})
+            pending_activity = self.crm_dossier_activity_check
+            if pending_activity and pending_activity["company_id"] == company_id:
+                # Verify the immutable activity ID and exact journal content
+                # from the canonical company dossier, not from a write ACK.
+                matched = any(
+                    row.get("id") == pending_activity["id"]
+                    and row.get("opportunity_id") == pending_activity["opportunity_id"]
+                    and row.get("company_id") == pending_activity["activity_company_id"]
+                    and row.get("activity_type") == pending_activity["activity_type"]
+                    and row.get("detail") == pending_activity["detail"]
+                    for row in (sections.get("activities") or {}).get("items", [])
+                )
+                if matched:
+                    self.crm_dossier_activity_check = None
+                    self.crm_dossier_activity_uncertain = False
+                    self.crm_dossier_activity_flash = (
+                        "Manual activity verified in this company history. "
+                        "No external communication was sent."
+                    )
+                    self.status.setText("Manual activity verified after exact-ID readback.")
+                    if self.crm_dossier_activity_editor is not None:
+                        self.crm_dossier_activity_record.setChecked(False)
+                        self.crm_dossier_activity_detail.clear()
+                        self.crm_dossier_activity_confirm.setChecked(False)
+                else:
+                    self.status.setText(
+                        "Activity write acknowledged but not verified in this "
+                        "company preview. Review the record; do not retry blindly."
+                    )
             def section_count(name):
                 return int((sections.get(name) or {}).get("total", 0))
 
@@ -7672,6 +7715,7 @@ class EnkyronWindow(QMainWindow):
             and (opportunity is None
                  or opportunity in self.crm_dossier_activity_opportunity_ids)
             and not self.crm_dossier_activity_saving
+            and not self.crm_dossier_activity_uncertain
             and self.crm_dossier_activity_record.isChecked()
             and 10 <= len(detail) <= 2000
             and self.crm_dossier_activity_confirm.isChecked()
@@ -7700,8 +7744,11 @@ class EnkyronWindow(QMainWindow):
                 (company_id if opportunity_id is None else opportunity_id),
             "activity_type": self.crm_dossier_activity_type.currentData(),
             "detail": self.crm_dossier_activity_detail.toPlainText().strip(),
-            "reviewed": True
+            "reviewed": True,
+            "confirmed": True
         }
+        if opportunity_id is not None:
+            payload["reviewed_company_id"] = company_id
         self.crm_dossier_activity_saving = True
         self.update_dossier_activity_save()
 
@@ -7711,20 +7758,37 @@ class EnkyronWindow(QMainWindow):
                     or company_id != self.crm_dossier_company_id):
                 return
             self.crm_dossier_activity_saving = False
-            if error or not result or not result.get("id"):
+            # An error might follow a successful commit. Disable this form
+            # until the operator reviews the canonical history; never resend.
+            self.crm_dossier_activity_uncertain = True
+            if (error or not isinstance(result, dict)
+                    or not isinstance(result.get("id"), str)
+                    or result.get("opportunity_id") != opportunity_id
+                    or result.get("company_id") !=
+                       (company_id if opportunity_id is None else None)
+                    or result.get("activity_type") != payload["activity_type"]):
+                self.status.setText(
+                    "Activity outcome uncertain; review company history before retrying."
+                )
                 QMessageBox.warning(
-                    dialog, "Save not confirmed",
-                    "Check the activity history before trying again to avoid "
-                    "duplicate records. " + str(error or "")
+                    dialog, "Activity save not verified",
+                    "The write may already have committed. Review the company "
+                    "history before another attempt. No retry was sent. "
+                    + str(error or "")
                 )
                 self.update_dossier_activity_save()
                 return
-            self.crm_dossier_activity_flash = (
-                "Activity saved to CRM. No external message was sent."
+            self.crm_dossier_activity_check = {
+                "id": result["id"], "company_id": company_id,
+                "opportunity_id": opportunity_id,
+                "activity_company_id":
+                    (company_id if opportunity_id is None else None),
+                "activity_type": payload["activity_type"],
+                "detail": payload["detail"]
+            }
+            self.status.setText(
+                "Activity acknowledged; verifying exact company-history record."
             )
-            self.crm_dossier_activity_record.setChecked(False)
-            self.crm_dossier_activity_detail.clear()
-            self.crm_dossier_activity_confirm.setChecked(False)
             self.refresh_company_dossier()
 
         self.bridge.call("crm-record-activity", payload=payload, callback=saved)
