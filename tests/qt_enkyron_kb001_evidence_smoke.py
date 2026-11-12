@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox, QTableWidgetItem
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox, QTableWidgetItem, QListWidgetItem, QHeaderView
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
 TICKET = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
@@ -252,6 +252,60 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
             self.assertIn("No DB writes", output)
             self.assertIsNone(w.kb001_candidate)
             self.assertFalse(w.kb001_record_button.isEnabled())
+        finally:
+            self.dispose(w)
+
+    def test_review_matrix_detaches_to_second_monitor_and_reattaches_same_table(self):
+        """Native window uses same data, selected control, and safely closes on ticket switch."""
+        w = self.make_window()
+        second = "1445aa99-e08a-4471-b8e5-9d0b36a8412b"
+        try:
+            w.show()
+            w.ticket_views.setCurrentIndex(1)
+            w.tabs.setCurrentIndex(5)
+            w.batch_review_table.setRowCount(108)
+            for index in range(108):
+                w.batch_review_table.setItem(
+                    index, 0, QTableWidgetItem("ARL-KB-{:03d}".format(index + 1))
+                )
+            w.batch_review_panel.setVisible(True)
+            w.batch_review_table.selectRow(14)
+            self.assertEqual(w.record_control.value(), 15)
+            self.assertEqual(
+                w.batch_review_table.horizontalHeader().sectionResizeMode(1),
+                QHeaderView.ResizeMode.Stretch
+            )
+            panel = w.batch_review_panel
+            table = w.batch_review_table
+            w.toggle_batch_review_window()
+            self.assertIsNotNone(w.batch_review_detached_window)
+            self.assertIs(w.batch_review_detached_window.centralWidget(), panel)
+            self.assertIs(table, w.batch_review_table)
+            self.assertEqual(table.item(14, 0).text(), "ARL-KB-015")
+            self.assertEqual(table.currentRow(), 14)
+            self.assertEqual(w.record_control.value(), 15)
+            self.assertIsNotNone(w.batch_review_detach_placeholder)
+
+            # Closing the window restores the SAME widget, with selection intact.
+            w.batch_review_detached_window.close()
+            self.assertIsNone(w.batch_review_detached_window)
+            self.assertIsNone(w.batch_review_detach_placeholder)
+            self.assertEqual(w.evidence_layout.indexOf(panel) >= 0, True)
+            self.assertEqual(table.currentRow(), 14)
+            self.assertEqual(table.item(14, 0).text(), "ARL-KB-015")
+            self.assertEqual(w.batch_review_detach_button.text(), "Open matrix in window")
+
+            # Switching tickets must close the window and erase old workplan.
+            w.toggle_batch_review_window()
+            self.assertIsNotNone(w.batch_review_detached_window)
+            item = QListWidgetItem("Another synthetic client")
+            item.setData(Qt.ItemDataRole.UserRole, second)
+            with patch.object(DesktopBridge, "call", return_value=None):
+                w.ticket_changed(item, None)
+            self.assertIsNone(w.batch_review_detached_window)
+            self.assertEqual(w.batch_review_table.rowCount(), 0)
+            self.assertEqual(w.current_id, second)
+            self.assertFalse(w.batch_review_panel.isVisible())
         finally:
             self.dispose(w)
 
