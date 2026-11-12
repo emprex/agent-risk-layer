@@ -39,12 +39,12 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-company-direct-opportunity-create', 'crm-company-followup-create',
     'crm-company-followup-update', 'crm-edit-company', 'crm-edit-contact',
     'crm-update-opportunity', 'crm-activity-timeline',
-    'crm-record-activity',
+    'crm-record-activity', 'crm-record-qualification',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
     'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
-    'crm-proposal-create', 'crm-record-qualification',
+    'crm-proposal-create',
     'crm-invoice-prepare',
   ]) assert.throws(() => requireEnkyronUatCommand(target, command), /UAT blocks/);
 });
@@ -83,8 +83,34 @@ test('ENK-04 UAT permits only reviewed company-owned manual activity, never outr
     {database:'arl_local',uat:false},'crm-record-activity',{}
   ));
   for(const command of ['mail-send-draft','crm-proposal-create','create-ticket',
-    'crm-record-qualification','crm-invoice-issue','assessment-link']){
+    'crm-invoice-issue','assessment-link']){
     assert.throws(()=>requireEnkyronUatCommand(target,command),/UAT blocks/);
+  }
+});
+
+test('ENK-04 qualification UAT allows only reviewed company-level potential fit', () => {
+  const target={database:'enkyron_uat_enk03',uat:true};
+  const good={
+    company_id:'22222222-3333-4444-8555-666666666666',
+    contact_id:null,fit_status:'potential_fit',priority:'normal',
+    rationale:'Synthetic commercial documentary review; no buyer was verified.',
+    next_action:'Confirm discovery agenda before any outreach',
+    confirmed:true
+  };
+  assert.doesNotThrow(()=>requireEnkyronUatCommand(target,'crm-record-qualification'));
+  assert.doesNotThrow(()=>requireEnkyronUatPayload(target,'crm-record-qualification',good));
+  for(const bad of [
+    null,{}, {...good,confirmed:false}, {...good,company_id:'not-uuid'},
+    {...good,contact_id:'11111111-2222-4333-8444-555555555555'},
+    {...good,fit_status:'not_fit'}, {...good,priority:'high'},
+    {...good,company_id:undefined},
+  ]) assert.throws(()=>requireEnkyronUatPayload(target,'crm-record-qualification',bad),
+    /reviewed company-level potential fit/);
+  assert.doesNotThrow(()=>requireEnkyronUatPayload({database:'arl_local',uat:false},
+    'crm-record-qualification',{}));
+  for(const sensitive of ['mail-send-draft','crm-proposal-create','create-ticket',
+    'assessment-link','crm-invoice-issue']){
+    assert.throws(()=>requireEnkyronUatCommand(target,sensitive),/UAT blocks/);
   }
 });
 
