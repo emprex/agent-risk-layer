@@ -63,8 +63,13 @@ class CompanyDossierNextActionSmoke(unittest.TestCase):
             # The existing company edit/follow-up actions remain present.
             self.assertIsNotNone(
                 dialog.findChild(QPushButton, "crmDossierEditCompany"))
-            self.assertIsNotNone(
-                dialog.findChild(QPushButton, "crmCompanyFollowups"))
+            followups = dialog.findChild(QPushButton, "crmCompanyFollowups")
+            self.assertIsNotNone(followups)
+            self.assertTrue(card.isAncestorOf(followups))
+            # A follow-up is opened for the exact company, never for a guessed
+            # contact; opening the existing window does not create records.
+            followups.click()
+            self.assertIn(("crm-company-followups", COMPANY, None), commands)
             # This stub leaves the async read pending; the disclaimer is
             # rendered only once the callback supplies a real dossier.
             self.assertEqual(window.crm_dossier_notice.text(),
@@ -80,6 +85,8 @@ class CompanyDossierNextActionSmoke(unittest.TestCase):
             ))
         finally:
             if window:
+                if window.crm_company_followups_dialog:
+                    window.crm_company_followups_dialog.reject()
                 if window.crm_dossier_dialog:
                     window.crm_dossier_dialog.close_guard = lambda: True
                     window.crm_dossier_dialog.reject()
