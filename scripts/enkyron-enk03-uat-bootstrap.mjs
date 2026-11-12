@@ -109,7 +109,7 @@ export async function bootstrapUat() {
       `)).rows[0];
       const tables = (await client.query(`
         SELECT schemaname, tablename FROM pg_tables
-        WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+        WHERE schemaname !~ '^pg_' AND schemaname <> 'information_schema'
       `)).rows;
       validateBootstrapTarget(target, identity, tables);
       const applied = await runMigrations(migrationAdapter(client));
