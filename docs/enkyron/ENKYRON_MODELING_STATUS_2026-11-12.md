@@ -84,6 +84,14 @@ These are **qualitative evidence states**, not user-story completion measurement
 
 **Safety invariant:** no changes to actual customer records, mailbox sends, invoice issuance, migration or ARL assessment work for this checkpoint.
 
+### Source-level ENK-02 finding (read-only audit; no fix yet)
+
+In `desktop/enkyron.py`, `module_changed(index)` enters CRM through the existing page and sets the CRM tab to index 0; when `crm_company_loaded` is true it does **not** automatically call `load_companies`. The selected company may therefore survive ordinary module switches; **a navigation defect is not proven from this alone**.
+
+However, the `load_companies()` callback currently clears `crm_company_id` and the selected-company controls before repopulating the list. It restores selection **only** when `crm_pending_company_id` has been populated by another explicit workflow. An ordinary user-driven refresh with that field unset is a credible context-loss case, **visible in code but not yet reproduced in UAT**. The first ENK-02 regression should simulate: select company A → refresh same list → verify exact company A remains selected if returned by the canonical list, or a clear reset if missing/unauthorized. Test the race between pending searches and refreshes, and never silently select a different company.
+
+No code change is justified until this behavior is reproduced under a Qt stub and its intended UX semantics are agreed. Preserve history, current company identity, and the existing guard against unsaved dossier edits.
+
 ## 5. Screenshots and privacy
 
 Operator screenshots are available in the ongoing conversation but **not committed to public GitHub**, because they include customer records and personal details. The accepted visible features are recorded here without customer-identifying data. A screenshot alone cannot prove buttons work, records persist or roles are enforced.
