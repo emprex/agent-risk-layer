@@ -60,6 +60,12 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
             self.assertFalse(w.kb001_record_button.isVisible())
             self.assertFalse(w.kb001_record_button.isEnabled())
             self.assertIsNone(w.kb001_candidate)
+            # The recorded-evidence index begins with KB-001, not a legacy
+            # pilot control number. Every other control remains selectable.
+            self.assertEqual(w.record_control.value(), 1)
+            self.assertEqual(w.record_control.maximum(), 108)
+            w.record_control.setValue(13)
+            self.assertEqual(w.record_control.value(), 13)
         finally:
             self.dispose(w)
 
