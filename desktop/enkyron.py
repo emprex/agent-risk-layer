@@ -339,6 +339,7 @@ class EnkyronWindow(QMainWindow):
         self.evidence_source_ticket = None
         self.evidence_workplan_ticket = None
         self.evidence_context = None
+        self.kb001_candidate = None
         self.evidence_page = 0
         self.evidence_page_count = 0
         self.records_seq = 0
@@ -865,6 +866,14 @@ class EnkyronWindow(QMainWindow):
         self.static_collect_results.setMaximumHeight(165)
         self.static_collect_results.setVisible(False)
         evidence_l.addWidget(self.static_collect_results)
+        self.kb001_record_button = QPushButton(
+            "Review KB-001 source candidate · record as unverified…"
+        )
+        self.kb001_record_button.setObjectName("kb001UnverifiedRecord")
+        self.kb001_record_button.setVisible(False)
+        self.kb001_record_button.setEnabled(False)
+        self.kb001_record_button.clicked.connect(self.record_kb001_source_candidate)
+        evidence_l.addWidget(self.kb001_record_button)
         self.evidence_summary = make_text_area()
         self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
         self.evidence_summary.setMinimumHeight(150)
@@ -15816,6 +15825,9 @@ class EnkyronWindow(QMainWindow):
         self.engine_button.setEnabled(False)
         self.control_review_button.setEnabled(False)
         self.static_collect_button.setEnabled(False)
+        self.kb001_candidate = None
+        self.kb001_record_button.setEnabled(False)
+        self.kb001_record_button.setVisible(False)
         self.static_collect_results.clear()
         self.static_collect_results.setVisible(False)
         if self.control_review_dialog is not None and self.control_review_dialog.isVisible():
@@ -16296,6 +16308,9 @@ class EnkyronWindow(QMainWindow):
                 or ticket.get("archived_at") or ticket.get("status") == "closed"):
             return
         self.static_collect_button.setEnabled(False)
+        self.kb001_candidate = None
+        self.kb001_record_button.setEnabled(False)
+        self.kb001_record_button.setVisible(False)
         self.static_collect_results.setVisible(True)
         self.static_collect_results.setPlainText(
             "Reading the frozen Git source once for all machine-collectable "
@@ -16323,6 +16338,25 @@ class EnkyronWindow(QMainWindow):
                     "Static preview rejected: canonical identity or authority mismatch."
                 )
                 return
+            candidate = data.get("kb001_candidate")
+            if (not isinstance(candidate, dict) or
+                    candidate.get("control_id") != "ARL-KB-001" or
+                    candidate.get("criterion_number") != 1 or
+                    candidate.get("snapshot_id") != data.get("snapshot_id") or
+                    candidate.get("target_sha") != data.get("target_sha") or
+                    candidate.get("metadata_only") is not True or
+                    candidate.get("verified") is not False or
+                    candidate.get("criterion_satisfied") is not False or
+                    candidate.get("collection_sha256") != data.get("collection_sha256") or
+                    not re.fullmatch(r"[a-f0-9]{64}",
+                                     str(candidate.get("projection_sha256") or ""))):
+                self.static_collect_results.setPlainText(
+                    "Static candidate preview rejected: KB-001 provenance mismatch."
+                )
+                return
+            self.kb001_candidate = candidate
+            self.kb001_record_button.setEnabled(True)
+            self.kb001_record_button.setVisible(True)
             criteria = data["criteria"]
             lines = [
                 "READ-ONLY SOURCE METADATA COLLECTION — NOT CANONICAL EVIDENCE",
@@ -16340,6 +16374,15 @@ class EnkyronWindow(QMainWindow):
                     data.get("inspector_files"), data.get("inspector_truncated")),
                 "Nothing was persisted, accepted, tested or marked PASS/FAIL.",
                 "A metadata projection is NOT verification that the requirement is met.",
+                "",
+                "KB-001 REQUIREMENT 1 — SOURCE METADATA FOR HUMAN REVIEW",
+                "Frozen revision: " + str(candidate["observed_revision"]),
+                "Environment: " + str(candidate.get("observed_environment") or
+                                       "Not declared / not verified"),
+                "Project label: " + str(candidate.get("observed_project_label") or
+                                       "Not declared / not verified"),
+                "Projection SHA-256: " + str(candidate["projection_sha256"]),
+                "Recording requires confirmation; metadata stays UNVERIFIED.",
                 "",
                 "PER-CONTROL READ-ONLY PROJECTIONS",
             ]
