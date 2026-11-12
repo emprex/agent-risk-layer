@@ -5348,7 +5348,7 @@ class EnkyronWindow(QMainWindow):
         next_action_layout = QVBoxLayout(next_action_card)
         next_action_layout.setContentsMargins(16, 10, 16, 12)
         next_action_layout.setSpacing(5)
-        next_action_title = QLabel("RECORDED FOLLOW-UP")
+        next_action_title = QLabel("NEXT ACTION")
         next_action_title.setObjectName("crmDossierNextActionTitle")
         next_action_title.setStyleSheet(
             "font-size: 11px; font-weight: bold; color: #176e81; border: 0;"
@@ -6090,10 +6090,13 @@ class EnkyronWindow(QMainWindow):
                  if item.get("next_action") and str(item.get("next_action")).strip()),
                 None
             )
-            self.crm_dossier_next_action.setText(
-                "Latest recorded follow-up: " + next_action
+            opportunity_action = (
+                "Opportunity next action: " + next_action
                 if next_action else
-                "No next action recorded in the visible opportunities."
+                "No opportunity next action recorded."
+            )
+            self.crm_dossier_next_action.setText(
+                "Checking company follow-ups… " + opportunity_action
             )
             # Company tasks are independent of commercial opportunities.
             # Guard against stale callbacks when a dossier is refreshed.
@@ -6102,6 +6105,10 @@ class EnkyronWindow(QMainWindow):
                         or company_id != self.crm_dossier_company_id):
                     return
                 if error or not result or not result.get("available"):
+                    self.crm_dossier_next_action.setText(
+                        "Company follow-up status unavailable. "
+                        + opportunity_action
+                    )
                     return
                 open_tasks = [
                     item for item in result.get("items", [])
@@ -6114,6 +6121,10 @@ class EnkyronWindow(QMainWindow):
                             format_followup_due(task.get("due_date"), "research"),
                             task.get("action_text") or ""
                         )
+                    )
+                else:
+                    self.crm_dossier_next_action.setText(
+                        "No open company follow-ups. " + opportunity_action
                     )
             self.bridge.call(
                 "crm-company-followups", company_id,
