@@ -336,9 +336,8 @@ export async function collectTicketStaticCandidates(pool,ticketId,{
     refusal('KB-001 frozen system identity metadata is missing or has drifted');
   const reviewWorkplan=preparation.dossiers.map(dossier=>{
     const counts=dossier.counts||{};
-    if(!ID.test(dossier.control_id)||!['applicability','test_planning',
-      'evidence_collection','human_decision','blocked_follow_up',
-      'other_review'].includes(dossier.stage) ||
+    if(!ID.test(dossier.control_id)||!['applicability','test','evidence','finding','remediation',
+      'retest','approval','deployment_decision'].includes(dossier.stage) ||
        !['source_candidates','owner_documents','authorised_runtime'].every(
          key=>Number.isSafeInteger(counts[key])&&counts[key]>=0&&counts[key]<=40))
       refusal('canonical review workplan contains missing control routes');
