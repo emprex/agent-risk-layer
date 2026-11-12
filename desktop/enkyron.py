@@ -3574,6 +3574,61 @@ class EnkyronWindow(QMainWindow):
         layout.addStretch()
         return placeholder
 
+    def toggle_batch_review_window(self):
+        """Move the existing 108-KB table to a native window, never copy it."""
+        if self.batch_review_detached_window is not None:
+            self.batch_review_detached_window.close()
+            return
+        if not self.batch_review_panel.isVisible() or not self.current_id:
+            return
+        slot = self.evidence_layout.indexOf(self.batch_review_panel)
+        if slot < 0:
+            return
+        placeholder = QWidget()
+        placeholder.setObjectName("batchEvidenceDetachedPlaceholder")
+        holder = QVBoxLayout(placeholder)
+        notice = QLabel("The 108-control review matrix is open in another window.")
+        notice.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        holder.addWidget(notice)
+        return_button = QPushButton("Return matrix to ENKYRON")
+        return_button.clicked.connect(self.toggle_batch_review_window)
+        holder.addWidget(return_button)
+        self.evidence_layout.removeWidget(self.batch_review_panel)
+        self.evidence_layout.insertWidget(slot, placeholder)
+        self.batch_review_detach_placeholder = placeholder
+        window = DetachableModuleWindow(
+            "ENKYRON — 108-control evidence review (read-only)",
+            self._return_batch_review_window, None
+        )
+        self.batch_review_detached_window = window
+        window.resize(1390, 830)
+        self.batch_review_table.setMaximumHeight(16777215)
+        window.setCentralWidget(self.batch_review_panel)
+        self.batch_review_detach_button.setText("Return matrix to ENKYRON")
+        window.show()
+        self.batch_review_panel.show()
+        self.batch_review_panel.raise_()
+        window.activateWindow()
+
+    def _return_batch_review_window(self):
+        """Restore the very same table and current row when the window closes."""
+        window = self.batch_review_detached_window
+        if window is None:
+            return
+        panel = window.takeCentralWidget()
+        placeholder = self.batch_review_detach_placeholder
+        slot = self.evidence_layout.indexOf(placeholder) if placeholder else -1
+        if placeholder is not None and slot >= 0:
+            self.evidence_layout.removeWidget(placeholder)
+            if panel is not None:
+                self.evidence_layout.insertWidget(slot, panel)
+        if placeholder is not None:
+            placeholder.deleteLater()
+        self.batch_review_table.setMaximumHeight(390)
+        self.batch_review_detach_button.setText("Open matrix in window")
+        self.batch_review_detach_placeholder = None
+        self.batch_review_detached_window = None
+
     def toggle_mail_window(self):
         """Open the *same* Mail workspace as a genuine movable native window."""
         if self.mail_detached_window is not None:
@@ -3737,6 +3792,8 @@ class EnkyronWindow(QMainWindow):
             self.mail_detached_window.close()
         if self.calendar_detached_window is not None:
             self.calendar_detached_window.close()
+        if self.batch_review_detached_window is not None:
+            self.batch_review_detached_window.close()
         # Calendar editors are independent windows and must close with ENKYRON.
         if hasattr(self, "calendar_view"):
             self.calendar_view.close_editors()
@@ -15881,6 +15938,10 @@ class EnkyronWindow(QMainWindow):
         if not item:
             return
         ticket_id = item.data(Qt.ItemDataRole.UserRole)
+        # A detached panel must not remain visible with another client's data.
+        if (ticket_id != self.current_id and
+                self.batch_review_detached_window is not None):
+            self.batch_review_detached_window.close()
         self.ticket_views.setCurrentIndex(1)
         self.current_id = ticket_id
         self.current_ticket = None
@@ -16402,6 +16463,8 @@ class EnkyronWindow(QMainWindow):
                 or not self.batch_replay_button.isEnabled()):
             return
         self.batch_replay_button.setEnabled(False)
+        if self.batch_review_detached_window is not None:
+            self.batch_review_detached_window.close()
         self.batch_review_table.setRowCount(0)
         self.batch_review_panel.setVisible(False)
         self.batch_review_open.setEnabled(False)
