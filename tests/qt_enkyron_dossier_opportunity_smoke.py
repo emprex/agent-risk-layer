@@ -217,7 +217,7 @@ class DossierOpportunitySmoke(unittest.TestCase):
             new = dialog.findChild(QPushButton, "crmDossierNewOpportunity")
             self.assertTrue(new.isEnabled())
             with patch("desktop.enkyron.QInputDialog.getMultiLineText",
-                       return_value=("Review synthetic follow-up", True)), \\
+                       return_value=("Review synthetic follow-up", True)), \
                  patch("desktop.enkyron.QMessageBox.question",
                        return_value=QMessageBox.StandardButton.Yes):
                 new.click()
@@ -300,7 +300,7 @@ class DossierOpportunitySmoke(unittest.TestCase):
                 QPushButton, "crmDossierNewOpportunity"
             )
             with patch("desktop.enkyron.QInputDialog.getMultiLineText",
-                       return_value=("Review the scoped introduction", True)), \\
+                       return_value=("Review the scoped introduction", True)), \
                  patch("desktop.enkyron.QMessageBox.question",
                        return_value=QMessageBox.StandardButton.Yes):
                 button.click()
