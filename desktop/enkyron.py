@@ -479,21 +479,43 @@ class EnkyronWindow(QMainWindow):
         home = QWidget()
         home_l = QVBoxLayout(home)
         home_l.setContentsMargins(32, 28, 32, 20)
-        home_l.addWidget(section_title("ENKYRON · OPERATOR WORKSPACE"))
+        home_l.addWidget(section_title("MY WORK"))
         introduction = QLabel(
-            "Your native AgentRiskLayer work environment.\n"
-            "Tickets and commercial prospect research are separate records. "
-            "No assessment or external communication runs automatically."
+            "Choose a workspace to continue your work. Open a client request, "
+            "manage a sales relationship, review mail or plan appointments. "
+            "Nothing is sent or approved just by opening a workspace."
         )
         introduction.setWordWrap(True)
         home_l.addWidget(introduction)
-        go_tickets = QPushButton("Open Client Desk")
+        home_l.addWidget(section_title("START WORKING"))
+
+        # Shortcuts reuse the existing module navigation and read-only loaders.
+        # Do not introduce new business actions, records or permission shortcuts.
+        quick_actions_top = QHBoxLayout()
+        go_tickets = QPushButton("Tickets · client requests")
+        go_tickets.setObjectName("enkyronHomeOpenTickets")
+        go_tickets.setMinimumHeight(44)
         go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
-        home_l.addWidget(go_tickets, alignment=Qt.AlignmentFlag.AlignLeft)
-        go_mail = QPushButton("Open Mail")
+        quick_actions_top.addWidget(go_tickets, 1)
+        go_crm = QPushButton("Clients & CRM · sales")
+        go_crm.setObjectName("enkyronHomeOpenCRM")
+        go_crm.setMinimumHeight(44)
+        go_crm.clicked.connect(lambda: self.navigation.setCurrentRow(2))
+        quick_actions_top.addWidget(go_crm, 1)
+        home_l.addLayout(quick_actions_top)
+
+        quick_actions_bottom = QHBoxLayout()
+        go_mail = QPushButton("Mail · conversations")
         go_mail.setObjectName("enkyronHomeOpenMail")
+        go_mail.setMinimumHeight(44)
         go_mail.clicked.connect(lambda: self.navigation.setCurrentRow(3))
-        home_l.addWidget(go_mail, alignment=Qt.AlignmentFlag.AlignLeft)
+        quick_actions_bottom.addWidget(go_mail, 1)
+        go_calendar = QPushButton("Calendar · appointments & tasks")
+        go_calendar.setObjectName("enkyronHomeOpenCalendar")
+        go_calendar.setMinimumHeight(44)
+        go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
+        quick_actions_bottom.addWidget(go_calendar, 1)
+        home_l.addLayout(quick_actions_bottom)
 
         overview_header = QHBoxLayout()
         overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
