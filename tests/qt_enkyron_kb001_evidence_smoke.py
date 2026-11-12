@@ -194,6 +194,52 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
         finally:
             self.dispose(w)
 
+    def test_batch_108_source_replay_is_read_only_and_exposes_match_without_trust(self):
+        w = self.make_window()
+        replay = {
+            "available": True, "ticket_id": TICKET,
+            "project_id": PROJECT, "assessment_id": ASSESSMENT,
+            "snapshot_id": SNAP, "target_sha": SHA,
+            "controls_total": 108,
+            "collection_sha256": "a" * 64,
+            "controls_with_source_routes": 108,
+            "source_criteria_total": 108, "metadata_projected_unverified": 108,
+            "incomplete_source_projections": 0,
+            "kb001_evidence_id": "cei_a16a08432bdd4801b3c7aa753a9d21ea",
+            "kb001_replay_status": "recorded_source_fingerprints_reproduced",
+            "recorded_evidence_verified": 0, "evidence_written": 0,
+            "active_tests_executed": 0, "human_review_required": True,
+            "per_control": [
+                {"control_id": "ARL-KB-{:03d}".format(n),
+                 "source_requirements": 1,
+                 "metadata_projected_unverified": 1,
+                 "incomplete_source_projections": 0}
+                for n in range(1, 109)
+            ]
+        }
+        calls = []
+        def fake(_bridge, action, arg="", payload=None, callback=None):
+            calls.append((action, arg))
+            self.assertEqual(action, "batch-source-replay")
+            self.assertEqual(arg, TICKET)
+            self.assertIsNone(payload)
+            callback(replay, None)
+        try:
+            w.batch_replay_button.setEnabled(True)
+            with patch.object(DesktopBridge, "call", new=fake):
+                w.replay_source_fingerprints()
+            self.assertEqual(calls, [("batch-source-replay", TICKET)])
+            output = w.batch_replay_results.toPlainText()
+            self.assertIn("108 CANONICAL CONTROLS", output)
+            self.assertIn("KB-001 existing evidence: REPRODUCED", output)
+            self.assertIn("ARL-KB-108", output)
+            self.assertIn("NOT accepted evidence", output)
+            self.assertIn("No DB writes", output)
+            self.assertIsNone(w.kb001_candidate)
+            self.assertFalse(w.kb001_record_button.isEnabled())
+        finally:
+            self.dispose(w)
+
     def test_source_preview_has_human_gate_and_unverified_canonical_write(self):
         w = self.make_window()
         calls = []
