@@ -223,6 +223,13 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_contact_autorefresh_smoke.py'
 
+      - name: ENK-03 unified chronological Company History (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_history_smoke.py'
+
+
 
 
       - name: ENKYRON local Mail + Calendar integration and DST (offline)
