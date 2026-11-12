@@ -16400,6 +16400,115 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("static-candidate-collect", ticket_id, callback=received)
 
+    def record_kb001_source_candidate(self):
+        """Explicit human submission: canonical record stays unverified."""
+        candidate = self.kb001_candidate
+        ticket_id = self.current_id
+        ticket = self.current_ticket or {}
+        if (not isinstance(candidate, dict) or not ticket_id
+                or ticket.get("status") == "closed" or ticket.get("archived_at")
+                or ticket.get("target_kind") != "git"
+                or not self.kb001_record_button.isEnabled()):
+            return
+        prompt = (
+            "KB-001 requirement 1: system identity and scope.\n"
+            "Source: frozen Git metadata (read-only)\n"
+            "Revision: {}\nEnvironment: {}\nProjection SHA256: {}\n\n"
+            "This is NOT verified evidence, approved purpose or a PASS.\n"
+            "Explain why you are recording this limited source observation:"
+        ).format(
+            candidate.get("observed_revision"),
+            candidate.get("observed_environment") or "Not verified",
+            candidate.get("projection_sha256"),
+        )
+        rationale, ok = QInputDialog.getMultiLineText(
+            self, "KB-001 · source candidate review", prompt,
+            "I reviewed frozen Git identity metadata. Approved deployment "
+            "environment, purpose, permissions and change-control records "
+            "are not yet verified."
+        )
+        if not ok:
+            return
+        rationale = " ".join(rationale.split())
+        if not 30 <= len(rationale) <= 600:
+            QMessageBox.warning(
+                self, "Recording refused",
+                "Enter a specific, privacy-safe rationale (30–600 characters)."
+            )
+            return
+        answer = QMessageBox.question(
+            self, "Record UNVERIFIED source candidate?",
+            "Ticket: {}\nSnapshot: {}\nFrozen SHA: {}\n\n"
+            "Record ONE unverified canonical evidence item?\n"
+            "This does not change context_required, approve a test, infer PASS "
+            "or create a Master revision.\n\nRationale: {}".format(
+                ticket_id, candidate["snapshot_id"], candidate["target_sha"], rationale
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        payload = {
+            "ticket_id": ticket_id,
+            "control_id": "ARL-KB-001", "criterion_number": 1,
+            "snapshot_id": candidate["snapshot_id"],
+            "target_sha": candidate["target_sha"],
+            "collection_sha256": candidate["collection_sha256"],
+            "projection_sha256": candidate["projection_sha256"],
+            "confirmed": True,
+            "acknowledgement": "I CONFIRM UNVERIFIED SOURCE METADATA ONLY",
+            "rationale": rationale,
+        }
+        self.kb001_record_button.setEnabled(False)
+        self.static_collect_button.setEnabled(False)
+        self.static_collect_results.setPlainText(
+            "Rechecking frozen source, Master, operator ownership and candidate "
+            "digests before canonical recording. No active testing."
+        )
+
+        def recorded(data, error):
+            if ticket_id != self.current_id:
+                return
+            self.static_collect_button.setEnabled(True)
+            if error or not isinstance(data, dict):
+                self.static_collect_results.setPlainText(
+                    "KB-001 write NOT confirmed: " + str(error or "Invalid response") +
+                    ". Inspect Evidence Register before retrying."
+                )
+                return
+            if (data.get("control_id") != "ARL-KB-001" or
+                    data.get("snapshot_id") != candidate["snapshot_id"] or
+                    not data.get("evidence_id") or
+                    data.get("verification_state") not in ("unverified", "verified")):
+                self.static_collect_results.setPlainText(
+                    "Unexpected evidence response: check Evidence Register before retrying."
+                )
+                return
+            if data.get("saved") is True and data.get("verification_state") == "unverified":
+                self.static_collect_results.setPlainText(
+                    "KB-001 SOURCE CANDIDATE RECORDED — UNVERIFIED\n"
+                    "Evidence ID: {}\nSnapshot: {}\n"
+                    "No test, applicability change, PASS/FAIL or Master revision.\n"
+                    "Next: Evidence Register → ARL-KB-001 → Inspect stored evidence."
+                    .format(data["evidence_id"], candidate["snapshot_id"])
+                )
+            elif data.get("already_recorded") is True:
+                self.static_collect_results.setPlainText(
+                    "No duplicate created. Existing KB-001 record: {}\n"
+                    "Verification state: {}.\nInspect it in Evidence Register."
+                    .format(data["evidence_id"], data["verification_state"])
+                )
+            else:
+                self.static_collect_results.setPlainText(
+                    "KB-001 recording not confirmed. Inspect Evidence Register."
+                )
+                return
+            self.kb001_candidate = None
+            self.kb001_record_button.setVisible(False)
+
+        self.bridge.call("static-candidate-record", payload=payload, callback=recorded)
+
     def inspect_evidence(self):
         """Read existing evidence requirements; never accept evidence or run tests."""
         ticket_id, ticket = self.current_id, self.current_ticket
