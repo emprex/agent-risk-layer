@@ -3969,6 +3969,14 @@ class EnkyronWindow(QMainWindow):
             if request_seq != self.crm_company_seq:
                 return
             self.crm_company_loaded = True
+            # Preserve the operator's exact company identity on a successful
+            # refresh. A deliberate post-create/edit selection takes priority.
+            # Never use the displayed company name as a matching key.
+            selected_company_id = (
+                self.crm_pending_company_id
+                if self.crm_pending_company_id is not None
+                else self.crm_company_id
+            )
             self.crm_company_items = []
             self.crm_company_table.blockSignals(True)
             self.crm_company_table.setRowCount(0)
@@ -4008,7 +4016,6 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_items = data.get("items", [])
             self.crm_company_table.blockSignals(True)
             self.crm_company_table.setRowCount(len(self.crm_company_items))
-            pending = self.crm_pending_company_id
             chosen = -1
             for row, company in enumerate(self.crm_company_items):
                 values = [
@@ -4024,7 +4031,7 @@ class EnkyronWindow(QMainWindow):
                     self.crm_company_table.setItem(
                         row, col, QTableWidgetItem(str(val))
                     )
-                if pending and pending == company.get("id"):
+                if selected_company_id and selected_company_id == company.get("id"):
                     chosen = row
             self.crm_company_table.blockSignals(False)
             self.crm_pending_company_id = None
