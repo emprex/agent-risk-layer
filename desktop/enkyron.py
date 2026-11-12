@@ -16450,7 +16450,9 @@ class EnkyronWindow(QMainWindow):
                 "Other 107 controls: source projections prepared, NOT accepted evidence.",
                 "No DB writes, tests, PASS/FAIL, owner approvals or Master revision.",
                 "",
-                "PER-CONTROL WORK QUEUE · STATIC METADATA ONLY",
+                "Use the 108-control matrix below to inspect a control.",
+                "Source routes, owner documents and authorised tests are separate.",
+                "The matrix does not record applicability or approve evidence.",
             ]
             for item in data["per_control"]:
                 cid = str(item.get("control_id") or "")
@@ -16459,12 +16461,7 @@ class EnkyronWindow(QMainWindow):
                         "Batch replay rejected: malformed control work queue."
                     )
                     return
-                lines.append("{} · projected {}/{} · incomplete {} · owner documents {} · authorised tests {} · review required".format(
-                    cid, item.get("metadata_projected_unverified"),
-                    item.get("source_requirements"),
-                    item.get("incomplete_source_projections"),
-                    item.get("human_document_requirements"),
-                    item.get("authorised_runtime_requirements")))
+                # The table below replaces the old 108-line text dump.
             self.batch_replay_results.setPlainText("\n".join(lines))
             self.batch_review_table.setRowCount(108)
             seen_controls = set()
