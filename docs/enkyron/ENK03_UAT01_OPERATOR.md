@@ -30,6 +30,53 @@ pg_isready -h 127.0.0.1 -p 5432
 
 This step only observes the existing laptop. It does **not** install PR #583 or run any write test. If it differs from the known branch, stop and reconcile before setting up the preview.
 
+## Synthetic PostgreSQL isolation gate (ENK-03 preview only)
+
+**Implementation in PR #583:** `desktop/enkyron-uat-database.mjs`.
+The normal production/local operator target remains `arl_local` when no UAT
+environment variables are present. To enter the synthetic test mode, **both**
+`ENKYRON_UAT_DATABASE=enkyron_uat_enk03` and
+`ENKYRON_UAT_GUARD=ENK03_SYNTHETIC_ONLY` must be present. Any other name,
+missing gate or incorrect marker is rejected **before business queries**.
+The service checks a row with marker `ENK03_SYNTHETIC_ONLY` in
+`public.enkyron_uat_guard` inside that exact database. This row must be
+prepared only inside a separate, verified synthetic database; the application
+never creates it automatically.
+
+- The UAT bridge accepts only the narrow Company 360 CRM commands, including
+  synthetic company, contact, company-only opportunity and company-follow-up
+  creation. Mail sends, assessment writes, ticket creation and invoice actions
+  are rejected. Owner login/mail routes and Python ARL reader adapters are
+  blocked in UAT.
+- This prevents accidental targeting of `arl_local` **only if the test
+  environment variables are correctly supplied to the entire desktop process**.
+  It is an operational interlock, not a security boundary or a substitute for
+  a dedicated PostgreSQL role with limited grants.
+- **Do not launch ENKYRON on the new preview without the UAT target variables.**
+  An ordinary launch continues to use `arl_local` by design.
+- The test database must be fresh and synthetic, **never a copy of
+  `arl_local`**, and no live mailbox/provider credentials should be loaded.
+- Do not infer that a database is ready from `pg_isready`. Before creation,
+  inspect PostgreSQL role privileges, existing database names and available
+  migration tooling in read-only mode. The isolated DB and marker are NOT yet
+  provisioned, so UAT-01 remains NOT RUN.
+
+### Next local read-only test database preflight
+
+```bash
+cd ~/enkyron-ux-preview-583 || exit 1
+git rev-parse HEAD
+psql -X -d postgres -v ON_ERROR_STOP=1 -P pager=off \
+  -c "SELECT current_user, rolcreatedb, rolsuper FROM pg_roles WHERE rolname = current_user;"
+psql -X -d postgres -v ON_ERROR_STOP=1 -P pager=off \
+  -c "SELECT datname, pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname IN ('arl_local','enkyron_uat_enk03') ORDER BY datname;"
+```
+
+No SQL DDL, migration, database copy, role changes or application launch is
+performed by the preflight. A failed authentication or missing CREATE DATABASE
+privilege requires a separately reviewed provisioning route, not ad hoc
+privilege escalation.
+
 ## Acceptance scenario UAT-01 (after test workspace isolation is proven)
 
 1. Open the PR #583 native ENKYRON preview and select **CRM → Companies & Contacts**. Create one clearly synthetic company, e.g. `ENK03-UAT Synthetic Company`; confirm it is selected by canonical company ID, not a matching name.
