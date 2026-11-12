@@ -876,7 +876,8 @@ class EnkyronWindow(QMainWindow):
         work_actions.addWidget(self.batch_replay_button)
         work_actions.addStretch()
         evidence_l.addLayout(work_actions)
-        self.pilot_lab = PilotLabPanel(self.bridge, self.review_pilot_lab_control)
+        self.pilot_lab = PilotLabPanel(
+            self.bridge, self.review_pilot_lab_control, self.open_pilot_lab_register)
         evidence_l.addWidget(self.pilot_lab)
         self.batch_replay_results = make_text_area()
         self.batch_replay_results.setObjectName("batchSourceReplayResults")
@@ -16431,6 +16432,14 @@ class EnkyronWindow(QMainWindow):
             existing.activateWindow()
             return
         self.open_control_review()
+
+    def open_pilot_lab_register(self, ticket_id, control_id):
+        """Take the operator directly to the saved test and evidence for one KB."""
+        if ticket_id != self.current_id or not self.current_ticket:
+            return
+        self.set_active_ticket_control(ticket_id, control_id)
+        self.tabs.setCurrentIndex(6)  # Evidence Register; tab_changed reads canonical DB.
+        self.inspect_records()
 
     def show_evidence_workflow(self):
         """Load the read-only workplan and source preparation without extra clicks."""
