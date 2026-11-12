@@ -249,6 +249,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_manual_sends_smoke.py'
 
+      - name: ENK-01A company dossier follow-up card (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_dossier_next_action_smoke.py'
+
       - name: Dossier close after qualification — native Qt regression
         env:
           QT_QPA_PLATFORM: offscreen
