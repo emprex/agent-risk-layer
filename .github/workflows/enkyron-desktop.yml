@@ -27,8 +27,10 @@ jobs:
           cache: npm
       - name: Node dependencies
         run: npm ci --ignore-scripts
-      - name: ENK-03 isolated PostgreSQL routing guard (synthetic offline)
-        run: node --test tests/enkyron-uat-database.test.js
+      - name: ENK-03 isolated PostgreSQL routing and bootstrap guard (synthetic offline)
+        run: |
+          node --check scripts/enkyron-enk03-uat-bootstrap.mjs
+          node --test tests/enkyron-uat-database.test.js
       - name: Desktop bridge and contract tests
         run: |
           node --check desktop/enkyron-contract.mjs
