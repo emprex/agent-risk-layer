@@ -5423,6 +5423,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_editor = None
         self.crm_dossier_company_pending = False
         self.crm_dossier_opportunity_saving = False
+        self.crm_dossier_opportunity_check_id = None
         dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
@@ -5984,6 +5985,11 @@ class EnkyronWindow(QMainWindow):
                         "notice", "Company dossier is unavailable."
                     )
                 )
+                if getattr(self, "crm_dossier_opportunity_check_id", None):
+                    self.status.setText(
+                        "Opportunity write acknowledged; dossier re-read unavailable. "
+                        "Inspect CRM records before retrying."
+                    )
                 return
             company = data["company"]
             self.crm_dossier_company_snapshot = dict(company)
@@ -6022,7 +6028,26 @@ class EnkyronWindow(QMainWindow):
                     section_count("activities"), section_count("commercial_docs")
                 )
             )
-            opportunities = (sections.get("opportunities") or {}).get("items") or []
+            opportunity_section = sections.get("opportunities") or {}
+            opportunities = opportunity_section.get("items") or []
+            awaiting_id = getattr(self, "crm_dossier_opportunity_check_id", None)
+            if awaiting_id:
+                verified = any(
+                    item.get("opportunity_id") == awaiting_id
+                    and item.get("company_id") == company_id
+                    for item in opportunities
+                )
+                if verified:
+                    self.crm_dossier_opportunity_check_id = None
+                    self.status.setText(
+                        "CRM opportunity verified in this company dossier. "
+                        "No service ticket created."
+                    )
+                else:
+                    self.status.setText(
+                        "Opportunity write acknowledged, but not confirmed in this "
+                        "dossier preview. Review the full CRM record before retrying."
+                    )
             next_action = next(
                 (str(item.get("next_action")).strip() for item in opportunities
                  if item.get("next_action") and str(item.get("next_action")).strip()),
@@ -6356,9 +6381,24 @@ class EnkyronWindow(QMainWindow):
                             add_opportunity = QPushButton("New opportunity")
                             add_opportunity.setObjectName("crmDossierNewOpportunity")
                             add_opportunity.setMaximumWidth(190)
+                            # Mirror the backend's company-only uniqueness rule
+                            # for visible records; backend remains authoritative.
+                            direct_exists = any(
+                                item.get("company_id") == company_id
+                                and item.get("source_ticket_id") is None
+                                for item in rows
+                            )
                             add_opportunity.setEnabled(
                                 not self.crm_dossier_opportunity_saving
+                                and self.crm_dossier_opportunity_check_id is None
+                                and not direct_exists
                             )
+                            if direct_exists:
+                                add_opportunity.setText("Opportunity already recorded")
+                                add_opportunity.setToolTip(
+                                    "Use the existing opportunity above. "
+                                    "No duplicate company-only lead is created."
+                                )
                             add_opportunity.clicked.connect(
                                 lambda _checked=False, scoped_company=company_id:
                                 self.open_dossier_direct_opportunity(scoped_company)
@@ -7568,6 +7608,13 @@ class EnkyronWindow(QMainWindow):
                 or company.get("id") != company_id
                 or self.crm_dossier_opportunity_saving):
             return
+        if self.crm_dossier_opportunity_check_id is not None:
+            QMessageBox.information(
+                dialog, "Verify previous opportunity",
+                "The previous save response has not been verified in this "
+                "dossier. Review the CRM record before trying again."
+            )
+            return
         if (self.crm_dossier_company_editor is not None
                 or self.crm_dossier_contact_editor is not None
                 or self.crm_dossier_followup_editor is not None):
@@ -7651,11 +7698,11 @@ class EnkyronWindow(QMainWindow):
                     "to avoid a duplicate. " + str(error or "")
                 )
                 return
+            self.crm_dossier_opportunity_check_id = result["id"]
             self.status.setText(
-                "CRM opportunity recorded for the selected company. No ticket created."
+                "Opportunity write acknowledged; checking the company dossier…"
             )
-            # Re-read canonical PostgreSQL data; do not invent a new card from
-            # the submit payload or navigate away from the active company.
+            # Success is reported only after an exact-ID canonical readback.
             self.refresh_company_dossier()
 
         self.bridge.call(
