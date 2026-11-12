@@ -222,6 +222,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_pipeline_company_update_smoke.py'
+      - name: ENK-04 company manual activity exact-readback (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_activity_uat_smoke.py'
 
       - name: ENK-03 CRM contact auto-refresh after dossier save (synthetic offline)
         env:
