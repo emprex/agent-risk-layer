@@ -12,8 +12,8 @@ class FakeBridge:
     def __init__(self):
         self.calls=[]
         self.result=None
-    def call(self,action,arg="",callback=None):
-        self.calls.append((action,arg))
+    def call(self,action,arg="",payload=None,callback=None):
+        self.calls.append((action,arg,payload))
         callback(self.result,None)
 
 def sample():
@@ -49,7 +49,7 @@ class QtPilotLabSmoke(unittest.TestCase):
         self.panel.set_ticket(TICKET,True)
         self.bridge.result=sample()
         self.panel.load()
-        self.assertEqual(self.bridge.calls,[("pilot-lab-status",TICKET)])
+        self.assertEqual(self.bridge.calls,[("pilot-lab-status",TICKET,None)])
         self.assertEqual(self.panel.table.rowCount(),10)
         self.assertIn("SHA-256 verified",self.panel.status.text())
         self.assertIn("SIMULATED",self.panel.document.toPlainText())
@@ -62,9 +62,35 @@ class QtPilotLabSmoke(unittest.TestCase):
         self.bridge.result=sample()
         with patch.object(QMessageBox,"question",return_value=QMessageBox.StandardButton.Yes):
             self.panel.confirm_run()
-        self.assertEqual(self.bridge.calls,[("pilot-lab-run",TICKET)])
+        self.assertEqual(self.bridge.calls,[("pilot-lab-run",TICKET,None)])
         self.assertTrue(self.panel.run_button.isEnabled())
         self.assertEqual(self.panel.table.rowCount(),10)
+
+    def test_record_reviewed_lab_case_then_open_exact_kb_register(self):
+        opened = []
+        self.panel.view_register = lambda t, k: opened.append((t,k))
+        self.panel.set_ticket(TICKET,True)
+        self.bridge.result=sample()
+        self.panel.load()
+        self.panel.table.selectRow(2)
+        self.panel.control_picker.setCurrentText("ARL-KB-055")
+        self.assertTrue(self.panel.record_button.isEnabled())
+        self.bridge.result={
+            "saved":True, "ticket_id":TICKET,"control_id":"ARL-KB-055",
+            "case_id":"LAB-03","run_id":"run-20261112T123811Z",
+            "snapshot_id":LAB_SNAPSHOT,"test_result":"inconclusive",
+            "verification_state":"unverified","master_modified":False,
+            "test_id":"ctx_" + "a"*32, "evidence_id":"cei_" + "b"*32}
+        with patch.object(QMessageBox,"question",return_value=QMessageBox.StandardButton.Yes):
+            self.panel.record_selected()
+        command, arg, payload = self.bridge.calls[-1]
+        self.assertEqual(command,"pilot-lab-handoff")
+        self.assertEqual(payload["control_id"],"ARL-KB-055")
+        self.assertEqual(payload["case_id"],"LAB-03")
+        self.assertTrue(payload["confirmed"])
+        self.assertIn("UNVERIFIED",self.panel.status.text())
+        self.panel.show_saved()
+        self.assertEqual(opened,[(TICKET,"ARL-KB-055")])
 
     def test_scope_mismatch_fails_closed(self):
         self.panel.set_ticket(TICKET,True)
