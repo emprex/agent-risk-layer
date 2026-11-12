@@ -3,8 +3,7 @@
 // Exact workspace/company/verified-link scoping; no inference from company display names.
 // Historical notes and mail bodies are excluded; external sends remain unverified claims.
 // Current view is the latest 20 events; count and truncation are explicit in UI.
-export const COMPANY_HISTORY_SQL = `
-WITH linked_opportunities AS (
+export const COMPANY_HISTORY_SQL = `WITH linked_opportunities AS (
   SELECT o.id
   FROM enkyron_crm_opportunities o
   WHERE o.workspace_key=$1 AND (
