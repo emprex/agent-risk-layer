@@ -292,3 +292,29 @@ write, data migration, merge or release is authorized by this report.
 **Disposition: ENK-03 UAT positive business flow PASSED; full UAT-01
 acceptance remains PENDING explicit human decision / documented
 disposition of residual checks. PR #583 remains DRAFT, unmerged.**
+
+## Final operator test — 12 November 2026, synthetic missing-readback case
+
+The Debian operator closed the ENKYRON UI and ran from
+`~/enkyron-ux-preview-583`:
+
+```text
+QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests \\
+  -p 'qt_enkyron_dossier_opportunity_smoke.py' -v
+test_company_only_creation_requires_confirmation_and_reloads_same_dossier ... ok
+Ran 1 test in 0.219s
+OK
+```
+
+**PASS for the synthetic Qt regression:** cancelled/refused opportunity input,
+unconfirmed canonical readback remaining unverified, and later exact-ID
+readback success are tested by the suite. This test stubs the bridge and is
+**not** fault-injection testing of the real PostgreSQL/server path.
+
+**Review disposition:** ENK-03's exercised Company 360 synthetic *functional*
+flow is PASS, including the observed persistence and the scoped read-only SQL
+check. The independently untested negative paths (notably actual IPC write
+failures, concurrent selected-company changes and wider security permissions)
+remain expressly **NOT VERIFIED by operator UAT**, not invented PASS results.
+Formal UAT-01 human acceptance of those residuals, promotion, release and
+merging PR #583 are **NOT authorized by this record**; PR remains draft.
