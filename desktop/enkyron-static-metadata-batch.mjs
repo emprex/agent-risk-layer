@@ -239,11 +239,13 @@ export async function recordStaticMetadataBatchChunk(pool,input,actor,{
     await client.query('SELECT pg_advisory_lock(hashtext($1),hashtext($2))',
       [plan.project_id,plan.snapshot_id+':static-batch']);
     locked=true;
-    const current=await scopeReader(pool,request.ticket_id);
+    // The desktop pg pool has max: 1. Reuse its leased advisory-lock client
+    // for all guarded rechecks; pool.query here deadlocks waiting for itself.
+    const current=await scopeReader(client,request.ticket_id);
     checkedScope(plan,current);
     if(current.target_reference!==scope.target_reference)
       refuse('frozen source reference changed');
-    await masterReader(pool,current);
+    await masterReader(client,current);
     // Detect ALL existing clashes before entering even the first write.
     const existing=await readExisting(client,plan);
     const end=Math.min(plan.bundles.length,request.cursor+CHUNK);
@@ -254,11 +256,11 @@ export async function recordStaticMetadataBatchChunk(pool,input,actor,{
       if(existing.has(bundle.control_id)){skipped++;continue;}
       // Current Master and snapshot are reassessed before each independently
       // committed canonical ARL write; a changed SHA cannot reuse older proof.
-      const ongoing=await scopeReader(pool,request.ticket_id);
+      const ongoing=await scopeReader(client,request.ticket_id);
       checkedScope(plan,ongoing);
       if(ongoing.target_reference!==scope.target_reference)
         refuse('source path changed during batch');
-      await masterReader(pool,ongoing);
+      await masterReader(client,ongoing);
       const evidence=await write({
         projectId:plan.project_id,controlId:bundle.control_id,
         userId:binding.binding.userId,
