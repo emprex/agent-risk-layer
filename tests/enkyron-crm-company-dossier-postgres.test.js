@@ -10,6 +10,7 @@ import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 import {recordActivity} from '../desktop/enkyron-crm-activities.mjs';
 import {createMailDraft} from '../desktop/enkyron-crm-mail-drafts.mjs';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
+import {getCompanyHistoryPage} from '../desktop/enkyron-crm-company-history.mjs';
 
 const url=process.env.ARL_CI_POSTGRES_URL||'';
 function disposable(){
@@ -223,6 +224,27 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
       'Do not publish internal note bodies or event detail in company overview');
     const history=dossier.sections.company_history;
     assert.equal(history.total,9);
+    const oldestPage=await getCompanyHistoryPage(pool,{
+      company_id:a.id,page:0,order:'oldest'
+    },actor);
+    const newestPage=await getCompanyHistoryPage(pool,{
+      company_id:a.id,page:0,order:'newest'
+    },actor);
+    assert.equal(oldestPage.total,history.total);
+    assert.equal(newestPage.total,history.total);
+    assert.equal(oldestPage.order,'oldest');
+    assert.equal(newestPage.order,'newest');
+    assert.deepEqual(oldestPage.items.map(row=>row.event_id),
+      [...newestPage.items.map(row=>row.event_id)].reverse());
+    assert.equal(oldestPage.items[0].resource_kind,'company');
+    assert.ok(oldestPage.items.every((e,i)=>i===0||
+      new Date(oldestPage.items[i-1].recorded_at)<=new Date(e.recorded_at)));
+    assert.ok(!JSON.stringify(oldestPage).includes(privateMarker));
+    assert.ok(!JSON.stringify(oldestPage).includes(privateCommercialTerms));
+    await assert.rejects(()=>getCompanyHistoryPage(pool,{
+      company_id:a.id,page:0,order:'oldest'
+    },'ci-other-operator'),/not found in local workspace/);
+
     assert.deepEqual(new Set(history.items.map(e=>e.resource_kind)),new Set([
       'company','contact','research_link','ticket_link','opportunity',
       'activity','mail_draft','ticket'
