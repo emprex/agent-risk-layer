@@ -45,7 +45,7 @@ entries AS (
     AND ((e.resource_kind='company' AND e.resource_id=$2)
       OR (e.resource_kind='contact' AND c.id IS NOT NULL))
   UNION ALL
-  SELECT r.id,'company_contact_change',r.resource_id,'updated',
+  SELECT r.id,r.resource_kind,r.resource_id,'updated',
     r.resource_kind||' fields: '||array_to_string(r.changed_fields,', '),
     r.actor_local,r.recorded_at
   FROM enkyron_crm_record_changes r
