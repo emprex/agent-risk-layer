@@ -83,7 +83,6 @@ class ProposalReadinessSmoke(unittest.TestCase):
                 self.assertEqual(info.call_count, 1)
                 message = info.call_args.args[2]
                 self.assertIn("READ-ONLY CHECK", message)
-                self.assertIn("Potential", message) if False else None
                 self.assertIn("no", message.lower())
                 self.assertFalse(any(c[0] in {
                     "crm-proposal-create", "crm-proposal-update",
@@ -95,7 +94,7 @@ class ProposalReadinessSmoke(unittest.TestCase):
     def test_wrong_company_and_bad_link_are_denied(self):
         window, dialog, calls, original = self.setup_window()
         try:
-            with patch("desktop.enkyron.QMessageBox.warning") as warning, \\
+            with patch("desktop.enkyron.QMessageBox.warning") as warning, \
                  patch("desktop.enkyron.QMessageBox.information") as info:
                 window.review_dossier_proposal_preparation(
                     self.opportunity(company=OTHER), COMPANY
@@ -118,7 +117,7 @@ class ProposalReadinessSmoke(unittest.TestCase):
     def test_late_response_after_company_change_is_ignored(self):
         window, dialog, calls, original = self.setup_window()
         try:
-            with patch("desktop.enkyron.QMessageBox.information") as info, \\
+            with patch("desktop.enkyron.QMessageBox.information") as info, \
                  patch("desktop.enkyron.QMessageBox.warning") as warning:
                 window.review_dossier_proposal_preparation(
                     self.opportunity(), COMPANY
