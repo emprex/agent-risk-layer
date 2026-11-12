@@ -270,8 +270,11 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(audited.sections.audit_changes.total,2);
     assert.equal(audited.sections.company_history.total,11,
       'Two versioned edits appear once each, not duplicated by CRM updated events');
-    assert.equal(audited.sections.company_history.items.filter(e=>
-      e.resource_kind==='company_contact_change').length,2);
+    assert.deepEqual(audited.sections.company_history.items
+      .filter(e=>e.action==='updated' &&
+        ['company','contact'].includes(e.resource_kind))
+      .map(e=>e.resource_kind).sort(), ['company','contact'],
+      'Versioned edits retain their true company/contact source type');
     assert.deepEqual(audited.sections.audit_changes.items.map(x=>x.resource_kind).sort(),
       ['company','contact']);
     const auditText=JSON.stringify({
