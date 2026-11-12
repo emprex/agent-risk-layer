@@ -134,7 +134,7 @@ jobs:
           node --check desktop/enkyron-ticket-controls.mjs
           node --check desktop/enkyron-control-preparation.mjs
           node --check desktop/enkyron-bridge.mjs
-          node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js tests/enkyron-static-evidence-handoff.test.js
+          node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js tests/enkyron-static-evidence-handoff.test.js tests/enkyron-evidence-integrity.test.js
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
