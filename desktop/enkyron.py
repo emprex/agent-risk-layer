@@ -16488,16 +16488,16 @@ class EnkyronWindow(QMainWindow):
             if data.get("saved") is True and data.get("verification_state") == "unverified":
                 self.static_collect_results.setPlainText(
                     "KB-001 SOURCE CANDIDATE RECORDED — UNVERIFIED\n"
-                    "Evidence ID: {}\nSnapshot: {}\n"
+                    f"Evidence ID: {data['evidence_id']}\n"
+                    f"Snapshot: {candidate['snapshot_id']}\n"
                     "No test, applicability change, PASS/FAIL or Master revision.\n"
                     "Next: Evidence Register → ARL-KB-001 → Inspect stored evidence."
-                    .format(data["evidence_id"], candidate["snapshot_id"])
                 )
             elif data.get("already_recorded") is True:
                 self.static_collect_results.setPlainText(
-                    "No duplicate created. Existing KB-001 record: {}\n"
-                    "Verification state: {}.\nInspect it in Evidence Register."
-                    .format(data["evidence_id"], data["verification_state"])
+                    f"No duplicate created. Existing KB-001 record: {data['evidence_id']}\n"
+                    f"Verification state: {data['verification_state']}.\n"
+                    "Inspect it in Evidence Register."
                 )
             else:
                 self.static_collect_results.setPlainText(
