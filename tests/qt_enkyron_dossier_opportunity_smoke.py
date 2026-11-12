@@ -161,6 +161,15 @@ class DossierOpportunitySmoke(unittest.TestCase):
             )
             self.assertFalse(final_button.isEnabled())
             self.assertEqual(final_button.text(), "Opportunity already recorded")
+            self.assertGreaterEqual(
+                final_button.width(),
+                final_button.fontMetrics().horizontalAdvance(
+                    final_button.text()
+                ) + 40,
+                "The disabled full-text status must never be clipped"
+            )
+            self.assertLessEqual(final_button.width(), 320,
+                                 "Do not replace clipping with an oversized button")
             forbidden = {
                 "create-ticket", "crm-create-contact", "assessment-link",
                 "mail-send-draft", "crm-invoice-issue",
