@@ -5257,7 +5257,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_followups.clicked.connect(
             lambda: self.open_company_followups(self.crm_dossier_company_id)
         )
-        heading_row.addWidget(self.crm_dossier_company_followups)
+        # The follow-up action belongs with its recorded context, not
+        # among the global dossier header controls.
         layout.addLayout(heading_row)
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
@@ -5301,6 +5302,10 @@ class EnkyronWindow(QMainWindow):
             "font-size: 14px; font-weight: 600; color: #20354a; border: 0;"
         )
         next_action_layout.addWidget(self.crm_dossier_next_action)
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        action_row.addWidget(self.crm_dossier_company_followups)
+        next_action_layout.addLayout(action_row)
         layout.addWidget(next_action_card)
         self.crm_dossier_notice = QLabel(
             "Internal CRM records: notes are not verified sent messages, "
