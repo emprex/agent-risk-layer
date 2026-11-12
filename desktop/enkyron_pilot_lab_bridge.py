@@ -38,7 +38,11 @@ UUID = re.compile(r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$", re.I)
 RUN_NAME = re.compile(r"^run-[0-9]{8}T[0-9]{6}Z$")
 VALID_STATES = {"PASS_LAB_EXPECTATION", "FAIL_LAB_EXPECTATION",
                 "OBSERVED_ONLY", "BLOCKED"}
+# The canonical 576-row evidence matrix is approximately 165 KiB.
+# Keep strict per-file bounds while allowing the genuine generated CSV.
 MAX_FILE = 160_000
+MATRIX_FILE = "03_CONTROL_REQUIREMENTS_108.csv"
+MAX_MATRIX_FILE = 1_000_000
 
 def reject(message):
     raise ValueError("Pilot lab: " + message)
@@ -71,7 +75,10 @@ def binding(ticket_id):
             "assessment_id":rows[0][4]}
 
 def read_checked(path):
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_FILE:
+    # A larger, explicitly named matrix is allowed; all other files remain
+    # under the original cap. Every file is SHA-256 checked before display.
+    limit = MAX_MATRIX_FILE if path.name == MATRIX_FILE else MAX_FILE
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
         reject("missing, symlinked or oversized laboratory artefact: " + path.name)
     return path.read_bytes()
 
