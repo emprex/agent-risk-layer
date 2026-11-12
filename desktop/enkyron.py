@@ -5377,8 +5377,8 @@ class EnkyronWindow(QMainWindow):
         # Frequent tasks stay visible; extra sections are always one toggle away.
         self.crm_dossier_show_all = QCheckBox("Show all sections")
         self.crm_dossier_show_all.setToolTip(
-            "Include research links, commercial documents, ticket history "
-            "and audit sections, even when empty."
+            "Include optional research and commercial sections, even when empty. "
+            "Company History remains visible separately."
         )
         self.crm_dossier_show_all.toggled.connect(
             self.update_dossier_section_visibility
@@ -6527,8 +6527,167 @@ class EnkyronWindow(QMainWindow):
                                 )
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
+                    elif section_id == "company_history":
+                        # Full on-page reading of event details, without hover,
+                        # popup dialogs or navigation out of Company 360.
+                        # The first bounded page comes from the dossier's
+                        # consistent read-only snapshot; older pages are fetched
+                        # on demand by exact company ID.
+                        state = {
+                            "items": list(rows), "page": 0, "total": count,
+                            "pending": False, "request": 0
+                        }
+                        history_table = table
+                        table.setObjectName("crmCompanyHistoryTable")
+                        table.setMaximumHeight(
+                            min(340, max(150, 52 + min(len(rows), 8) * 32))
+                        )
+                        page_layout.addWidget(table, 1)
+                        detail_title = QLabel("EVENT DETAILS — FULL RECORDED SUMMARY")
+                        detail_title.setStyleSheet("font-weight: bold;")
+                        page_layout.addWidget(detail_title)
+                        detail = QPlainTextEdit()
+                        detail.setObjectName("crmCompanyHistoryDetail")
+                        detail.setReadOnly(True)
+                        detail.setPlaceholderText(
+                            "Select an event above to read its full recorded summary."
+                        )
+                        detail.setMinimumHeight(110)
+                        detail.setMaximumHeight(170)
+                        page_layout.addWidget(detail)
+                        controls = QHBoxLayout()
+                        newer = QPushButton("Newer events")
+                        newer.setObjectName("crmCompanyHistoryNewer")
+                        older = QPushButton("Older events")
+                        older.setObjectName("crmCompanyHistoryOlder")
+                        page_status = QLabel("")
+                        page_status.setObjectName("crmCompanyHistoryPageStatus")
+                        controls.addWidget(newer)
+                        controls.addWidget(page_status)
+                        controls.addWidget(older)
+                        controls.addStretch()
+                        page_layout.addLayout(controls)
+                        page_layout.addStretch()
+
+                        def show_selected_event(
+                                listing=history_table, view=detail, data=state):
+                            selected_row = listing.currentRow()
+                            items = data["items"]
+                            if not 0 <= selected_row < len(items):
+                                view.clear()
+                                return
+                            event = items[selected_row]
+                            view.setPlainText(
+                                "Recorded: {}\n"
+                                "Record: {}\n"
+                                "Action: {}\n"
+                                "Operator: {}\n\n"
+                                "Full summary:\n{}\n\n"
+                                "Record ID: {}\n"
+                                "Event ID: {}".format(
+                                    display_date(event.get("recorded_at")),
+                                    event.get("resource_kind") or "",
+                                    event.get("action") or "",
+                                    event.get("actor_local") or "",
+                                    event.get("summary") or "",
+                                    event.get("resource_id") or "",
+                                    event.get("event_id") or ""
+                                )
+                            )
+
+                        def update_history_buttons(
+                                data=state, previous=newer, following=older,
+                                status=page_status):
+                            start = data["page"] * 20
+                            end = start + len(data["items"])
+                            status.setText(
+                                "Events {}–{} of {}".format(
+                                    start + 1 if end else 0, end, data["total"]
+                                )
+                            )
+                            previous.setEnabled(
+                                not data["pending"] and data["page"] > 0
+                            )
+                            following.setEnabled(
+                                not data["pending"] and end < data["total"]
+                            )
+
+                        def open_history_page(
+                                delta, data=state, listing=history_table,
+                                view=detail, cols=columns,
+                                company_scope=company_id, window=dialog,
+                                load_seq=seq):
+                            if data["pending"] or not window.isVisible():
+                                return
+                            target = data["page"] + delta
+                            if target < 0 or (
+                                    delta > 0
+                                    and (data["page"] + 1) * 20 >= data["total"]):
+                                return
+                            data["pending"] = True
+                            data["request"] += 1
+                            request = data["request"]
+                            update_history_buttons()
+
+                            def received_page(result, error):
+                                if (not window.isVisible()
+                                        or load_seq != self.crm_dossier_seq
+                                        or company_scope != self.crm_dossier_company_id
+                                        or data["request"] != request):
+                                    return
+                                data["pending"] = False
+                                if (error or not isinstance(result, dict)
+                                        or not result.get("available")
+                                        or result.get("page") != target
+                                        or not isinstance(result.get("items"), list)
+                                        or not result["items"]):
+                                    view.setPlainText(
+                                        "History page unavailable. No records were changed.\n"
+                                        + str(error or (result or {}).get(
+                                            "notice", "Reload the dossier to retry."
+                                        ))
+                                    )
+                                    update_history_buttons()
+                                    return
+                                data["page"] = target
+                                data["items"] = result["items"]
+                                data["total"] = int(result.get("total", 0))
+                                listing.setRowCount(0)
+                                listing.setRowCount(len(data["items"]))
+                                for row_no, event in enumerate(data["items"]):
+                                    for col_no, (_heading, key) in enumerate(cols):
+                                        value = event.get(key)
+                                        if key == "recorded_at":
+                                            value = display_date(value)
+                                        cell = QTableWidgetItem(
+                                            str(value) if value is not None else ""
+                                        )
+                                        cell.setToolTip(cell.text())
+                                        listing.setItem(row_no, col_no, cell)
+                                listing.selectRow(0)
+                                update_history_buttons()
+
+                            self.bridge.call(
+                                "crm-company-history",
+                                payload={"company_id": company_scope,
+                                         "page": target},
+                                callback=received_page
+                            )
+
+                        history_table.itemSelectionChanged.connect(
+                            show_selected_event
+                        )
+                        newer.clicked.connect(
+                            lambda _checked=False: open_history_page(-1)
+                        )
+                        older.clicked.connect(
+                            lambda _checked=False: open_history_page(1)
+                        )
+                        if rows:
+                            history_table.selectRow(0)
+                        update_history_buttons()
                     elif section_id in {
-                        "prospects", "tickets", "drafts", "company_history"
+                        "prospects", "tickets", "drafts"
                     } and len(rows) <= 4:
                         if not rows:
                             empty_hints = {
