@@ -31,7 +31,7 @@ jobs:
         run: node --test tests/enkyron-uat-database.test.js
       - name: Desktop bridge and contract tests
         run: |
-                  node --check desktop/enkyron-contract.mjs
+          node --check desktop/enkyron-contract.mjs
           node --check desktop/enkyron-bridge.mjs
           node --check desktop/enkyron-evidence-register.mjs
           node --check desktop/enkyron-ticket-intake.mjs
