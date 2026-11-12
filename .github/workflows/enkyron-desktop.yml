@@ -1005,7 +1005,14 @@ jobs:
                        "resource_id": company_id, "actor_local": "ci-local",
                        "created_at": "2026-11-07T05:00:00Z"
                    }]},
-                   "audit_changes": {"total": 0, "more": False, "items": []}
+                   "audit_changes": {"total": 0, "more": False, "items": []},
+                   "company_history": {"total": 1, "more": False, "items": [{
+                       "event_id": "historical-company-event",
+                       "resource_kind": "company", "resource_id": company_id,
+                       "action": "created", "summary": "Company record",
+                       "actor_local": "ci-local",
+                       "recorded_at": "2026-11-07T05:00:00Z"
+                   }]}
               }
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
@@ -1385,22 +1392,23 @@ jobs:
           assert window.crm_dossier_show_all.text() == "Show all sections"
           assert not hasattr(window, "crm_dossier_commercial_button")
           assert not window.crm_dossier_show_all.isChecked()
-          assert window.crm_dossier_nav.isRowHidden(10)
+          assert window.crm_dossier_nav.isRowHidden(6)
           assert not window.crm_dossier_nav.isRowHidden(4)
+          assert not window.crm_dossier_nav.isRowHidden(8)
           window.crm_dossier_show_all.click()
-          assert not window.crm_dossier_nav.isRowHidden(10)
-          window.crm_dossier_nav.setCurrentRow(10)
-          assert window.crm_dossier_tabs.currentIndex() == 10
+          assert not window.crm_dossier_nav.isRowHidden(6)
+          window.crm_dossier_nav.setCurrentRow(6)
+          assert window.crm_dossier_tabs.currentIndex() == 6
           window.crm_dossier_show_all.click()
-          assert window.crm_dossier_nav.isRowHidden(10)
+          assert window.crm_dossier_nav.isRowHidden(6)
           assert window.crm_dossier_nav.currentRow() == 0
           assert window.crm_dossier_tabs.currentIndex() == 0
-          assert window.crm_dossier_tabs.count() == 11
-          assert window.crm_dossier_nav.count() == 11
+          assert window.crm_dossier_tabs.count() == 9
+          assert window.crm_dossier_nav.count() == 9
           assert not window.crm_dossier_tabs.tabBar().isVisible()
           assert window.crm_dossier_nav.currentRow() == 0
           assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (4)"
-          assert window.crm_dossier_nav.item(8).text() == "Ticket history (1)"
+          assert window.crm_dossier_nav.item(8).text() == "Company History (1)"
           window.crm_dossier_nav.setCurrentRow(8)
           assert window.crm_dossier_tabs.currentIndex() == 8
           window.crm_dossier_tabs.setCurrentIndex(4)
@@ -1435,9 +1443,11 @@ jobs:
           assert calls[-1][1] == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
           assert any("not customer acceptance" in child.text()
                      for child in commercial_page.findChildren(QLabel))
-          assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
-          assert window.crm_dossier_tabs.tabText(9) == "CRM audit (1)"
-          assert window.crm_dossier_tabs.tabText(10) == "Field changes (0)"
+          assert window.crm_dossier_tabs.tabText(8) == "Company History (1)"
+          history_table = window.crm_dossier_tabs.widget(8).findChildren(QTableWidget)[0]
+          assert history_table.rowCount() == 1
+          assert history_table.item(0, 1).text() == "company"
+          assert history_table.item(0, 2).text() == "created"
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (1)"
