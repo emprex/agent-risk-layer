@@ -66,6 +66,26 @@ class BridgeProcessLifecycleSmoke(unittest.TestCase):
         self.assertEqual(answers[0], ({"source":"fixture"}, None))
         self.assertEqual(len(self.bridge.running), 0)
 
+    def test_static_collection_has_assessment_budget_not_default_15_seconds(self):
+        """The 108-control read-only collector needs the long bounded lane."""
+        answers = []
+        with patch.object(enkyron, "BRIDGE", self.script(20)):
+            self.bridge.call("static-candidate-collect", "3385aa99-e08a-4471-b8e5-9d0b36a8412b",
+                             callback=lambda value, error: answers.append((value, error)))
+        process = next(iter(self.bridge.running))
+        timer = process.findChild(QTimer)
+        self.assertIsNotNone(timer)
+        self.assertEqual(timer.interval(), 95000)
+        self.run_until(lambda: len(answers) == 1)
+        self.assertEqual(answers[0], ({"source": "fixture"}, None))
+
+        with patch.object(enkyron, "BRIDGE", self.script(20)):
+            self.bridge.call("tickets", callback=lambda value, error: answers.append((value, error)))
+        process = next(iter(self.bridge.running))
+        timer = process.findChild(QTimer)
+        self.assertEqual(timer.interval(), 15000)
+        self.run_until(lambda: len(answers) == 2)
+
     def test_timeout_never_deletes_running_child_or_calls_back_twice(self):
         answers, terminal = [], []
         with patch.object(enkyron, "BRIDGE", self.script(2200)):
