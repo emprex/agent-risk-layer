@@ -330,6 +330,8 @@ class EnkyronWindow(QMainWindow):
         self.bridge = DesktopBridge(self)
         self.current_id = None
         self.current_ticket = None
+        # UI-only selected control per ticket; no canonical state change.
+        self.active_control_by_ticket = {}
         self.assessment_link_dialog = None
         self.control_review_dialog = None
         self.scope_review_dialog = None
@@ -927,7 +929,7 @@ class EnkyronWindow(QMainWindow):
         toolbar.addWidget(QLabel("Control number:"))
         self.record_control = QSpinBox()
         self.record_control.setRange(1, 108)
-        self.record_control.setValue(1)  # Start the assessment register at KB-001, not legacy KB-013.
+        self.record_control.setValue(1)  # Fallback until the ticket has an active control.
         self.record_control.setPrefix("ARL-KB-")
         self.record_control.valueChanged.connect(self.invalidate_records)
         toolbar.addWidget(self.record_control)
@@ -15817,6 +15819,12 @@ class EnkyronWindow(QMainWindow):
         self.ticket_views.setCurrentIndex(1)
         self.current_id = ticket_id
         self.current_ticket = None
+        # Restore the control for this ticket, never the previous client's.
+        self.record_control.blockSignals(True)
+        self.record_control.setValue(
+            self.active_control_by_ticket.get(ticket_id, 1)
+        )
+        self.record_control.blockSignals(False)
         self.master_doc.clear()
         self.master_initial_preview = None
         self.master_create.setVisible(False)
@@ -16012,6 +16020,8 @@ class EnkyronWindow(QMainWindow):
                 self.load_master()
             elif self.tabs.currentIndex() == 5:
                 self.show_evidence_workflow()
+            elif self.tabs.currentIndex() == 6:
+                self.inspect_records()
         self.bridge.call("ticket", ticket_id, callback=received)
 
     def tab_changed(self, index):
@@ -16019,6 +16029,9 @@ class EnkyronWindow(QMainWindow):
             self.load_master()
         elif index == 5 and self.current_ticket:
             self.show_evidence_workflow()
+        elif index == 6 and self.current_ticket:
+            # Open on the selected control with a fresh canonical read.
+            self.inspect_records()
 
     def load_master(self):
         ticket_id = self.current_id
@@ -16229,7 +16242,12 @@ class EnkyronWindow(QMainWindow):
                 return
             existing.reject()
         dialog = ControlReviewDialog(
-            self, self.bridge, ticket_id, on_recorded=self.inspect_evidence
+            self, self.bridge, ticket_id,
+            on_recorded=self.inspect_evidence,
+            on_control_selected=self.set_active_ticket_control,
+            initial_control_id="ARL-KB-{:03d}".format(
+                self.active_control_by_ticket.get(ticket_id, 1)
+            ),
         )
         self.control_review_dialog = dialog
         dialog.show()
@@ -16714,7 +16732,21 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("evidence-pack", payload=request, callback=pack_loaded)
 
+    def set_active_ticket_control(self, ticket_id, control_id):
+        """Follow canonical control selection without recording a decision."""
+        match = re.fullmatch(r"ARL-KB-(\d{3})", str(control_id or ""))
+        if (ticket_id != self.current_id or not self.current_ticket
+                or not match or not 1 <= int(match.group(1)) <= 108):
+            return
+        number = int(match.group(1))
+        self.active_control_by_ticket[ticket_id] = number
+        if self.record_control.value() != number:
+            # Never display a previous control's evidence under this number.
+            self.record_control.setValue(number)
+
     def invalidate_records(self, _number):
+        if self.current_id and self.current_ticket:
+            self.active_control_by_ticket[self.current_id] = self.record_control.value()
         self.records_seq += 1
         self.record_items = []
         self.test_items = []
