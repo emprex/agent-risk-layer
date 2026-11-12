@@ -99,6 +99,28 @@ Ces sources orientent la **conception cible**. Elles ne prouvent pas que les fon
 - **Écart documentaire ouvert, non classé comme corruption :** le registre contient 115 entrées pour 114 fichiers numérotés dans cette branche GitHub. Identifier le nom et l'origine de la ligne supplémentaire avant de conclure à une divergence ou de lancer un outil de migration ; cela peut provenir d'un renommage, d'un historique plus ancien ou d'un enregistrement hors patron.
 - **Prochaine lecture locale :** comptage par préfixe et entrées au nom hors patron, puis inventaire des contraintes `FOREIGN KEY` sur les dossiers société / contact / ticket / follow-up. Aucune mutation SQL.
 
+## 4 quinquies. Résolution de l'écart des migrations (12 novembre 2026)
+
+**Preuve opérateur locale :** le script a comparé les noms du registre `schema_migrations` avec les fichiers présents dans `~/agent-risk-layer/migrations` et calculé les SHA-256 **complets** des fichiers communs.
+
+| Mesure | Résultat observé |
+| --- | ---: |
+| Enregistrements PostgreSQL | 115 |
+| Fichiers SQL locaux numérotés | 114 |
+| Fichiers présents non enregistrés | 0 |
+| Différences d'empreinte SHA-256 pour les fichiers communs | **0** |
+| Entrées dans PostgreSQL sans fichier | **1** — `021_paid_assessment_remediation_scope.sql` |
+
+**Origine retrouvée dans l'historique GitHub :**
+
+- Commit [`e644d51`](https://github.com/emprex/agent-risk-layer/commit/e644d51cfdf256e04989dafc45b4cea4a4e23aa4), **20 août 2026 à 10:47 UTC** : le fichier `migrations/021_paid_assessment_remediation_scope.sql` est ajouté. Son SQL modifie `owner_assessment_cases` en y ajoutant `assessment_id` et `purchase_id` et des index associés.
+- Commit [`1dc2bdc`](https://github.com/emprex/agent-risk-layer/commit/1dc2bdc9e097f87fc862051db07a90ae64725a3c), **20 août 2026 à 21:13 UTC** : suppression du même fichier dans un rollback de l'arbre produit vers son état pré-Atlas.
+- Le fichier actuel portant le préfixe `021` sur la branche de l'opérateur est **différent** : `021_agent_cli_repository_binding.sql`.
+
+**Conclusion limitée :** l'entrée supplémentaire correspond à une migration historiquement créée puis supprimée du dépôt. Ce n'est **pas** une preuve de corruption, ni une raison de supprimer la ligne du registre. **Ne pas effacer l'entrée, recréer artificiellement le fichier ni annuler des colonnes sur une base vivante.** Les effets structurels réellement persistants de l'ancien SQL (`owner_assessment_cases`, index et éventuelles dépendances) nécessiteraient une inspection propre avant toute migration de ce domaine. Aucun changement à KYRTHOS n'est requis pour la refonte de l'interface CRM.
+
+**Décision :** l'écart de *fichier historique* est expliqué et ne bloque pas `ENK-01` (conception de l'UI CRM). Le gate `ENK-00` reste **PARTIEL** pour les recettes locales et les contrôles d'autorité.
+
 ## 5. Méthode et conditions d'arrêt de ENK-00
 
 **Réalisation dans ce bloc :** lecture GitHub, inventaire d'interface, extrait du catalogue des migrations, revue de routes et d'autorité ; documentation uniquement.
