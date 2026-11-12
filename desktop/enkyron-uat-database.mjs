@@ -12,6 +12,7 @@ const UAT_COMMANDS = new Set([
   'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
   'crm-opportunities', 'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
+  'crm-company-followup-update',
 ]);
 
 export function resolveEnkyronDatabase(env = process.env) {
