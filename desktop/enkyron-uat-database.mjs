@@ -12,6 +12,7 @@ const UAT_COMMANDS = new Set([
   'crm-edit-company', 'crm-edit-contact',
   'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
   'crm-opportunities', 'crm-activity-timeline', 'crm-update-opportunity',
+  'crm-record-activity',
   'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',
@@ -42,6 +43,18 @@ export function requireEnkyronUatPayload(target, command, payload) {
   if (target.uat && command === 'crm-update-opportunity' &&
       (payload?.confirmed !== true || typeof payload?.company_id !== 'string')) {
     throw new Error('ENKYRON UAT company opportunity update requires explicit reviewed company');
+  }
+  // ENK-04: allow manual journal entries only from a reviewed Company 360 context.
+  // A selected opportunity must carry its source company for server-side
+  // association checks; an activity is never a sent message.
+  if (target.uat && command === 'crm-record-activity' &&
+      (payload?.confirmed !== true || payload?.reviewed !== true ||
+       !((typeof payload?.company_id === 'string' &&
+          payload?.opportunity_id == null && payload?.reviewed_company_id == null) ||
+         (typeof payload?.opportunity_id === 'string' &&
+          typeof payload?.reviewed_company_id === 'string' &&
+          payload?.company_id == null)))) {
+    throw new Error('ENKYRON UAT activity requires explicit reviewed company context');
   }
 }
 
