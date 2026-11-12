@@ -994,9 +994,6 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_search.setPlaceholderText("Search registered companies…")
         self.crm_company_search.setMaxLength(100)
         company_toolbar.addWidget(self.crm_company_search, 1)
-        company_refresh = QPushButton("Refresh")
-        company_refresh.clicked.connect(self.load_companies)
-        company_toolbar.addWidget(company_refresh)
         self.crm_company_add = QPushButton("+ Add company")
         self.crm_company_add.setObjectName("primary")
         self.crm_company_add.setEnabled(False)
@@ -3707,8 +3704,11 @@ class EnkyronWindow(QMainWindow):
         if index == 0:
             self.load_sales_overview()
         if index == 2:
+            # Returning to CRM automatically re-reads companies. The list
+            # is reconciled by canonical company ID, not display name.
+            already_on_companies = self.crm_tabs.currentIndex() == 0
             self.crm_tabs.setCurrentIndex(0)
-            if not self.crm_company_loaded:
+            if already_on_companies:
                 self.load_companies()
             if not self.crm_loaded:
                 self.load_prospects()
@@ -3770,6 +3770,10 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("calendar-task-complete", payload=data, callback=received)
 
     def crm_tab_changed(self, index):
+        if index == 0 and self.navigation.currentRow() == 2:
+            # Returning from Pipeline / Contacts / other CRM tabs replaces
+            # the old manual Refresh control.
+            self.load_companies()
         if index == 3:
             self.load_mail_status()
         if index == 4 and self.navigation.currentRow() == 2:
@@ -4105,6 +4109,19 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
+        self.refresh_selected_company_contacts(company_id)
+
+    def refresh_selected_company_contacts(self, company_id):
+        """Re-read contacts for the EXACT currently selected CRM company.
+
+        Used after a confirmed dossier contact save. Stale callbacks must
+        never render another company's contacts, including same-name firms.
+        """
+        row = self.crm_company_table.currentRow()
+        if (not company_id or company_id != self.crm_company_id
+                or row < 0 or row >= len(self.crm_company_items)
+                or self.crm_company_items[row].get("id") != company_id):
+            return
         self.crm_contact_seq += 1
         seq = self.crm_contact_seq
         self.crm_contacts_table.setRowCount(0)
@@ -7070,6 +7087,9 @@ class EnkyronWindow(QMainWindow):
                 return
             finish()
             self.refresh_company_dossier()
+            # After a confirmed save, keep the parent Companies & Contacts
+            # pane consistent without asking the operator to press Refresh.
+            self.refresh_selected_company_contacts(company_id)
 
         def submit():
             if (state["pending"] or state["failed"] or
