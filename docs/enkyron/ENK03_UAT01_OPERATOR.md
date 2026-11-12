@@ -1,6 +1,6 @@
 # ENK-03 — UAT-01, Company 360 native workflow
 
-**Status:** PREPARED / NOT EXECUTED ON OPERATOR DEBIAN  
+**Status:** IN PROGRESS / NOT ACCEPTED — operator Debian UAT-01 company and contact creation observed; remaining checks pending  
 **Scope:** PR #583, stacked on PR #582. This is a manual **business-flow acceptance**, not a replacement for existing CI.  
 **Authority:** Human operator decides whether UAT passes. A GitHub CI success does not prove desktop behaviour.
 
@@ -58,8 +58,9 @@ never creates it automatically.
   `arl_local`**, and no live mailbox/provider credentials should be loaded.
 - Do not infer that a database is ready from `pg_isready`. Before creation,
   inspect PostgreSQL role privileges, existing database names and available
-  migration tooling in read-only mode. The isolated DB and marker are NOT yet
-  provisioned, so UAT-01 remains NOT RUN.
+  migration tooling in read-only mode. On 12 November 2026 the operator
+  confirmed a synthetic `enkyron_uat_enk03` with all 113 migrations and
+  `ENK03_SYNTHETIC_ONLY` marker; no pilot data was copied.
 
 ### Next local read-only test database preflight
 
@@ -105,15 +106,32 @@ would target `arl_local` by legacy design. The presence of a marker does
 not constitute test acceptance; UAT-01 requires business-level evidence.
 
 
+## Operator observation — 12 November 2026, Company 360 UAT
+
+On the operator's isolated Debian `enkyron_uat_enk03` preview, the synthetic
+company was created, and `Alex Martin` was saved and visible in its Company
+360 Contacts section. **However**, `Contacts for Selected Company` on the
+parent CRM pane remained stale until the operator manually clicked `Refresh`.
+The operator requested automatic synchronization and one fewer button.
+
+Correction in this PR: after an acknowledged dossier contact creation or
+correction, re-read contacts for the **exact selected company ID** in the main
+pane; on returning to Companies, automatically reload the company list.
+Remove the top Companies `Refresh` button, preserving readback and stale
+callback guards. Native synthetic Qt regression added. **This remains a
+fix awaiting local operator re-test, not a UAT pass.** Do not duplicate the
+existing synthetic contact. Closing with the window X and clicking Close use
+the same dossier unsaved-work guard.
+
 ## Acceptance scenario UAT-01 (after test workspace isolation is proven)
 
 1. Open the PR #583 native ENKYRON preview and select **CRM → Companies & Contacts**. Create one clearly synthetic company, e.g. `ENK03-UAT Synthetic Company`; confirm it is selected by canonical company ID, not a matching name.
-2. Open the same Company 360 dossier and, from **Contacts**, create one synthetic contact. Confirm the contact appears under the selected company after Refresh.
+2. Open the same Company 360 dossier and, from **Contacts**, create one synthetic contact. Confirm the contact appears automatically both in the dossier and in **Contacts for Selected Company** on the parent Companies pane, with **no manual Refresh**. An observed 12 November UAT-01 defect required the operator to click Refresh; a targeted fix is committed but requires local re-test.
 3. In the same dossier, select **Opportunities → New opportunity**, enter a specific next action, review the displayed company, and explicitly confirm. A refusal/cancel must perform **no write**.
 4. After confirmation, the UI must show an acknowledgement first, then show **verified** only after the returned opportunity ID is visible in the reloaded canonical company dossier. If readback fails or the item is absent, it must remain **unverified** and advise investigation rather than another blind creation.
 5. Verify the new opportunity appears as an actual company-linked record. Attempting a second direct company opportunity must not create a duplicate; a visible existing company-only opportunity disables the button, and the service rejects duplicates independently.
 6. From **Company follow-ups**, create one dated synthetic company-owned reminder using the existing confirmed service. This is a scheduled local reminder, **not** a sent email or proof of customer interest.
-7. Close and reopen the dossier, Refresh, then confirm the same company ID, contact, opportunity, next action and company-owned reminder persist. Navigate Home → CRM and verify no silent selection change.
+7. Close and reopen the dossier, then confirm the same company ID, contact, opportunity, next action and company-owned reminder persist **without manual Refresh**. Navigate Home → CRM and verify no silent selection change.
 8. Inspect the synthetic test data and ticket count before/after: **zero implicit service tickets, mail sends, contracts, invoices or assessments**. Confirm records belong only to the intended local test workspace.
 9. Check negative paths: cancel at the confirmation step, stale/failed readback, refresh during an outstanding write, change of selected company, and failed backend permissions. A partial or failed operation must not be displayed as verified.
 
@@ -121,6 +139,6 @@ not constitute test acceptance; UAT-01 requires business-level evidence.
 
 Record for each step: date/time, isolated test database name, app branch + exact SHA, synthetic company/opportunity identifiers (not customer data), screenshot or sanitized trace, expected vs observed behaviour, and the operator's verdict `PASS`, `FAIL`, or `BLOCKED`.
 
-**UAT-01 remains NOT RUN until the operator actually performs these steps.** CI success, source inspection and synthetic Qt fixtures cannot close it. Keep PR #583 draft and ENK-03 `PARTIEL` until verified UAT and an explicit human decision. Multioperator authentication/authorization remains a separate unresolved platform gate.
+**UAT-01 is IN PROGRESS, not accepted.** CI success, source inspection and synthetic Qt fixtures cannot close it. Keep PR #583 draft and ENK-03 `PARTIEL` until verified UAT and an explicit human decision. Multioperator authentication/authorization remains a separate unresolved platform gate.
 
-**Next step right now:** execute only the read-only preflight, capture the output, then prepare the isolated preview and synthetic DB without disrupting the local KYRTHOS pilot.
+**Next step:** run the auto-refresh regression on exact-head CI, then update only the #583 preview once the operator closes ENKYRON; verify the already saved Alex Martin remains visible and test a confirmed synthetic contact edit without manual Refresh. Do not re-bootstrap or reset the isolated DB.
