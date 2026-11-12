@@ -49,6 +49,30 @@ export function shapeBatchSourceReplay({ticketId,preview,master,record=null,dupl
       control.metadata_projected_unverified++;
     else control.incomplete_source_projections++;
   }
+  if(!Array.isArray(preview.review_workplan)||preview.review_workplan.length!==108)
+    refuse('the canonical 108-control evidence route workplan is missing');
+  for(const item of preview.review_workplan){
+    const current=map.get(item?.control_id);
+    if(!current || current.workplan_bound ||
+       typeof item.title!=='string'||item.title.length>180 ||
+       typeof item.category!=='string'||item.category.length>140 ||
+       !['applicability','test','evidence','finding','remediation','retest',
+         'approval','deployment_decision'].includes(item.stage) ||
+       !['source_requirements','human_document_requirements',
+         'authorised_runtime_requirements'].every(key=>
+           Number.isSafeInteger(item[key])&&item[key]>=0&&item[key]<=40) ||
+       current.source_requirements!==item.source_requirements)
+      refuse('canonical evidence workplan mismatches source projections');
+    current.title=item.title;
+    current.category=item.category;
+    current.stage=item.stage;
+    current.human_document_requirements=item.human_document_requirements;
+    current.authorised_runtime_requirements=item.authorised_runtime_requirements;
+    current.workplan_bound=true;
+  }
+  if([...map.values()].some(item=>!item.workplan_bound))
+    refuse('canonical evidence workplan incomplete');
+  for(const item of map.values())delete item.workplan_bound;
   let status='not_recorded';
   const candidate=preview.kb001_candidate;
   const kb001Projection=preview.criteria.find(c=>
@@ -80,6 +104,11 @@ export function shapeBatchSourceReplay({ticketId,preview,master,record=null,dupl
     snapshot_id:preview.snapshot_id,target_sha:preview.target_sha,
     controls_total:108,
     controls_with_source_routes:controls.filter(x=>x.source_requirements>0).length,
+    controls_without_static_routes:controls.filter(x=>x.source_requirements===0).length,
+    human_document_requirements_total:controls.reduce(
+      (n,x)=>n+x.human_document_requirements,0),
+    authorised_runtime_requirements_total:controls.reduce(
+      (n,x)=>n+x.authorised_runtime_requirements,0),
     source_criteria_total:preview.criteria.length,
     metadata_projected_unverified:controls.reduce((n,x)=>n+x.metadata_projected_unverified,0),
     incomplete_source_projections:controls.reduce((n,x)=>n+x.incomplete_source_projections,0),
