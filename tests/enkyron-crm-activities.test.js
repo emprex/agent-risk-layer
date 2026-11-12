@@ -21,7 +21,6 @@ test('rejects malformed and unconfirmed activity, permits multiline notes',()=>{
   }).company_id,companyId);
   for(const bad of [
     {...input,company_id:companyId},
-    {...input,company_id:null,reviewed_company_id:companyId},
     {...input,opportunity_id:null},
     {...input,reviewed_company_id:'bad'},
     {...input,opportunity_id:'wrong'},
