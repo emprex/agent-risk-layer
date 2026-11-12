@@ -927,7 +927,7 @@ class EnkyronWindow(QMainWindow):
         toolbar.addWidget(QLabel("Control number:"))
         self.record_control = QSpinBox()
         self.record_control.setRange(1, 108)
-        self.record_control.setValue(13)
+        self.record_control.setValue(1)  # Start the assessment register at KB-001, not legacy KB-013.
         self.record_control.setPrefix("ARL-KB-")
         self.record_control.valueChanged.connect(self.invalidate_records)
         toolbar.addWidget(self.record_control)
