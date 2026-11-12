@@ -9,6 +9,7 @@ on:
       - 'desktop/enkyron*'
       - 'tests/enkyron-desktop.test.js'
       - 'tests/qt_enkyron_pilot_lab_smoke.py'
+      - 'tests/enkyron-pilot-lab-handoff.test.js'
       - '.github/workflows/enkyron-desktop.yml'
 
 permissions:
@@ -136,6 +137,8 @@ jobs:
           node --check desktop/enkyron-control-preparation.mjs
           node --check desktop/enkyron-bridge.mjs
           node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js tests/enkyron-static-evidence-handoff.test.js tests/enkyron-evidence-integrity.test.js tests/enkyron-batch-source-replay.test.js tests/enkyron-static-metadata-batch.test.js
+          node --check desktop/enkyron-pilot-lab-handoff.mjs
+          node --test tests/enkyron-pilot-lab-handoff.test.js
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
