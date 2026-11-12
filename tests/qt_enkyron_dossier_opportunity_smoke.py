@@ -109,8 +109,9 @@ class DossierOpportunitySmoke(unittest.TestCase):
             })
             self.assertFalse(button.isEnabled())
             self.assertTrue(window.company_dossier_pending_or_unsaved()[0])
-            self.assertFalse(window.confirm_company_dossier_close())
-            # Note: close guard uses QMessageBox.information; no real write.
+            with patch("desktop.enkyron.QMessageBox.information"):
+                self.assertFalse(window.confirm_company_dossier_close())
+            # The busy close guard must not start another write.
             self.assertEqual(count("crm-company-direct-opportunity-create"), 1)
 
             saved({
