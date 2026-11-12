@@ -193,3 +193,41 @@ mail, invoice, contract or assessment creation; negative-path verification;
 confirmation of the latest presentation fixes on Debian; and an explicit
 human acceptance decision. Do not reset the existing test database or
 re-run the 113 migrations. PR #583 remains draft/not merged.
+
+## Operator checkpoint — 12 November 2026, ENK-03 step 8 read-only SQL
+
+**Operator-supplied Debian terminal output and screenshot, exact preview
+update target** `119d229cb0f50de80a207f82e0af4f48d6155ae1`.
+The available screenshot confirms the corrected `NEXT ACTION` banner states
+`No open company follow-ups` and separately identifies the opportunity's
+next action; Company History still has nine events and its visible company
+revision card says `Company · Updated`. The preceding expanded contact
+revision retains `contact fields: job_title`. The screenshot does not
+fully show that contact card's heading, so do not claim independent visible
+proof of its title.
+
+**Read-only PostgreSQL transaction reported by operator:**
+- `current_database() = enkyron_uat_enk03`,
+  `current_user = emprex`.
+- Exact local-workspace company `ENK03 Synthetic Engineering Ltd` with
+  sector `Synthetic engineering services`: 2 contacts, 1 directly
+  linked opportunity, 1 company-owned follow-up.
+- Follow-up: `completed`, version 3, due `2026-11-20`,
+  3 recorded follow-up event revisions.
+- In this isolated test database, six table-level counts were all zero:
+  `arl_workbench_tickets`, `enkyron_crm_mail_manual_sends`,
+  `enkyron_crm_mail_drafts`, `enkyron_crm_contract_references`,
+  `enkyron_crm_issued_invoices`, `owner_assessment_cases`.
+  These counts prove only the present stored rows in these six tables.
+  They do not independently demonstrate no external transmission nor
+  every negative/guard path.
+- Transaction ended with `COMMIT`, but ran under `BEGIN READ ONLY`,
+  and does not evidence any new database mutation.
+- A Qt device-pixel-ratio cache warning appeared at launch; the app
+  opened and displayed the company dossier, so no reproducible functional
+  failure is established from this warning alone.
+
+**Acceptance:** step 8 positive read-back/PgSQL checks PASS for the
+observed assertions. UAT-01 remains IN PROGRESS, not human accepted;
+negative UI/server denial tests and end-to-end operator acceptance remain.
+PR #583 stays draft; no merge or production DB writes.
