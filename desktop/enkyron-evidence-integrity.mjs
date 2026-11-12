@@ -2,7 +2,7 @@
 // This checks canonical descriptor consistency and *claimed* Git lineage.
 // It does NOT independently authenticate source material, approve evidence,
 // or change verificationState, applicability, Master, or test permissions.
-import {canonicalJson,intelligenceDigest} from '../src/control-intelligence-core.js';
+import {canonicalJson,intelligenceDigest} from '../src/canonical-intelligence-digest.mjs';
 
 const CONTROL='ARL-KB-001';
 const ID=/^cei_[a-f0-9]{32}$/;
