@@ -7,6 +7,8 @@ on:
       - 'tests/test_miniagent_pilot_lab_contract.py'
       - 'risk-knowledge/risk-knowledge-v1.json'
       - '.github/workflows/miniagent-lab.yml'
+      - 'desktop/enkyron_pilot_lab_bridge.py'
+      - 'tests/test_enkyron_pilot_lab_bridge.py'
 
 permissions:
   contents: read
@@ -20,5 +22,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Python syntax and synthetic dossier regression
         run: |
-          python3 -m py_compile scripts/miniagent-pilot-lab.py tests/test_miniagent_pilot_lab_contract.py
+          python3 -m py_compile scripts/miniagent-pilot-lab.py desktop/enkyron_pilot_lab_bridge.py tests/test_miniagent_pilot_lab_contract.py tests/test_enkyron_pilot_lab_bridge.py
           python3 -m unittest discover -s tests -p 'test_miniagent_pilot_lab_contract.py' -v
+          python3 -m unittest discover -s tests -p 'test_enkyron_pilot_lab_bridge.py' -v
