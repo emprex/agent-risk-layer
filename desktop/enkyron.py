@@ -6436,6 +6436,15 @@ class EnkyronWindow(QMainWindow):
                             )
                             if direct_exists:
                                 add_opportunity.setText("Opportunity already recorded")
+                                # The disabled label is longer than the 190px action
+                                # control. Fit this one status to its real font size;
+                                # do not enlarge the regular New opportunity button.
+                                add_opportunity.setFixedWidth(max(
+                                    add_opportunity.sizeHint().width(),
+                                    add_opportunity.fontMetrics().horizontalAdvance(
+                                        add_opportunity.text()
+                                    ) + 44
+                                ))
                                 add_opportunity.setToolTip(
                                     "Use the existing opportunity above. "
                                     "No duplicate company-only lead is created."
