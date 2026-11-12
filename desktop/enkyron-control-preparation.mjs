@@ -334,7 +334,26 @@ export async function collectTicketStaticCandidates(pool,ticketId,{
   if(!projected || !identity || identity.revision!==scope.target_sha ||
      !source.collectors.includes('target_identity'))
     refusal('KB-001 frozen system identity metadata is missing or has drifted');
-  return {...preview,kb001_candidate:{
+  const reviewWorkplan=preparation.dossiers.map(dossier=>{
+    const counts=dossier.counts||{};
+    if(!ID.test(dossier.control_id)||!['applicability','test_planning',
+      'evidence_collection','human_decision','blocked_follow_up',
+      'other_review'].includes(dossier.stage) ||
+       !['source_candidates','owner_documents','authorised_runtime'].every(
+         key=>Number.isSafeInteger(counts[key])&&counts[key]>=0&&counts[key]<=40))
+      refusal('canonical review workplan contains missing control routes');
+    return {
+      control_id:dossier.control_id,
+      title:clean(dossier.title,180),
+      category:clean(dossier.category,140),
+      stage:dossier.stage,
+      source_requirements:counts.source_candidates,
+      human_document_requirements:counts.owner_documents,
+      authorised_runtime_requirements:counts.authorised_runtime,
+      decision_required:true
+    };
+  });
+  return {...preview,review_workplan:reviewWorkplan,kb001_candidate:{
     schema:'enkyron.kb001.static-identity-candidate.v1',
     control_id:'ARL-KB-001',
     criterion_number:1,
