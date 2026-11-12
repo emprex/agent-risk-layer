@@ -297,7 +297,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "master-init-preview", "master-init-record") else
+        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "master-init-preview", "master-init-record") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -861,8 +861,18 @@ class EnkyronWindow(QMainWindow):
         self.static_collect_button.setEnabled(False)
         self.static_collect_button.clicked.connect(self.collect_static_candidates)
         work_actions.addWidget(self.static_collect_button)
+        self.batch_replay_button = QPushButton("Replay source fingerprints · 108 KB · read-only")
+        self.batch_replay_button.setObjectName("batchSourceReplayReadOnly")
+        self.batch_replay_button.setEnabled(False)
+        self.batch_replay_button.clicked.connect(self.replay_source_fingerprints)
+        work_actions.addWidget(self.batch_replay_button)
         work_actions.addStretch()
         evidence_l.addLayout(work_actions)
+        self.batch_replay_results = make_text_area()
+        self.batch_replay_results.setObjectName("batchSourceReplayResults")
+        self.batch_replay_results.setMaximumHeight(205)
+        self.batch_replay_results.setVisible(False)
+        evidence_l.addWidget(self.batch_replay_results)
         self.static_collect_results = make_text_area()
         self.static_collect_results.setObjectName("ticketStaticCandidatePreview")
         self.static_collect_results.setMaximumHeight(165)
@@ -15838,6 +15848,9 @@ class EnkyronWindow(QMainWindow):
         self.engine_button.setEnabled(False)
         self.control_review_button.setEnabled(False)
         self.static_collect_button.setEnabled(False)
+        self.batch_replay_button.setEnabled(False)
+        self.batch_replay_results.clear()
+        self.batch_replay_results.setVisible(False)
         self.kb001_candidate = None
         self.kb001_record_button.setEnabled(False)
         self.kb001_record_button.setVisible(False)
@@ -16018,6 +16031,9 @@ class EnkyronWindow(QMainWindow):
                 and ticket.get("status") != "closed"
             )
             self.static_collect_button.setEnabled(
+                self.control_review_button.isEnabled()
+            )
+            self.batch_replay_button.setEnabled(
                 self.control_review_button.isEnabled()
             )
             self.record_button.setEnabled(self.engine_button.isEnabled())
@@ -16322,6 +16338,98 @@ class EnkyronWindow(QMainWindow):
                 )
             )
         self.bridge.call("source-review", ticket_id, callback=prepared)
+
+    def replay_source_fingerprints(self):
+        """One read-only SHA-bound source replay across the prepared 108 KBs."""
+        ticket_id, ticket = self.current_id, self.current_ticket or {}
+        if (not ticket_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")
+                or ticket.get("archived_at") or ticket.get("status") == "closed"
+                or not self.batch_replay_button.isEnabled()):
+            return
+        self.batch_replay_button.setEnabled(False)
+        self.batch_replay_results.setVisible(True)
+        self.batch_replay_results.setPlainText(
+            "Recollecting source metadata once for 108 controls, then comparing "
+            "the existing KB-001 record within a read-only Master transaction. "
+            "No evidence write, no verification or active tests."
+        )
+
+        def received(data, error):
+            if ticket_id != self.current_id:
+                return
+            self.batch_replay_button.setEnabled(True)
+            if error or not isinstance(data, dict) or data.get("available") is not True:
+                self.batch_replay_results.setPlainText(
+                    "Batch replay refused: " + str(error or "No verified result")
+                    + "\nNo evidence or control decision changed."
+                )
+                return
+            if (data.get("ticket_id") != ticket_id
+                    or data.get("project_id") != ticket.get("linked_project_id")
+                    or data.get("assessment_id") != ticket.get("linked_assessment_id")
+                    or data.get("controls_total") != 108
+                    or data.get("evidence_written") != 0
+                    or data.get("active_tests_executed") != 0
+                    or data.get("recorded_evidence_verified") != 0
+                    or data.get("human_review_required") is not True
+                    or not isinstance(data.get("per_control"), list)
+                    or len(data["per_control"]) != 108):
+                self.batch_replay_results.setPlainText(
+                    "Batch replay rejected: scope, authority or control count mismatch."
+                )
+                return
+            statuses = {
+                "recorded_source_fingerprints_reproduced":
+                    "REPRODUCED — recorded KB-001 source fingerprints match the new projection",
+                "recorded_source_fingerprints_changed":
+                    "MISMATCH — KB-001 recorded and replayed fingerprints differ",
+                "not_recorded":
+                    "NOT RECORDED — no active KB-001 static candidate found",
+                "duplicate_record_requires_review":
+                    "REVIEW BLOCKED — multiple KB-001 source candidates recorded",
+            }
+            status = statuses.get(data.get("kb001_replay_status"))
+            if not status:
+                self.batch_replay_results.setPlainText(
+                    "Batch replay rejected: unknown fingerprint comparison status."
+                )
+                return
+            lines = [
+                "READ-ONLY BATCH SOURCE REPLAY — 108 CANONICAL CONTROLS",
+                "Snapshot: " + str(data.get("snapshot_id")),
+                "Frozen Git SHA: " + str(data.get("target_sha")),
+                "New collection SHA-256: " + str(data.get("collection_sha256")),
+                "Controls with static source routes: " +
+                    str(data.get("controls_with_source_routes")),
+                "Machine-source requirements: " + str(data.get("source_criteria_total")),
+                "Projections: {} unverified / {} incomplete".format(
+                    data.get("metadata_projected_unverified"),
+                    data.get("incomplete_source_projections")),
+                "",
+                "KB-001 existing evidence: " + status,
+                "Evidence ID: " + str(data.get("kb001_evidence_id") or "none"),
+                "Reproduced source digests DO NOT prove authenticity or approval.",
+                "Other 107 controls: source projections prepared, NOT accepted evidence.",
+                "No DB writes, tests, PASS/FAIL, owner approvals or Master revision.",
+                "",
+                "PER-CONTROL WORK QUEUE · STATIC METADATA ONLY",
+            ]
+            for item in data["per_control"]:
+                cid = str(item.get("control_id") or "")
+                if not re.fullmatch(r"ARL-KB-(?:00[1-9]|0[1-9][0-9]|10[0-8])", cid):
+                    self.batch_replay_results.setPlainText(
+                        "Batch replay rejected: malformed control work queue."
+                    )
+                    return
+                lines.append("{} · projected {}/{} · incomplete {} · review required".format(
+                    cid, item.get("metadata_projected_unverified"),
+                    item.get("source_requirements"),
+                    item.get("incomplete_source_projections")))
+            self.batch_replay_results.setPlainText("\n".join(lines))
+
+        self.bridge.call("batch-source-replay", ticket_id, callback=received)
 
     def collect_static_candidates(self):
         """Project bounded read-only source metadata for the existing 108 controls."""
