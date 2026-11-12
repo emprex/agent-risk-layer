@@ -132,6 +132,18 @@ class CompanyHistoryStorySmoke(unittest.TestCase):
         self.assertFalse(any(cmd.startswith(("crm-create", "mail-send", "create-ticket"))
                              for cmd, *_ in self.calls))
 
+    def test_edits_are_named_by_real_company_or_contact_source(self):
+        contact = event("edit-contact", "contact", "updated",
+                        "contact fields: job_title", 32)
+        company = event("edit-company", "company", "updated",
+                        "company fields: sector", 31)
+        self.dossier([contact, company], 2)
+        panel = self.view()
+        labels = [button.text() for button in self.cards(panel)]
+        self.assertTrue(labels[0].startswith("1. Company · Updated"))
+        self.assertTrue(labels[1].startswith("2. Contact · Updated"))
+        self.assertNotIn("Company Contact Change", " ".join(labels))
+
     def test_older_events_and_order_are_real_scoped_pages(self):
         newest = [event("n-%02d"%i, "contact", "created",
                         "Recent event %02d"%i, 39-i) for i in range(20)]
