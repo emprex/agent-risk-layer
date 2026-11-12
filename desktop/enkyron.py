@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QFileDialog,
     QInputDialog,
     QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QSpinBox, QDateEdit, QTabWidget,
-    QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView, QStackedWidget, QVBoxLayout, QWidget,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 
 if __package__:
@@ -297,7 +297,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "master-init-preview", "master-init-record") else
+        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "static-batch-preview", "static-batch-commit", "master-init-preview", "master-init-record") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -373,6 +373,7 @@ class EnkyronWindow(QMainWindow):
         self.calendar_detached_window = None
         self.batch_review_detached_window = None
         self.batch_review_detach_placeholder = None
+        self.batch_record_progress = None
         self.mail_detach_placeholder = None
         self.calendar_detach_placeholder = None
         self.crm_company_followups_dialog = None
@@ -884,6 +885,18 @@ class EnkyronWindow(QMainWindow):
             "108-CONTROL EVIDENCE REVIEW MATRIX · READ-ONLY")
         review_head.addWidget(self.batch_review_heading)
         review_head.addStretch()
+        self.batch_record_button = QToolButton()
+        self.batch_record_button.setObjectName("batchMetadataRecordTinyAction")
+        self.batch_record_button.setText("＋")
+        self.batch_record_button.setToolTip(
+            "Record eligible static metadata in one reviewed batch · UNVERIFIED only")
+        self.batch_record_button.setStatusTip(
+            "Explicit human authorisation required; no PASS/FAIL or active tests")
+        self.batch_record_button.setFixedSize(30, 30)
+        self.batch_record_button.setAutoRaise(True)
+        self.batch_record_button.setEnabled(False)
+        self.batch_record_button.clicked.connect(self.review_static_metadata_batch)
+        review_head.addWidget(self.batch_record_button)
         self.batch_review_detach_button = QPushButton("Open matrix in window")
         self.batch_review_detach_button.setObjectName("batchEvidenceDetach")
         self.batch_review_detach_button.clicked.connect(self.toggle_batch_review_window)
@@ -15968,6 +15981,8 @@ class EnkyronWindow(QMainWindow):
         self.batch_review_table.setRowCount(0)
         self.batch_review_panel.setVisible(False)
         self.batch_review_open.setEnabled(False)
+        self.batch_record_button.setEnabled(False)
+        self.batch_record_progress = None
         self.kb001_candidate = None
         self.kb001_record_button.setEnabled(False)
         self.kb001_record_button.setVisible(False)
@@ -16466,6 +16481,8 @@ class EnkyronWindow(QMainWindow):
                 or not self.batch_replay_button.isEnabled()):
             return
         self.batch_replay_button.setEnabled(False)
+        self.batch_record_button.setEnabled(False)
+        self.batch_record_progress = None
         if self.batch_review_detached_window is not None:
             self.batch_review_detached_window.close()
         self.batch_review_table.setRowCount(0)
@@ -16582,9 +16599,201 @@ class EnkyronWindow(QMainWindow):
                         cell.setToolTip(str(item.get("category") or ""))
                     self.batch_review_table.setItem(index, column, cell)
             self.batch_review_panel.setVisible(True)
+            self.batch_record_button.setEnabled(True)
             self.batch_review_open.setEnabled(False)
 
         self.bridge.call("batch-source-replay", ticket_id, callback=received)
+
+    def review_static_metadata_batch(self):
+        """One explicit human authorisation for unverified source candidate rows."""
+        ticket_id = self.current_id
+        if (not ticket_id or not self.current_ticket or
+                not self.batch_record_button.isEnabled()):
+            return
+        self.batch_record_button.setEnabled(False)
+        self.batch_replay_results.setPlainText(
+            "Checking the exact 108-control frozen source manifest and existing "
+            "canonical records. This preview does NOT write evidence."
+        )
+
+        def previewed(data, error):
+            if ticket_id != self.current_id:
+                return
+            self.batch_record_button.setEnabled(True)
+            if error or not isinstance(data, dict) or data.get("available") is not True:
+                self.batch_replay_results.setPlainText(
+                    "Batch recording preview REFUSED: " +
+                    str(error or "Invalid response") +
+                    "\nNo new evidence has been authorised by this request."
+                )
+                return
+            if (data.get("ticket_id") != ticket_id
+                    or data.get("project_id") != self.current_ticket.get("linked_project_id")
+                    or data.get("assessment_id") != self.current_ticket.get("linked_assessment_id")
+                    or data.get("controls_total") != 108
+                    or data.get("machine_source_controls") != 104
+                    or data.get("candidate_control_bundles") != 103
+                    or data.get("excluded_existing_kb001") != 1
+                    or data.get("controls_without_source") != 4
+                    or not re.fullmatch(r"[a-f0-9]{40}",
+                                        str(data.get("target_sha") or ""))
+                    or not re.fullmatch(r"[a-f0-9]{64}",
+                                        str(data.get("collection_sha256") or ""))
+                    or not re.fullmatch(r"[a-f0-9]{64}",
+                                        str(data.get("manifest_digest") or ""))
+                    or data.get("evidence_accepted") is not False
+                    or data.get("verification_state") != "unverified"
+                    or data.get("active_tests_executed") != 0
+                    or data.get("master_modified") is not False):
+                self.batch_replay_results.setPlainText(
+                    "Batch preview rejected: wrong pilot, scope, count or trust state."
+                )
+                return
+            remaining = data.get("to_record")
+            if not isinstance(remaining, int) or not 0 <= remaining <= 103:
+                self.batch_replay_results.setPlainText(
+                    "Batch preview refused: inconsistent existing record count."
+                )
+                return
+            if remaining == 0:
+                self.batch_replay_results.setPlainText(
+                    "All 103 other-KB source metadata bundles already exist. "
+                    "No duplicate was created. All remain UNVERIFIED; "
+                    "review original source and owner approvals separately."
+                )
+                return
+            confirm = QMessageBox.question(
+                self, "Record UNVERIFIED source metadata for other KBs?",
+                "Frozen source SHA: {}\nSnapshot: {}\n"
+                "Manifest SHA-256: {}\n\n"
+                "Already recorded: {} of 103 other KBs\n"
+                "Still to record: {} of 103\n"
+                "KB-001: existing evidence preserved\n"
+                "KB-030/031/032/106: no static source, skipped\n\n"
+                "AUTHORISE recording metadata CANDIDATES only, in bounded "
+                "resumable chunks?\n"
+                "This does NOT verify source authenticity, approve owner "
+                "permissions, accept evidence, perform tests, change "
+                "applicability, record PASS/FAIL or revise the Master.".format(
+                    data["target_sha"], data["snapshot_id"],
+                    data["manifest_digest"], data["already_recorded"],
+                    remaining
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+            self.batch_record_progress = {
+                "ticket_id": ticket_id,
+                "snapshot_id": data["snapshot_id"],
+                "manifest_digest": data["manifest_digest"],
+                "cursor": 0, "created": 0, "skipped": 0, "processed": 0,
+                "payload": {
+                    "ticket_id": ticket_id, "snapshot_id": data["snapshot_id"],
+                    "target_sha": data["target_sha"],
+                    "collection_sha256": data["collection_sha256"],
+                    "manifest_digest": data["manifest_digest"],
+                    "confirmed": True,
+                    "acknowledgement":
+                        "I AUTHORISE UNVERIFIED STATIC METADATA RECORDING ONLY",
+                    "rationale":
+                        "The accountable operator reviewed and authorised "
+                        "recording frozen-Git static metadata projections as "
+                        "unverified candidates only; original sources, "
+                        "environment and owner permissions remain unverified.",
+                }
+            }
+            self.batch_record_button.setEnabled(False)
+            self._commit_static_batch_chunk()
+
+        self.bridge.call("static-batch-preview", ticket_id, callback=previewed)
+
+    def _commit_static_batch_chunk(self):
+        """Resume exact reviewed manifest; no additional confirmations."""
+        state = self.batch_record_progress
+        if not state or state["ticket_id"] != self.current_id:
+            return
+        ticket_id = state["ticket_id"]
+        manifest = state["manifest_digest"]
+        cursor = state["cursor"]
+        self.batch_replay_results.setPlainText(
+            "Recording UNVERIFIED source metadata only · {} of 103 processed\n"
+            "Canonical ARL evidence rows, no duplicate or control decision.\n"
+            "If interrupted, inspect the register before retrying.".format(
+                state["processed"])
+        )
+        payload = dict(state["payload"], cursor=cursor)
+
+        def committed(data, error):
+            current = self.batch_record_progress
+            if (not current or ticket_id != self.current_id or
+                    current["manifest_digest"] != manifest or
+                    current["cursor"] != cursor):
+                return
+            if error or not isinstance(data, dict) or data.get("available") is not True:
+                self.batch_replay_results.setPlainText(
+                    "Batch stopped at cursor {}: {}.\n"
+                    "Partial canonical rows MAY exist. Reopen the batch preview "
+                    "to reconcile stored records; duplicates are not authorised."
+                    .format(cursor, str(error or "Invalid response")))
+                self.batch_record_progress = None
+                self.batch_record_button.setEnabled(True)
+                return
+            next_cursor = data.get("next_cursor")
+            created = data.get("created")
+            skipped = data.get("skipped")
+            if (data.get("ticket_id") != ticket_id or
+                    data.get("snapshot_id") != current["snapshot_id"] or
+                    data.get("manifest_digest") != manifest or
+                    data.get("total") != 103 or
+                    not isinstance(next_cursor, int) or
+                    not cursor < next_cursor <= min(103, cursor + 16) or
+                    not isinstance(created, int) or
+                    not isinstance(skipped, int) or
+                    created + skipped != next_cursor - cursor or
+                    data.get("verification_state") != "unverified" or
+                    data.get("evidence_accepted") is not False or
+                    data.get("decisions_recorded") != 0 or
+                    data.get("active_tests_executed") != 0 or
+                    data.get("master_modified") is not False):
+                self.batch_replay_results.setPlainText(
+                    "Batch response rejected: scope, cursor or trust mismatch. "
+                    "Inspect canonical register before retrying."
+                )
+                self.batch_record_progress = None
+                self.batch_record_button.setEnabled(True)
+                return
+            current["cursor"] = next_cursor
+            current["processed"] += created + skipped
+            current["created"] += created
+            current["skipped"] += skipped
+            if data.get("finished") is True and next_cursor == 103:
+                self.batch_replay_results.setPlainText(
+                    "BATCH METADATA RECORDING COMPLETED — UNVERIFIED ONLY\n"
+                    "103 other-KB source bundles examined\n"
+                    "New canonical records: {}\n"
+                    "Already existing, not duplicated: {}\n"
+                    "KB-001 existing evidence unchanged; 4 non-static KBs skipped.\n"
+                    "No source authenticated, evidence verified, test authorised, "
+                    "PASS/FAIL, applicability change or Master revision.\n"
+                    "Use Evidence Register on a selected KB to inspect its row."
+                    .format(current["created"], current["skipped"])
+                )
+                self.batch_record_progress = None
+                self.batch_record_button.setEnabled(True)
+                return
+            if data.get("finished") is not False or next_cursor >= 103:
+                self.batch_replay_results.setPlainText(
+                    "Batch cursor inconsistent; inspect records before retrying.")
+                self.batch_record_progress = None
+                self.batch_record_button.setEnabled(True)
+                return
+            # Continue with the next bounded batch as a genuine one-shot IPC
+            # request. No 108 confirmation dialogs or background work.
+            self._commit_static_batch_chunk()
+
+        self.bridge.call("static-batch-commit", payload=payload, callback=committed)
 
     def select_batch_review_control(self):
         """Navigate to an existing canonical KB, without any decision or write."""
