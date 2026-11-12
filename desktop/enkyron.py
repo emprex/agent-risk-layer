@@ -302,7 +302,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action in ("pilot-lab-run", "operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "static-batch-preview", "static-batch-commit", "master-init-preview", "master-init-record") else
+        timer.start(95000 if action in ("pilot-lab-run", "pilot-lab-handoff", "operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "static-batch-preview", "static-batch-commit", "master-init-preview", "master-init-record") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
