@@ -64,6 +64,7 @@ jobs:
           node --check desktop/enkyron-crm-company-dossier.mjs
           node --check desktop/enkyron-crm-qualification.mjs
           node --check desktop/enkyron-crm-proposals.mjs
+          node --check desktop/enkyron-crm-proposal-readiness.mjs
           node --check desktop/enkyron-crm-proposal-lines.mjs
           node --check desktop/enkyron-crm-service-catalog.mjs
           node --check scripts/enkyron-crm-service-catalog-schema.mjs
@@ -130,7 +131,7 @@ jobs:
           node --check scripts/enkyron-crm-privacy-schema.mjs
           node --check scripts/enkyron-crm-retention-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-ticket-actions.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-company-opportunities.test.js tests/enkyron-crm-direct-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-service-catalog.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-sow-sources.test.js tests/enkyron-crm-sow-drafts.test.js tests/enkyron-crm-contract-references.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-invoice-issuance.test.js tests/enkyron-crm-quote-preflight.test.js tests/enkyron-crm-quote-evidence-review.test.js tests/enkyron-crm-quote-external-report.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-ticket-actions.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-company-opportunities.test.js tests/enkyron-crm-direct-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposal-readiness.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-service-catalog.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-sow-sources.test.js tests/enkyron-crm-sow-drafts.test.js tests/enkyron-crm-contract-references.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-invoice-issuance.test.js tests/enkyron-crm-quote-preflight.test.js tests/enkyron-crm-quote-evidence-review.test.js tests/enkyron-crm-quote-external-report.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
           node --check desktop/enkyron-ticket-controls.mjs
           node --check desktop/enkyron-control-preparation.mjs
@@ -232,6 +233,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_qualification_uat_smoke.py'
+      - name: ENK-04 company proposal preparation read-only smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_proposal_readiness_smoke.py'
 
       - name: ENK-03 CRM contact auto-refresh after dossier save (synthetic offline)
         env:
