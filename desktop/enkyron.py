@@ -6634,6 +6634,29 @@ class EnkyronWindow(QMainWindow):
                                     preparation,
                                     alignment=Qt.AlignmentFlag.AlignRight
                                 )
+                                new_draft = QPushButton(
+                                    "Prepare internal draft…"
+                                )
+                                new_draft.setObjectName(
+                                    "crmDossierPrepareInternalDraft"
+                                )
+                                new_draft.setToolTip(
+                                    "Opens a human-priced, unsent draft only "
+                                    "after a fresh company qualification check. "
+                                    "No email, quote or contract is issued."
+                                )
+                                new_draft.setEnabled(preparation.isEnabled())
+                                new_draft.clicked.connect(
+                                    lambda _checked=False, record=item,
+                                           scoped_company=company_id:
+                                    self.open_dossier_internal_proposal(
+                                        record, scoped_company
+                                    )
+                                )
+                                content.addWidget(
+                                    new_draft,
+                                    alignment=Qt.AlignmentFlag.AlignRight
+                                )
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
                     elif section_id == "company_history":
@@ -7965,6 +7988,69 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call(
             "crm-company-proposal-readiness", identifier, callback=received
+        )
+
+    def open_dossier_internal_proposal(self, record, company_id):
+        """Require a fresh, exact-ID readiness decision before opening editor."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id):
+            return
+        if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
+            self.crm_proposal_dialog.raise_()
+            return
+        opportunity_id = record.get("opportunity_id") if isinstance(record, dict) else None
+        if (not isinstance(opportunity_id, str)
+                or record.get("company_id") != company_id
+                or record.get("source_ticket_id") is not None):
+            QMessageBox.warning(
+                dialog, "Internal draft unavailable",
+                "Choose a directly linked company opportunity."
+            )
+            return
+
+        def received(data, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            opportunity = data.get("opportunity") if isinstance(data, dict) else None
+            qualification = data.get("qualification") if isinstance(data, dict) else None
+            valid = (
+                not error and isinstance(data, dict)
+                and data.get("available") is True
+                and data.get("company_id") == company_id
+                and data.get("opportunity_id") == opportunity_id
+                and data.get("eligible_for_internal_draft_review") is True
+                and data.get("blockers") == []
+                and data.get("existing_draft_count") == 0
+                and data.get("external_issue_authorised") is False
+                and isinstance(opportunity, dict)
+                and opportunity.get("id") == opportunity_id
+                and isinstance(opportunity.get("version"), int)
+                and opportunity["version"] >= 1
+                and isinstance(qualification, dict)
+                and isinstance(qualification.get("id"), str)
+                and qualification.get("fit_status") == "potential_fit"
+            )
+            if not valid:
+                QMessageBox.warning(
+                    dialog, "Internal draft preparation blocked",
+                    "The current company, opportunity, qualification and "
+                    "draft count were not all verified. No draft was created."
+                )
+                return
+            self.show_proposal_dialog({
+                "company_id": company_id,
+                "company_name_at_creation": data.get("company_name") or "",
+                "opportunity_id": opportunity_id,
+                "expected_opportunity_version": opportunity["version"],
+                "qualification_id": qualification["id"],
+            })
+
+        self.bridge.call(
+            "crm-company-proposal-readiness",
+            company_id + ":" + opportunity_id, callback=received
         )
 
     def record_company_qualification(self):
