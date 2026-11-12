@@ -19,7 +19,8 @@ test('request demands two immutable canonical UUIDs, no names or arbitrary queri
     company_id:COMPANY,opportunity_id:OPPORTUNITY
   });
   for(const bad of [null,'',COMPANY,COMPANY+':bad',COMPANY+':'+OPPORTUNITY+':x',
-    'example-client:'+OPPORTUNITY,ids.toUpperCase(),'../../data']){
+    'example-client:'+OPPORTUNITY,
+    'AAAAAAAA-2222-4333-8444-555555555555:'+OPPORTUNITY,'../../data']){
     assert.throws(()=>validateCompanyProposalReadinessRequest(bad),/CRM invalid/);
   }
 });
