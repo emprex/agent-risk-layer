@@ -6,6 +6,7 @@ import hashlib
 from email.utils import parseaddr
 from datetime import datetime, timezone
 import json
+import os
 import re
 from decimal import Decimal, InvalidOperation
 import sys
