@@ -16522,6 +16522,9 @@ class EnkyronWindow(QMainWindow):
                     "KB-001 recording not confirmed. Inspect Evidence Register."
                 )
                 return
+            # A confirmed KB-001 recording becomes the ticket's active review
+            # context; opening Evidence Register now selects its exact control.
+            self.set_active_ticket_control(ticket_id, "ARL-KB-001")
             self.kb001_candidate = None
             self.kb001_record_button.setVisible(False)
 
