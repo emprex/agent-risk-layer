@@ -37,7 +37,7 @@ export async function listActivityTimeline(pool,id,actor){
   const opportunityId=requireOpportunityId(id),owner=scope(actor);
   try{
     const row=(await pool.query(
-      'SELECT id,prospect_id,company_name_at_creation,stage,version '
+      'SELECT id,prospect_id,company_id,company_name_at_creation,stage,next_action,due_date,probability_percent,owner_local,version '
       +'FROM enkyron_crm_opportunities WHERE workspace_key=$1 AND id=$2',
       [owner.key,opportunityId]
     )).rows[0];
