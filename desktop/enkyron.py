@@ -5257,7 +5257,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_followups.clicked.connect(
             lambda: self.open_company_followups(self.crm_dossier_company_id)
         )
-        heading_row.addWidget(self.crm_dossier_company_followups)
+        # The follow-up action belongs with its recorded context, not
+        # among the global dossier header controls.
         layout.addLayout(heading_row)
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
@@ -5274,10 +5275,38 @@ class EnkyronWindow(QMainWindow):
             "font-weight: bold; padding: 4px 0;"
         )
         layout.addWidget(self.crm_dossier_glance)
+        # ENK-01A: give the recorded human follow-up a readable hierarchy.
+        # The existing callbacks still supply the exact canonical text.
+        next_action_card = QFrame()
+        next_action_card.setObjectName("crmDossierNextActionCard")
+        next_action_card.setMaximumWidth(1120)
+        next_action_card.setStyleSheet(
+            "QFrame#crmDossierNextActionCard { background: #f0f8fa; "
+            "border: 1px solid #a7cbd2; border-left: 4px solid #176e81; "
+            "border-radius: 6px; }"
+        )
+        next_action_layout = QVBoxLayout(next_action_card)
+        next_action_layout.setContentsMargins(16, 10, 16, 12)
+        next_action_layout.setSpacing(5)
+        next_action_title = QLabel("RECORDED FOLLOW-UP")
+        next_action_title.setObjectName("crmDossierNextActionTitle")
+        next_action_title.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #176e81; border: 0;"
+        )
+        next_action_layout.addWidget(next_action_title)
         self.crm_dossier_next_action = QLabel("")
+        self.crm_dossier_next_action.setObjectName("crmDossierNextActionText")
         self.crm_dossier_next_action.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_next_action.setWordWrap(True)
-        layout.addWidget(self.crm_dossier_next_action)
+        self.crm_dossier_next_action.setStyleSheet(
+            "font-size: 14px; font-weight: 600; color: #20354a; border: 0;"
+        )
+        next_action_layout.addWidget(self.crm_dossier_next_action)
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        action_row.addWidget(self.crm_dossier_company_followups)
+        next_action_layout.addLayout(action_row)
+        layout.addWidget(next_action_card)
         self.crm_dossier_notice = QLabel(
             "Internal CRM records: notes are not verified sent messages, "
             "and drafts are not signed contracts or issued invoices."
