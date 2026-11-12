@@ -310,6 +310,107 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
         finally:
             self.dispose(w)
 
+    def test_one_batch_consent_records_other_kb_metadata_in_seven_bounded_requests(self):
+        """One human confirmation, 103 synthetic candidate records, zero verification."""
+        w = self.make_window()
+        manifest = "b" * 64
+        previews = []
+        commits = []
+        answer_count = []
+        def fake(_bridge, action, arg="", payload=None, callback=None):
+            if action == "static-batch-preview":
+                self.assertEqual(arg, TICKET)
+                previews.append(1)
+                callback({
+                    "available": True, "ticket_id": TICKET, "project_id": PROJECT,
+                    "assessment_id": ASSESSMENT,
+                    "snapshot_id": SNAP, "target_sha": SHA,
+                    "collection_sha256": "a" * 64, "manifest_digest": manifest,
+                    "controls_total": 108, "machine_source_controls": 104,
+                    "candidate_control_bundles": 103,
+                    "excluded_existing_kb001": 1,
+                    "controls_without_source": 4,
+                    "already_recorded": 0, "to_record": 103,
+                    "evidence_accepted": False, "verification_state": "unverified",
+                    "active_tests_executed": 0, "master_modified": False,
+                }, None)
+            elif action == "static-batch-commit":
+                self.assertIsNone(arg or None)
+                start = payload["cursor"]
+                self.assertEqual(payload["manifest_digest"], manifest)
+                self.assertEqual(payload["snapshot_id"], SNAP)
+                self.assertTrue(payload["confirmed"])
+                self.assertEqual(
+                    payload["acknowledgement"],
+                    "I AUTHORISE UNVERIFIED STATIC METADATA RECORDING ONLY")
+                end = min(start + 16, 103)
+                commits.append(start)
+                callback({
+                    "available": True, "ticket_id": TICKET,
+                    "snapshot_id": SNAP, "manifest_digest": manifest,
+                    "total": 103, "created": end-start, "skipped": 0,
+                    "next_cursor": end, "finished": end == 103,
+                    "verification_state": "unverified", "evidence_accepted": False,
+                    "decisions_recorded": 0, "active_tests_executed": 0,
+                    "master_modified": False,
+                }, None)
+            else:
+                raise AssertionError("Unexpected IPC " + action)
+
+        try:
+            w.batch_record_button.setEnabled(True)
+            def yes(*args, **kwargs):
+                answer_count.append(1)
+                return QMessageBox.StandardButton.Yes
+            with patch.object(DesktopBridge, "call", new=fake), \
+                    patch.object(QMessageBox, "question", new=yes):
+                w.review_static_metadata_batch()
+            self.assertEqual(len(previews), 1)
+            self.assertEqual(len(answer_count), 1)
+            self.assertEqual(commits, [0,16,32,48,64,80,96])
+            text = w.batch_replay_results.toPlainText()
+            self.assertIn("COMPLETED", text)
+            self.assertIn("New canonical records: 103", text)
+            self.assertIn("KB-001 existing evidence unchanged", text)
+            self.assertIn("No source authenticated", text)
+            self.assertTrue(w.batch_record_button.isEnabled())
+            self.assertIsNone(w.batch_record_progress)
+        finally:
+            self.dispose(w)
+
+    def test_batch_human_refusal_writes_zero_records(self):
+        w = self.make_window()
+        calls = []
+        def fake(_bridge, action, arg="", payload=None, callback=None):
+            calls.append(action)
+            if action == "static-batch-preview":
+                callback({
+                    "available": True, "ticket_id": TICKET, "project_id": PROJECT,
+                    "assessment_id": ASSESSMENT, "snapshot_id": SNAP,
+                    "target_sha": SHA, "collection_sha256": "a" * 64,
+                    "manifest_digest": "b" * 64, "controls_total": 108,
+                    "machine_source_controls": 104,
+                    "candidate_control_bundles": 103,
+                    "excluded_existing_kb001": 1,
+                    "controls_without_source": 4, "already_recorded": 0,
+                    "to_record": 103, "evidence_accepted": False,
+                    "verification_state": "unverified",
+                    "active_tests_executed": 0, "master_modified": False
+                }, None)
+            else:
+                raise AssertionError("Human cancelled; must not write")
+        try:
+            w.batch_record_button.setEnabled(True)
+            with patch.object(DesktopBridge, "call", new=fake), \
+                    patch.object(QMessageBox, "question",
+                                 return_value=QMessageBox.StandardButton.No):
+                w.review_static_metadata_batch()
+            self.assertEqual(calls, ["static-batch-preview"])
+            self.assertIsNone(w.batch_record_progress)
+            self.assertTrue(w.batch_record_button.isEnabled())
+        finally:
+            self.dispose(w)
+
     def test_source_preview_has_human_gate_and_unverified_canonical_write(self):
         w = self.make_window()
         calls = []
