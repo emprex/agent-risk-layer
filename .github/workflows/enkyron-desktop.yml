@@ -227,6 +227,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_activity_uat_smoke.py'
+      - name: ENK-04 company qualification exact-readback (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_qualification_uat_smoke.py'
 
       - name: ENK-03 CRM contact auto-refresh after dossier save (synthetic offline)
         env:
@@ -1518,6 +1523,29 @@ jobs:
           assert calls[-1][2]["contact_id"] is None
           assert calls[-1][2]["fit_status"] == "potential_fit"
           assert calls[-1][2]["confirmed"] is True
+          # The append ack alone is not verified; require an exact company
+          # and qualification ID from the canonical read-only dossier.
+          calls[-1][3]({
+              "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "company_id": company_id,
+              "contact_id": None,
+              "fit_status": "potential_fit",
+              "priority": "normal"
+          }, None)
+          assert calls[-1][0] == "crm-company-dossier"
+          calls[-1][3]({
+              "available": True,
+              "company": {"id": company_id},
+              "sections": {"qualifications": {"items": [{
+                  "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "contact_id": None, "fit_status": "potential_fit",
+                  "priority": "normal",
+                  "rationale": "Research suggests commercial relevance but client identity is unverified.",
+                  "next_action": "Review technical scope manually",
+                  "source_reference": None
+              }]}}
+          }, None)
+          assert calls[-1][0] == "crm-company-dossier"
           # Refresh must preserve an unsaved activity, not discard a human draft.
           window.crm_dossier_nav.setCurrentRow(5)
           window.crm_dossier_activity_record.click()
