@@ -5445,6 +5445,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_pending = False
         self.crm_dossier_opportunity_saving = False
         self.crm_dossier_opportunity_check_id = None
+        # Transport errors may hide a committed write: keep this dossier
+        # fail-closed until the operator reviews and reopens it.
+        self.crm_dossier_opportunity_uncertain = False
         dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
@@ -6027,6 +6030,23 @@ class EnkyronWindow(QMainWindow):
                         "Opportunity write acknowledged; dossier re-read unavailable. "
                         "Inspect CRM records before retrying."
                     )
+                if self.crm_dossier_opportunity_uncertain:
+                    self.status.setText(
+                        "Opportunity save outcome uncertain; dossier unavailable. "
+                        "Inspect company records before another attempt."
+                    )
+                return
+            if (not isinstance(data.get("company"), dict)
+                    or data["company"].get("id") != company_id):
+                self.crm_dossier_notice.setText(
+                    "CRM dossier identity mismatch. No company details loaded."
+                )
+                if (self.crm_dossier_opportunity_check_id is not None
+                        or self.crm_dossier_opportunity_uncertain):
+                    self.status.setText(
+                        "Opportunity save not verified: company identity mismatch. "
+                        "Review company records before retrying."
+                    )
                 return
             company = data["company"]
             self.crm_dossier_company_snapshot = dict(company)
@@ -6067,6 +6087,11 @@ class EnkyronWindow(QMainWindow):
             )
             opportunity_section = sections.get("opportunities") or {}
             opportunities = opportunity_section.get("items") or []
+            if self.crm_dossier_opportunity_uncertain:
+                self.status.setText(
+                    "Previous opportunity save outcome uncertain; review the "
+                    "visible company records and history before retrying."
+                )
             awaiting_id = getattr(self, "crm_dossier_opportunity_check_id", None)
             if awaiting_id:
                 verified = any(
@@ -6432,6 +6457,7 @@ class EnkyronWindow(QMainWindow):
                             add_opportunity.setEnabled(
                                 not self.crm_dossier_opportunity_saving
                                 and self.crm_dossier_opportunity_check_id is None
+                                and not self.crm_dossier_opportunity_uncertain
                                 and not direct_exists
                             )
                             if direct_exists:
@@ -7913,6 +7939,14 @@ class EnkyronWindow(QMainWindow):
                 or company.get("id") != company_id
                 or self.crm_dossier_opportunity_saving):
             return
+        if self.crm_dossier_opportunity_uncertain:
+            QMessageBox.information(
+                dialog, "Review uncertain save",
+                "The previous save response was uncertain. Inspect the "
+                "company's opportunities and history before starting another "
+                "attempt. Close and reopen the dossier after review."
+            )
+            return
         if self.crm_dossier_opportunity_check_id is not None:
             QMessageBox.information(
                 dialog, "Verify previous opportunity",
@@ -7995,12 +8029,21 @@ class EnkyronWindow(QMainWindow):
                     or not result.get("id")
                     or result.get("company_id") != company_id
                     or result.get("source_ticket_id") is not None):
+                # The server might have committed before the transport failed.
+                # No second create from this open dossier until manual review.
+                self.crm_dossier_opportunity_uncertain = True
                 if button is not None:
-                    button.setEnabled(True)
+                    button.setEnabled(False)
+                self.status.setText(
+                    "Opportunity save outcome uncertain; inspect the company "
+                    "record before another attempt. No retry performed."
+                )
                 QMessageBox.warning(
                     dialog, "Opportunity save not confirmed",
-                    "Refresh and inspect existing opportunities before trying again "
-                    "to avoid a duplicate. " + str(error or "")
+                    "The outcome may be uncertain. Inspect the company "
+                    "opportunities and history before trying again; close and "
+                    "reopen the dossier only after that review. "
+                    + str(error or "")
                 )
                 return
             self.crm_dossier_opportunity_check_id = result["id"]
