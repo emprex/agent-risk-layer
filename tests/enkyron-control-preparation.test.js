@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {
-  shapeControlPreparation,prepareTicketControlDossiers,readPreparedTicketControlQueue
+  shapeControlPreparation,prepareTicketControlDossiers,readPreparedTicketControlQueue,
+  shapeTicketStaticCandidatePreview,collectTicketStaticCandidates
 } from '../desktop/enkyron-control-preparation.mjs';
 
 const ticket='3385aa99-e08a-4471-b8e5-9d0b36a8412b';
@@ -98,4 +99,90 @@ test('queue/snapshot drift blocks preparation without persisting draft decisions
     scopeReader:async()=>({...scope,snapshot_id:++index===1?scope.snapshot_id:'sys_changed'}),
     queueReader:async()=>queue
   }),/changed during preparation/);
+});
+
+
+test('one frozen read-only collection projects machine metadata across all 108 prepared controls without writing evidence',async()=>{
+  const sourceScope={...scope,assessment_id:'asm_017009786d744df989ed72104a2f64f3',
+    target_reference:'/home/emprex/miniagent-ARL-2026-000002'};
+  const preparation={...shapeControlPreparation({scope,rows,items}),ticket_id:ticket};
+  const frozen={
+    type:'frozen_inspection',
+    target:{dirty:false,revision:scope.target_sha,repositoryPath:sourceScope.target_reference},
+    binding:{verified:true,revisionBefore:scope.target_sha,revisionAfter:scope.target_sha},
+    inspection:{schema:'arl.inspection.bundle.v1',
+      scope:{mode:'read-only-static-inspection',filesInspected:14,truncatedByLimit:false}}
+  };
+  const requirements=[...new Set(preparation.dossiers.flatMap(d=>
+    d.required_evidence.filter(c=>c.route==='machine_collectable')
+      .map(c=>c.requirement)))];
+  const collection={schema:'arl.deterministic-evidence-collection.v1',
+    targetRevision:scope.target_sha,
+    requirementObservations:requirements.map(requirement=>({
+      requirement,collectors:['dependency_and_version'],
+      observations:{dependency_and_version:{sourceMetadataOnly:true}}
+    }))};
+  // Read the actual routed collector names rather than relying on synthetic
+  // assumptions about how canonical requirement classification labels them.
+  const expectedCollectors=preparation.dossiers[0].required_evidence[0].collectors;
+  collection.requirementObservations= requirements.map(requirement=>({
+    requirement,collectors:expectedCollectors,
+    observations:Object.fromEntries(expectedCollectors.map(x=>[x,{sourceMetadataOnly:true}]))
+  }));
+  let scopeReads=0,collectionCalls=0;
+  const options={
+    scopeReader:async()=>{scopeReads++;return sourceScope;},
+    preparationReader:async()=>preparation,
+    inspector:async()=>frozen,
+    collector:({repositoryPath,requirements:requested})=>{
+      collectionCalls++;
+      assert.equal(repositoryPath,sourceScope.target_reference);
+      assert.deepEqual(requested,requirements);
+      return collection;
+    },
+    freezeReader:async()=>({dirty:false,revision:scope.target_sha,
+      repositoryPath:sourceScope.target_reference})
+  };
+  const preview=await collectTicketStaticCandidates({},ticket,options);
+  assert.equal(collectionCalls,1);
+  assert.equal(scopeReads,2);
+  assert.equal(preview.ticket_id,ticket);
+  assert.equal(preview.assessment_id,sourceScope.assessment_id);
+  assert.equal(preview.snapshot_id,scope.snapshot_id);
+  assert.equal(preview.target_sha,scope.target_sha);
+  assert.equal(preview.controls_total,108);
+  assert.equal(preview.static_criteria,108);
+  assert.equal(preview.metadata_projections,108);
+  assert.equal(preview.evidence_persisted,0);
+  assert.equal(preview.evidence_accepted,false);
+  assert.equal(preview.tests_executed,0);
+  assert.equal(preview.decisions_recorded,0);
+  assert.equal(preview.active_tests_authorised,false);
+  assert.equal(preview.human_review_required,true);
+  assert.match(preview.collection_sha256,/^[a-f0-9]{64}$/);
+  assert.equal(preview.criteria[0].criterion_satisfied,false);
+  assert.equal(preview.criteria[0].control_id,'ARL-KB-001');
+  assert.equal(preview.criteria.at(-1).control_id,'ARL-KB-108');
+
+  await assert.rejects(
+    collectTicketStaticCandidates({},ticket,{
+      ...options,freezeReader:async()=>({
+        dirty:true,revision:scope.target_sha,
+        repositoryPath:sourceScope.target_reference
+      })
+    }),/changed during static collection/);
+  await assert.rejects(
+    collectTicketStaticCandidates({},ticket,{
+      ...options,inspector:async()=>({
+        ...frozen,binding:{...frozen.binding,verified:false}
+      })
+    }),/frozen Inspector/);
+  assert.throws(()=>shapeTicketStaticCandidatePreview({
+    scope:sourceScope,preparation,frozen,
+    collection:{...collection,requirementObservations:[]}
+  }),/incomplete deterministic collection/);
+  assert.throws(()=>shapeTicketStaticCandidatePreview({
+    scope:sourceScope,preparation,frozen,
+    collection:{...collection,targetRevision:'f'.repeat(40)}
+  }),/exact clean assessment snapshot/);
 });
