@@ -1,4 +1,5 @@
 // Company 360 chronological business history.
+import {requireCompanyId} from './enkyron-crm-tickets.mjs';
 // Read-only union of original append-only sources, without migrating or rewriting them.
 // Exact workspace/company/verified-link scoping; no inference from company display names.
 // Historical notes and mail bodies are excluded; external sends remain unverified claims.
@@ -172,7 +173,6 @@ if(PAGED_SQL===COMPANY_HISTORY_SQL)throw new Error('CRM Company History page SQL
 export async function getCompanyHistoryPage(pool,payload,actor){
   if(!payload||typeof payload!=='object'||Array.isArray(payload))
     throw new Error('CRM invalid Company History page request');
-  const {requireCompanyId}=await import('./enkyron-crm-tickets.mjs');
   const companyId=requireCompanyId(payload.company_id);
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
     throw new Error('CRM invalid local operator');
