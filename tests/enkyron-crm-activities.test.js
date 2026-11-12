@@ -38,7 +38,9 @@ test('read scoped opportunity, combine history with bounded query',async()=>{
   const db={query:async(sql,params)=>{
     seen.push({sql,params});
     if(sql.includes('SELECT id,prospect_id'))return {rows:[{
-      id:opportunityId,company_name_at_creation:'Synthetic'
+      id:opportunityId,company_id:companyId,company_name_at_creation:'Synthetic',
+      stage:'qualified',next_action:'Review agreed next step',due_date:'2026-11-20',
+      probability_percent:35,owner_local:'ci-operator',version:2
     }]};
     return {rows:[
       {id:'activity',entry_kind:'activity',detail:'Manual call note'},
@@ -48,6 +50,10 @@ test('read scoped opportunity, combine history with bounded query',async()=>{
   const output=await listActivityTimeline(db,opportunityId,'ci-operator');
   assert.equal(output.available,true);
   assert.equal(output.items.length,2);
+  assert.equal(output.opportunity.company_id,companyId);
+  assert.equal(output.opportunity.version,2);
+  assert.equal(output.opportunity.next_action,'Review agreed next step');
+  assert.match(seen[0].sql,/company_id,company_name_at_creation,stage,next_action,due_date,probability_percent,owner_local,version/);
   // Database returns newest first; the CRM presents the story oldest first.
   assert.deepEqual(output.items.map(entry=>entry.id),['change','activity']);
   assert.deepEqual(seen.map(c=>c.params),

@@ -15215,10 +15215,14 @@ class EnkyronWindow(QMainWindow):
             "UPDATE COMMERCIAL OPPORTUNITY" if existing else
             "PLAN A PROSPECT FOLLOW-UP"
         ))
-        title = QLabel("{}: {}".format(
+        record_type = (
             "CRM company" if existing and existing.get("company_id")
-            else "Research candidate",
-            prospect.get("company_name") or "Unknown"
+            else "Research candidate"
+        )
+        owner = (existing or {}).get("owner_local")
+        title = QLabel("{}: {}{}".format(
+            record_type, prospect.get("company_name") or "Unknown",
+            "\nLocal owner: {}".format(owner) if owner else ""
         ))
         title.setTextFormat(Qt.TextFormat.PlainText)
         title.setWordWrap(True)
@@ -15324,6 +15328,24 @@ class EnkyronWindow(QMainWindow):
             if self.crm_followup_has_date.isChecked() else None
         )
         existing = self.crm_followup_context["existing"]
+        company_id = existing.get("company_id") if existing else None
+        if company_id:
+            # Review the exact company association and intended commercial edit.
+            # UI confirmation never substitutes for backend workspace/version checks.
+            approved = QMessageBox.question(
+                dialog, "Confirm company opportunity update",
+                "Company: {}\nStage: {}\nNext action: {}\nDue: {}\n\n"
+                "Save this manual commercial change? No contact or external "
+                "communication will be created.".format(
+                    self.crm_followup_context["company_name"],
+                    self.crm_followup_stage.currentText(),
+                    next_action, due_date or "Not scheduled"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if approved != QMessageBox.StandardButton.Yes:
+                return
         if existing:
             action = "crm-update-opportunity"
             payload = {
@@ -15337,6 +15359,9 @@ class EnkyronWindow(QMainWindow):
                     else self.crm_followup_probability.value()
                 )
             }
+            if company_id:
+                payload["company_id"] = company_id
+                payload["confirmed"] = True
         else:
             action = "crm-create-opportunity"
             payload = {
@@ -15347,14 +15372,7 @@ class EnkyronWindow(QMainWindow):
             }
         self.crm_followup_submit.setEnabled(False)
 
-        def received(data, error):
-            if error or not data or not data.get("id"):
-                self.crm_followup_submit.setEnabled(True)
-                QMessageBox.warning(
-                    dialog, "Follow-up not saved",
-                    error or "CRM record could not be saved."
-                )
-                return
+        def finish():
             dialog.accept()
             if self.crm_followup_context.get("return_tab") == 4:
                 self.crm_tabs.setCurrentIndex(4)
@@ -15363,6 +15381,71 @@ class EnkyronWindow(QMainWindow):
                 self.crm_tabs.setCurrentIndex(2)
             self.crm_followup_search.clear()
             self.load_followups()
+            self.load_sales_overview()
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not isinstance(data, dict) or not data.get("id"):
+                # A transport error may follow a successful commit. Do not
+                # offer a blind retry for a versioned opportunity update.
+                if not existing:
+                    self.crm_followup_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Opportunity save not confirmed" if existing
+                    else "Follow-up not saved",
+                    str(error or "The server did not confirm this write. "
+                        "Review the canonical record before another attempt.")
+                )
+                return
+            if not existing:
+                finish()
+                return
+            if (data.get("id") != existing.get("id")
+                    or data.get("version") != existing.get("version", 0) + 1):
+                QMessageBox.warning(
+                    dialog, "Opportunity save not verified",
+                    "The server response does not match the requested "
+                    "opportunity and revision. Review the record before retrying."
+                )
+                return
+
+            def verified(latest, check_error):
+                if not dialog.isVisible():
+                    return
+                row = (latest or {}).get("opportunity") if isinstance(
+                    latest, dict) and latest.get("available") else None
+                same_date = (
+                    str((row or {}).get("due_date") or "")[:10] ==
+                    str(payload["due_date"] or "")[:10]
+                )
+                valid = (
+                    not check_error and isinstance(row, dict)
+                    and row.get("id") == existing["id"]
+                    and row.get("version") == existing["version"] + 1
+                    and row.get("stage") == payload["stage"]
+                    and row.get("next_action") == payload["next_action"]
+                    and same_date
+                    and row.get("probability_percent") ==
+                        payload["probability_percent"]
+                    and (not company_id or row.get("company_id") == company_id)
+                )
+                if not valid:
+                    QMessageBox.warning(
+                        dialog, "Opportunity save not verified",
+                        "The exact opportunity could not be read back with "
+                        "the expected company, fields and revision. "
+                        "Review it before another attempt. No retry was sent."
+                    )
+                    return
+                self.status.setText(
+                    "Commercial opportunity verified after exact-ID readback."
+                )
+                finish()
+
+            self.bridge.call(
+                "crm-activity-timeline", existing["id"], callback=verified
+            )
 
         self.bridge.call(action, payload=payload, callback=received)
 

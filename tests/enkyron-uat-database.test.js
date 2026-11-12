@@ -3,7 +3,7 @@ import test from 'node:test';
 import os from 'node:os';
 import {
   ENKYRON_UAT_MARKER, resolveEnkyronDatabase,
-  requireEnkyronUatCommand, verifyEnkyronUatDatabase,
+  requireEnkyronUatCommand, requireEnkyronUatPayload, verifyEnkyronUatDatabase,
 } from '../desktop/enkyron-uat-database.mjs';
 import {validateBootstrapTarget, migrationAdapter} from '../scripts/enkyron-enk03-uat-bootstrap.mjs';
 
@@ -38,12 +38,26 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-create-company', 'crm-create-contact', 'crm-company-dossier',
     'crm-company-direct-opportunity-create', 'crm-company-followup-create',
     'crm-company-followup-update', 'crm-edit-company', 'crm-edit-contact',
+    'crm-update-opportunity', 'crm-activity-timeline',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
     'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
-    'crm-update-opportunity', 'crm-invoice-prepare',
+    'crm-proposal-create', 'crm-record-activity', 'crm-record-qualification',
+    'crm-invoice-prepare',
   ]) assert.throws(() => requireEnkyronUatCommand(target, command), /UAT blocks/);
+});
+
+test('ENK-04 UAT limits update to explicitly reviewed company record', () => {
+  const target = {database:'enkyron_uat_enk03',uat:true};
+  const payload = {company_id:'22222222-3333-4444-8555-666666666666',confirmed:true};
+  assert.doesNotThrow(() => requireEnkyronUatPayload(target,'crm-update-opportunity',payload));
+  for (const bad of [{}, {confirmed:true}, {company_id:payload.company_id}, null]) {
+    assert.throws(() => requireEnkyronUatPayload(target,'crm-update-opportunity',bad), /requires explicit reviewed company/);
+  }
+  assert.doesNotThrow(() => requireEnkyronUatPayload(target,'crm-activity-timeline',null));
+  assert.doesNotThrow(() => requireEnkyronUatPayload({database:'arl_local',uat:false},'crm-update-opportunity',{}));
+  assert.throws(() => requireEnkyronUatCommand(target,'mail-send-draft'), /UAT blocks/);
 });
 
 test('UAT refuses unmarked, wrong or unreadable database before business operation', async () => {

@@ -11,7 +11,8 @@ const UAT_COMMANDS = new Set([
   'crm-create-company', 'crm-create-contact',
   'crm-edit-company', 'crm-edit-contact',
   'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
-  'crm-opportunities', 'crm-company-followups',
+  'crm-opportunities', 'crm-activity-timeline', 'crm-update-opportunity',
+  'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',
 ]);
@@ -32,6 +33,15 @@ export function resolveEnkyronDatabase(env = process.env) {
 export function requireEnkyronUatCommand(target, command) {
   if (target.uat && !UAT_COMMANDS.has(command)) {
     throw new Error('ENKYRON UAT blocks operations outside Company 360 synthetic acceptance');
+  }
+}
+
+// ENK-04: a synthetic commercial edit may touch only a reviewed company-linked
+// opportunity. This supplements backend workspace, association and revision checks.
+export function requireEnkyronUatPayload(target, command, payload) {
+  if (target.uat && command === 'crm-update-opportunity' &&
+      (payload?.confirmed !== true || typeof payload?.company_id !== 'string')) {
+    throw new Error('ENKYRON UAT company opportunity update requires explicit reviewed company');
   }
 }
 
