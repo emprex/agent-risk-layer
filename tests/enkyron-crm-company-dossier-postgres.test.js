@@ -174,7 +174,7 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:4,ticket_history:2,audit_events:4,audit_changes:0});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:4,ticket_history:2,audit_events:4,audit_changes:0,company_history:9});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
@@ -221,6 +221,18 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.ok(dossier.sections.ticket_history.items.every(x=>x.ticket_id===ticket));
     assert.ok(!JSON.stringify(dossier.sections.ticket_history).includes(privateMarker),
       'Do not publish internal note bodies or event detail in company overview');
+    const history=dossier.sections.company_history;
+    assert.equal(history.total,9);
+    assert.deepEqual(new Set(history.items.map(e=>e.resource_kind)),new Set([
+      'company','contact','research_link','ticket_link','opportunity',
+      'activity','mail_draft','ticket'
+    ]));
+    assert.ok(history.items.every(e=>e.event_id&&e.recorded_at&&e.actor_local));
+    assert.ok(history.items.every((e,i)=>i===0||
+      new Date(history.items[i-1].recorded_at)>=new Date(e.recorded_at)));
+    assert.ok(!JSON.stringify(history).includes(privateMarker));
+    assert.ok(!JSON.stringify(history).includes(privateBuyerMarker));
+    assert.ok(!JSON.stringify(history).includes(privateCommercialTerms));
     const review='Synthetic correction reviewed against the originally entered source.';
     await updateCompany(pool,{
       id:a.id,expected_version:1,confirmed:true,review_note:review,
@@ -234,6 +246,10 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     const audited=await getCompanyDossier(pool,a.id,actor);
     assert.equal(audited.sections.audit_events.total,6);
     assert.equal(audited.sections.audit_changes.total,2);
+    assert.equal(audited.sections.company_history.total,11,
+      'Two versioned edits appear once each, not duplicated by CRM updated events');
+    assert.equal(audited.sections.company_history.items.filter(e=>
+      e.resource_kind==='company_contact_change').length,2);
     assert.deepEqual(audited.sections.audit_changes.items.map(x=>x.resource_kind).sort(),
       ['company','contact']);
     const auditText=JSON.stringify({
@@ -244,8 +260,10 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     const noAutoMatch=await getCompanyDossier(pool,twin.id,actor);
     assert.equal(noAutoMatch.sections.audit_events.total,1);
     assert.equal(noAutoMatch.sections.audit_changes.total,0);
+    assert.equal(noAutoMatch.sections.company_history.total,1,
+      'Identical company name does not merge other company audit events');
     assert.ok(Object.entries(noAutoMatch.sections).filter(([id])=>
-      !id.startsWith('audit_')).every(([,section])=>section.total===0),
+      !id.startsWith('audit_')&&id!=='company_history').every(([,section])=>section.total===0),
       'Identical names must not imply common legal identity');
     await assert.rejects(()=>getCompanyDossier(pool,a.id,'ci-other-operator'),
       /not found in local workspace/);
