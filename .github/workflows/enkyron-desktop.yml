@@ -207,6 +207,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_selection_refresh_smoke.py'
 
+      - name: ENK-03 Company 360 opportunity creation (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_dossier_opportunity_smoke.py'
+
 
       - name: ENKYRON local Mail + Calendar integration and DST (offline)
         env:
