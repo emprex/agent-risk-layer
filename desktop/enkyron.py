@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ENKYRON native operator desktop. No browser, web views, or active security testing."""
+"""ENKYRON native operator desktop, including a bounded synthetic offline pilot lab."""
 from __future__ import annotations
 
 import hashlib
@@ -30,6 +30,7 @@ if __package__:
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
     from .enkyron_calendar_view import MailCalendarView
+    from .enkyron_pilot_lab import PilotLabPanel
     from .enkyron_control_review import ControlReviewDialog
     from .enkyron_scope_review import ScopeReviewDialog
 else:
@@ -41,6 +42,7 @@ else:
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
     from enkyron_calendar_view import MailCalendarView
+    from enkyron_pilot_lab import PilotLabPanel
     from enkyron_control_review import ControlReviewDialog
     from enkyron_scope_review import ScopeReviewDialog
 
@@ -225,6 +227,9 @@ class DesktopBridge:
             module = ("desktop.enkyron_operator_state" if action == "operator-state"
                       else "desktop.enkyron_evidence")
             process.setArguments(["-m", module])
+        elif action in ("pilot-lab-status", "pilot-lab-run"):
+            process.setProgram(sys.executable)
+            process.setArguments(["-B", str(ROOT / "desktop" / "enkyron_pilot_lab_bridge.py"), action, arg])
         else:
             process.setProgram("node")
             target = (OWNER_LOGIN_BRIDGE if action in (
@@ -297,7 +302,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "static-batch-preview", "static-batch-commit", "master-init-preview", "master-init-record") else
+        timer.start(95000 if action in ("pilot-lab-run", "pilot-lab-handoff", "operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "static-batch-preview", "static-batch-commit", "master-init-preview", "master-init-record") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -871,6 +876,9 @@ class EnkyronWindow(QMainWindow):
         work_actions.addWidget(self.batch_replay_button)
         work_actions.addStretch()
         evidence_l.addLayout(work_actions)
+        self.pilot_lab = PilotLabPanel(
+            self.bridge, self.review_pilot_lab_control, self.open_pilot_lab_register)
+        evidence_l.addWidget(self.pilot_lab)
         self.batch_replay_results = make_text_area()
         self.batch_replay_results.setObjectName("batchSourceReplayResults")
         self.batch_replay_results.setMaximumHeight(205)
@@ -15983,6 +15991,7 @@ class EnkyronWindow(QMainWindow):
         self.batch_review_open.setEnabled(False)
         self.batch_record_button.setEnabled(False)
         self.batch_record_progress = None
+        self.pilot_lab.set_ticket(None, False)
         self.kb001_candidate = None
         self.kb001_record_button.setEnabled(False)
         self.kb001_record_button.setVisible(False)
@@ -16168,6 +16177,9 @@ class EnkyronWindow(QMainWindow):
             self.batch_replay_button.setEnabled(
                 self.control_review_button.isEnabled()
             )
+            self.pilot_lab.set_ticket(ticket_id,
+                self.control_review_button.isEnabled() and
+                ticket.get("ticket_number") == "ARL-2026-000002")
             self.record_button.setEnabled(self.engine_button.isEnabled())
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
@@ -16407,6 +16419,30 @@ class EnkyronWindow(QMainWindow):
         dialog.show()
         dialog.load_queue()
 
+    def review_pilot_lab_control(self, ticket_id, control_id):
+        """Navigate from a synthetic lab case to the canonical human KB review."""
+        if ticket_id != self.current_id:
+            return
+        self.set_active_ticket_control(ticket_id, control_id)
+        existing = self.control_review_dialog
+        if existing is not None and existing.isVisible():
+            # Do not discard a potentially unsaved human decision; show the
+            # selected KB in the existing dialog only when it can be reopened.
+            existing.raise_()
+            existing.activateWindow()
+            return
+        self.open_control_review()
+
+    def open_pilot_lab_register(self, ticket_id, control_id):
+        """Take the operator directly to the saved test and evidence for one KB."""
+        if ticket_id != self.current_id or not self.current_ticket:
+            return
+        self.set_active_ticket_control(ticket_id, control_id)
+        if self.tabs.currentIndex() == 6:
+            self.inspect_records()
+        else:
+            self.tabs.setCurrentIndex(6)  # tab_changed reads canonical evidence once.
+
     def show_evidence_workflow(self):
         """Load the read-only workplan and source preparation without extra clicks."""
         ticket = self.current_ticket or {}
@@ -16418,6 +16454,7 @@ class EnkyronWindow(QMainWindow):
             self.evidence_workplan_ticket = self.current_id
             self.inspect_evidence()
         self.prepare_source_review()
+        self.pilot_lab.load()
 
     def prepare_source_review(self):
         """Run ARL's existing frozen-source Inspector once per selected ticket."""

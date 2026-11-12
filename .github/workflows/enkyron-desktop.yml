@@ -8,6 +8,8 @@ on:
     paths:
       - 'desktop/enkyron*'
       - 'tests/enkyron-desktop.test.js'
+      - 'tests/qt_enkyron_pilot_lab_smoke.py'
+      - 'tests/enkyron-pilot-lab-handoff.test.js'
       - '.github/workflows/enkyron-desktop.yml'
 
 permissions:
@@ -135,6 +137,8 @@ jobs:
           node --check desktop/enkyron-control-preparation.mjs
           node --check desktop/enkyron-bridge.mjs
           node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js tests/enkyron-static-evidence-handoff.test.js tests/enkyron-evidence-integrity.test.js tests/enkyron-batch-source-replay.test.js tests/enkyron-static-metadata-batch.test.js
+          node --check desktop/enkyron-pilot-lab-handoff.mjs
+          node --test tests/enkyron-pilot-lab-handoff.test.js
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
@@ -143,6 +147,12 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Native pilot assessment lab UI smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_pilot_lab_smoke.py' -v
+
       - name: Native KB-001 source evidence handoff UX smoke (offline)
         env:
           QT_QPA_PLATFORM: offscreen
