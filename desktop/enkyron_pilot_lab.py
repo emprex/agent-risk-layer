@@ -23,10 +23,12 @@ KB_ID = re.compile(r"^ARL-KB-(?:00[1-9]|0[1-9][0-9]|10[0-8])$")
 class PilotLabPanel(QWidget):
     """Operates from ticket Evidence Requests; keeps canonical review separate."""
 
-    def __init__(self, bridge, review_control, parent=None):
+    def __init__(self, bridge, review_control, view_register=None, parent=None):
         super().__init__(parent)
         self.bridge = bridge
         self.review_control = review_control
+        self.view_register = view_register
+        self.run_id = None
         self.ticket_id = None
         self.seq = 0
         self.busy = False
@@ -38,13 +40,13 @@ class PilotLabPanel(QWidget):
         self.setObjectName("enkyronPilotLabPanel")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
-        title = QLabel("LOCAL ASSESSMENT LAB · FROZEN MINIAGENT")
+        title = QLabel("ASSESSMENT TESTS & EVIDENCE · FROZEN MINIAGENT")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
         self.intro = QLabel(
-            "Run the existing SHA-pinned, offline pilot from ENKYRON. "
-            "Simulated owner documents and synthetic tests are NOT independently "
-            "verified client evidence or automatic KB verdicts."
+            "1. Select a test.  2. Inspect what happened.  "
+            "3. Record the observation in ARL.  4. Open its saved evidence. "
+            "This is a synthetic lab; recorded tests remain inconclusive, evidence unverified."
         )
         self.intro.setWordWrap(True)
         layout.addWidget(self.intro)
@@ -82,9 +84,21 @@ class PilotLabPanel(QWidget):
         layout.addWidget(self.table)
 
         actions = QHBoxLayout()
-        self.review_button = QPushButton("Review selected KB in ARL…")
+        actions.addWidget(QLabel("Control:"))
+        self.control_picker = QComboBox()
+        self.control_picker.setObjectName("pilotLabControlPicker")
+        self.control_picker.currentIndexChanged.connect(self.update_actions)
+        actions.addWidget(self.control_picker)
+        self.review_button = QPushButton("Review this KB…")
         self.review_button.clicked.connect(self.review_selected)
         actions.addWidget(self.review_button)
+        self.record_button = QPushButton("Record lab observation in ARL…")
+        self.record_button.setObjectName("primary")
+        self.record_button.clicked.connect(self.record_selected)
+        actions.addWidget(self.record_button)
+        self.register_button = QPushButton("View saved evidence")
+        self.register_button.clicked.connect(self.show_saved)
+        actions.addWidget(self.register_button)
         actions.addStretch()
         layout.addLayout(actions)
         self.case_details = QPlainTextEdit()
@@ -115,6 +129,8 @@ class PilotLabPanel(QWidget):
         self.busy = False
         self.tests = []
         self.docs = []
+        self.run_id = None
+        self.control_picker.clear()
         self.table.setRowCount(0)
         self.case_details.clear()
         self.document_select.clear()
@@ -122,6 +138,8 @@ class PilotLabPanel(QWidget):
         self.run_button.setEnabled(bool(self.ticket_id))
         self.refresh_button.setEnabled(bool(self.ticket_id))
         self.review_button.setEnabled(False)
+        self.record_button.setEnabled(False)
+        self.register_button.setEnabled(False)
         self.status.setText("Select the frozen miniagent assessment ticket." if not self.ticket_id
                             else "Ready: inspect previous lab evidence or run a bounded offline assessment.")
 
@@ -198,6 +216,10 @@ class PilotLabPanel(QWidget):
             return
         self.tests = data["tests"]
         self.docs = data["documents"]
+        self.run_id = data.get("run_id")
+        if not re.fullmatch(r"run-\d{8}T\d{6}Z", str(self.run_id)):
+            self.status.setText("Invalid lab run identity; no record action enabled.")
+            return
         counts = data.get("counts") or {}
         self.status.setText(
             "Run {} · SHA-256 verified · {} cases · {} pass / {} fail expectations / "
@@ -228,18 +250,113 @@ class PilotLabPanel(QWidget):
     def case_selected(self):
         rows = self.table.selectionModel().selectedRows()
         self.review_button.setEnabled(False)
+        self.record_button.setEnabled(False)
+        self.register_button.setEnabled(False)
+        self.control_picker.blockSignals(True)
+        self.control_picker.clear()
         if len(rows)!=1 or rows[0].row() >= len(self.tests):
+            self.control_picker.blockSignals(False)
             return
         item = self.tests[rows[0].row()]
+        for control in item.get("controls") or []:
+            if KB_ID.fullmatch(str(control)):
+                self.control_picker.addItem(control)
+        self.control_picker.blockSignals(False)
+        lesson = {
+            "LAB-03": "Security: a registered dummy state-changing tool executed without separate approval. "
+                      "A sensitive real tool should have an independent policy gate.",
+            "LAB-04": "Security: malformed arguments reached a tool. Validate tool parameters outside the model.",
+            "LAB-05": "Security: replay caused repeated dummy effects. State changes may need deduplication.",
+            "LAB-08": "Security: exception text entered agent context. Remove confidential diagnostics.",
+            "LAB-09": "Security: duplicate tool names overwrite a callback. Reject unreviewed collisions.",
+            "LAB-10": "LIMITATION: the next command was scripted by our harness, not induced by an LLM."
+        }.get(item.get("id"), "Compare the expected boundary with the observed in-process behaviour.")
         self.case_details.setPlainText(
             "{} — {}\nCampaign: {}  |  KB: {}\nLab outcome: {}\n"
-            "Observed (scripted provider; no LLM exploit claim):\n{}".format(
+            "WHY THIS MATTERS: {}\n\nObserved (ScriptedProvider, not a real LLM):\n{}".format(
                 item.get("id"), item.get("objective"), item.get("campaign"),
-                ", ".join(item.get("controls") or []), item.get("state"),
+                ", ".join(item.get("controls") or []), item.get("state"), lesson,
                 json.dumps(item.get("observed",item.get("error","")),indent=2,ensure_ascii=False))
         )
-        refs = item.get("controls") or []
-        self.review_button.setEnabled(bool(refs and KB_ID.fullmatch(refs[0])))
+        self.update_actions()
+
+    def update_actions(self, *_):
+        control = self.control_picker.currentText()
+        valid = (bool(self.ticket_id) and not self.busy and
+                 bool(self.run_id) and bool(KB_ID.fullmatch(control)))
+        self.review_button.setEnabled(valid)
+        self.record_button.setEnabled(valid)
+        self.register_button.setEnabled(valid and callable(self.view_register))
+
+    def record_selected(self):
+        rows = self.table.selectionModel().selectedRows()
+        if not self.record_button.isEnabled() or len(rows) != 1:
+            return
+        item = self.tests[rows[0].row()]
+        control = self.control_picker.currentText()
+        if not KB_ID.fullmatch(control) or control not in (item.get("controls") or []):
+            return
+        answer = QMessageBox.question(
+            self, "Record synthetic observation in canonical ARL?",
+            "Case: {}  |  Control: {}\nRun: {}\n\n"
+            "Review the observation above. This records one completed SYNTHETIC "
+            "test as INCONCLUSIVE, plus its evidence as UNVERIFIED. "
+            "No confirmed vulnerability, no control PASS/FAIL, no new Master revision.\n\n"
+            "Record and verify the canonical entries?".format(
+                item["id"], control, self.run_id),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        payload = {
+            "ticket_id": self.ticket_id, "case_id": item["id"],
+            "control_id": control, "run_id": self.run_id,
+            "snapshot_id": LAB_SNAPSHOT, "target_sha": LAB_SHA,
+            "confirmed": True,
+            "acknowledgement":
+                "I REVIEWED SYNTHETIC LAB OBSERVATION FOR UNVERIFIED RECORDING",
+        }
+        self.busy = True
+        self.update_actions()
+        seq = self.seq
+        ticket = self.ticket_id
+        self.status.setText("Recording the inconclusive synthetic test and "
+                            "UNVERIFIED observation via canonical ARL…")
+
+        def recorded(data, error):
+            if seq != self.seq or ticket != self.ticket_id:
+                return
+            self.busy = False
+            self.update_actions()
+            if error or not isinstance(data, dict) or data.get("saved") is not True:
+                self.status.setText("NOT CONFIRMED: {}. No blind retry; inspect Evidence Register."
+                                    .format(error or "Unexpected canonical response"))
+                return
+            if (data.get("ticket_id") != ticket or
+                data.get("control_id") != control or
+                data.get("case_id") != item["id"] or
+                data.get("run_id") != self.run_id or
+                data.get("snapshot_id") != LAB_SNAPSHOT or
+                data.get("test_result") != "inconclusive" or
+                data.get("verification_state") != "unverified" or
+                data.get("master_modified") is not False or
+                not str(data.get("evidence_id", "")).startswith("cei_") or
+                not str(data.get("test_id", "")).startswith("ctx_")):
+                self.status.setText("Canonical response mismatch: inspect register before continuing.")
+                return
+            verb = "Already recorded" if data.get("already_recorded") else "Recorded"
+            self.status.setText(
+                "{}: {} → {}. Test {} = INCONCLUSIVE; evidence {} = UNVERIFIED. "
+                "Use 'View saved evidence' for direct verification. Master unchanged."
+                .format(verb, item["id"], control, data["test_id"], data["evidence_id"])
+            )
+
+        self.bridge.call("pilot-lab-handoff", payload=payload, callback=recorded)
+
+    def show_saved(self):
+        control = self.control_picker.currentText()
+        if self.ticket_id and KB_ID.fullmatch(control) and callable(self.view_register):
+            self.view_register(self.ticket_id, control)
 
     def document_selected(self, *_):
         index = self.document_select.currentIndex()
@@ -256,6 +373,6 @@ class PilotLabPanel(QWidget):
         if len(rows)!=1 or rows[0].row()>=len(self.tests):
             return
         item=self.tests[rows[0].row()]
-        refs=item.get("controls") or []
-        if refs and KB_ID.fullmatch(refs[0]) and self.ticket_id:
-            self.review_control(self.ticket_id, refs[0])
+        ref = self.control_picker.currentText()
+        if self.ticket_id and KB_ID.fullmatch(ref) and ref in (item.get("controls") or []):
+            self.review_control(self.ticket_id, ref)
