@@ -21,7 +21,9 @@ test('rejects malformed and unconfirmed activity, permits multiline notes',()=>{
   }).company_id,companyId);
   for(const bad of [
     {...input,company_id:companyId},
+    {...input,company_id:null,reviewed_company_id:companyId},
     {...input,opportunity_id:null},
+    {...input,reviewed_company_id:'bad'},
     {...input,opportunity_id:'wrong'},
     {...input,activity_type:'send_email'},
     {...input,detail:'short'},
@@ -109,4 +111,47 @@ test('cross-workspace or missing opportunity rolls back without inserting note',
     'ROLLBACK'
   ]);
   assert.equal(released,true);
+});
+
+test('reviewed opportunity activity validates exact company association before insert',async()=>{
+  const history=[];
+  const id='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const ctx={...input,reviewed_company_id:companyId};
+  assert.equal(validateActivity(ctx).reviewed_company_id,companyId);
+  const pool={connect:async()=>({
+    async query(sql,values){
+      history.push({sql,values});
+      if(sql.includes('FOR KEY SHARE'))return {rows:[{id:opportunityId}]};
+      if(sql.includes('AS linked'))return {rows:[{linked:true}]};
+      return {rows:[]};
+    },release(){}
+  })};
+  const result=await recordActivity(pool,ctx,'ci-operator',{uuid:()=>id});
+  assert.equal(result.id,id);
+  assert.deepEqual(history.map(x=>x.sql.match(/^[A-Z]+/)[0]),
+    ['BEGIN','SELECT','SELECT','INSERT','COMMIT']);
+  assert.deepEqual(history[2].values,['local:ci-operator',opportunityId,companyId]);
+  assert.match(history[2].sql,/enkyron_crm_effective_ticket_links/);
+  assert.match(history[2].sql,/enkyron_crm_prospect_links/);
+  assert.equal(history[3].values[3],null,
+    'opportunity-owned notes remain linked to opportunity, not copied to company');
+  assert.ok(history.every(x=>!/mail-send-draft|arl_workbench_tickets.*INSERT/.test(x.sql)));
+});
+
+test('reviewed opportunity activity rejects wrong company and never inserts',async()=>{
+  const statements=[];
+  const pool={connect:async()=>({
+    async query(sql,values){
+      statements.push(sql);
+      if(sql.includes('FOR KEY SHARE'))return {rows:[{id:opportunityId}]};
+      if(sql.includes('AS linked'))return {rows:[{linked:false}]};
+      return {rows:[]};
+    },release(){}
+  })};
+  await assert.rejects(
+    ()=>recordActivity(pool,{...input,reviewed_company_id:companyId},
+      'ci-operator'),/no longer linked to reviewed company/);
+  assert.deepEqual(statements.map(x=>x.match(/^[A-Z]+/)[0]),
+    ['BEGIN','SELECT','SELECT','ROLLBACK']);
+  assert.ok(!statements.some(sql=>sql.includes('INSERT INTO')));
 });
