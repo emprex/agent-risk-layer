@@ -195,6 +195,14 @@ class DesktopBridge:
         self.running = set()
 
     def call(self, action, arg="", payload=None, callback=None):
+        # ARL master readers use separate Python adapters. They must not
+        # accidentally inspect the live assessment DB during synthetic UAT.
+        if (os.environ.get("ENKYRON_UAT_DATABASE") is not None
+                or os.environ.get("ENKYRON_UAT_GUARD") is not None):
+            if action in ("operator-state", "evidence-summary", "evidence-pack"):
+                if callback:
+                    callback(None, "Assessment adapters disabled in ENK-03 UAT")
+                return
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
         if action in ("operator-state", "evidence-summary", "evidence-pack"):
