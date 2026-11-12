@@ -4122,6 +4122,7 @@ class EnkyronWindow(QMainWindow):
                 or row < 0 or row >= len(self.crm_company_items)
                 or self.crm_company_items[row].get("id") != company_id):
             return
+        company = self.crm_company_items[row]
         self.crm_contact_seq += 1
         seq = self.crm_contact_seq
         self.crm_contacts_table.setRowCount(0)
