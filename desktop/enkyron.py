@@ -818,8 +818,17 @@ class EnkyronWindow(QMainWindow):
         self.control_review_button.setEnabled(False)
         self.control_review_button.clicked.connect(self.open_control_review)
         work_actions.addWidget(self.control_review_button)
+        self.static_collect_button = QPushButton("Collect source metadata · read-only")
+        self.static_collect_button.setEnabled(False)
+        self.static_collect_button.clicked.connect(self.collect_static_candidates)
+        work_actions.addWidget(self.static_collect_button)
         work_actions.addStretch()
         evidence_l.addLayout(work_actions)
+        self.static_collect_results = make_text_area()
+        self.static_collect_results.setObjectName("ticketStaticCandidatePreview")
+        self.static_collect_results.setMaximumHeight(165)
+        self.static_collect_results.setVisible(False)
+        evidence_l.addWidget(self.static_collect_results)
         self.evidence_summary = make_text_area()
         self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
         self.evidence_summary.setMinimumHeight(150)
@@ -15765,6 +15774,9 @@ class EnkyronWindow(QMainWindow):
         self.engine_view.clear()
         self.engine_button.setEnabled(False)
         self.control_review_button.setEnabled(False)
+        self.static_collect_button.setEnabled(False)
+        self.static_collect_results.clear()
+        self.static_collect_results.setVisible(False)
         if self.control_review_dialog is not None and self.control_review_dialog.isVisible():
             self.control_review_dialog.reject()
         self.evidence_seq += 1
@@ -15937,6 +15949,9 @@ class EnkyronWindow(QMainWindow):
                 self.engine_button.isEnabled()
                 and not ticket.get("archived_at")
                 and ticket.get("status") != "closed"
+            )
+            self.static_collect_button.setEnabled(
+                self.control_review_button.isEnabled()
             )
             self.record_button.setEnabled(self.engine_button.isEnabled())
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
@@ -16230,6 +16245,76 @@ class EnkyronWindow(QMainWindow):
                 )
             )
         self.bridge.call("source-review", ticket_id, callback=prepared)
+
+    def collect_static_candidates(self):
+        """Project bounded read-only source metadata for the existing 108 controls."""
+        ticket_id, ticket = self.current_id, self.current_ticket or {}
+        if (not ticket_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")
+                or ticket.get("archived_at") or ticket.get("status") == "closed"):
+            return
+        self.static_collect_button.setEnabled(False)
+        self.static_collect_results.setVisible(True)
+        self.static_collect_results.setPlainText(
+            "Reading the frozen Git source once for all machine-collectable "
+            "requirements. No test or database evidence write is authorised."
+        )
+
+        def received(data, error):
+            if ticket_id != self.current_id:
+                return
+            self.static_collect_button.setEnabled(True)
+            if error or not isinstance(data, dict) or data.get("available") is not True:
+                self.static_collect_results.setPlainText(
+                    "Static source collection refused: " + str(error or "No verified result")
+                )
+                return
+            if (data.get("ticket_id") != ticket_id or
+                    data.get("project_id") != ticket.get("linked_project_id") or
+                    data.get("assessment_id") != ticket.get("linked_assessment_id") or
+                    data.get("controls_total") != 108 or
+                    data.get("evidence_persisted") != 0 or
+                    data.get("evidence_accepted") is not False or
+                    data.get("tests_executed") != 0 or
+                    not isinstance(data.get("criteria"), list)):
+                self.static_collect_results.setPlainText(
+                    "Static preview rejected: canonical identity or authority mismatch."
+                )
+                return
+            criteria = data["criteria"]
+            lines = [
+                "READ-ONLY SOURCE METADATA COLLECTION — NOT CANONICAL EVIDENCE",
+                "Ticket: " + ticket_id,
+                "Assessment: " + str(data["assessment_id"]),
+                "Snapshot: " + str(data["snapshot_id"]),
+                "Frozen Git SHA: " + str(data["target_sha"]),
+                "Collection SHA-256: " + str(data["collection_sha256"]),
+                "{} machine-readable criteria; {} metadata projections; {} incomplete.".format(
+                    data.get("static_criteria", 0),
+                    data.get("metadata_projections", 0),
+                    data.get("incomplete_projections", 0),
+                ),
+                "Inspector: {} files; truncated: {}.".format(
+                    data.get("inspector_files"), data.get("inspector_truncated")),
+                "Nothing was persisted, accepted, tested or marked PASS/FAIL.",
+                "A metadata projection is NOT verification that the requirement is met.",
+                "",
+                "PER-CONTROL READ-ONLY PROJECTIONS",
+            ]
+            for criterion in criteria:
+                status = ("Metadata projected — unverified"
+                          if criterion.get("state") == "static_metadata_projected_unverified"
+                          else "Incomplete source projection")
+                lines.append("{} / evidence requirement {} · {} · {}".format(
+                    criterion.get("control_id", "?"),
+                    criterion.get("criterion_number", "?"),
+                    status,
+                    ",".join(criterion.get("projected_collectors") or []) or "none",
+                ))
+            self.static_collect_results.setPlainText("\n".join(lines))
+
+        self.bridge.call("static-candidate-collect", ticket_id, callback=received)
 
     def inspect_evidence(self):
         """Read existing evidence requirements; never accept evidence or run tests."""
