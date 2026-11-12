@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import os from 'node:os';
 import pg from 'pg';
+import { resolveEnkyronDatabase, requireEnkyronUatCommand, verifyEnkyronUatDatabase } from './enkyron-uat-database.mjs';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
 import { listSalesProspects, listSalesProspectsPage, validateProspectPage } from './enkyron-crm-prospects.mjs';
@@ -74,9 +75,8 @@ import {
 } from './enkyron-ticket-intake.mjs';
 
 const socket = '/var/run/postgresql';
-const database = 'arl_local';
 const config = {
-  host: socket, database, user: os.userInfo().username,
+  host: socket, user: os.userInfo().username,
   connectionTimeoutMillis: 5000, max: 1
 };
 
@@ -310,13 +310,17 @@ async function main() {
   if (command === 'crm-service-catalog-create') validateServiceCatalog(payload);
   if (command === 'crm-service-catalog-update') validateServiceCatalog(payload, true);
   const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'assessment-link', 'control-applicability-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-send-draft', 'mail-reply-draft', 'mail-link-sent', 'mail-threads', 'mail-local-folder-create', 'mail-local-sync', 'mail-local-sync-bodies','mail-local-archive-sync', 'mail-local-fetch', 'mail-local-move', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command);
+  const dbTarget = resolveEnkyronDatabase();
+  requireEnkyronUatCommand(dbTarget, command);
   const pool = new pg.Pool({
     ...config,
+    database: dbTarget.database,
     options: readOnly
       ? '-c default_transaction_read_only=on -c statement_timeout=8000'
       : '-c statement_timeout=8000 -c lock_timeout=3000'
   });
   try {
+    await verifyEnkyronUatDatabase(pool, dbTarget);
     const result =
       command === 'tickets' ? await ticketList(pool, arg) :
       command === 'tickets-archived' ? await ticketList(pool, arg, true) :
