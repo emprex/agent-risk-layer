@@ -158,3 +158,38 @@ Record for each step: date/time, isolated test database name, app branch + exact
 **UAT-01 is IN PROGRESS, not accepted.** CI success, source inspection and synthetic Qt fixtures cannot close it. Keep PR #583 draft and ENK-03 `PARTIEL` until verified UAT and an explicit human decision. Multioperator authentication/authorization remains a separate unresolved platform gate.
 
 **Next step:** run the auto-refresh regression on exact-head CI, then update only the #583 preview once the operator closes ENKYRON; verify the already saved Alex Martin remains visible and test a confirmed synthetic contact edit without manual Refresh. Do not re-bootstrap or reset the isolated DB.
+
+## Operator checkpoint — 12 November 2026, ENK-03 steps 4–7
+
+Observed in the separately guarded Debian UAT database `enkyron_uat_enk03`
+with `ENK03_SYNTHETIC_ONLY`. These are **operator-visible UAT observations**,
+not independent PostgreSQL audit results or approval to merge:
+
+- `ENK03 Synthetic Engineering Ltd` displays two distinct contacts
+  (`Alex Martin`, `Sam Taylor`) and one company-linked opportunity.
+- A single company-owned manual follow-up was created for 2026-11-19
+  (revision 1), rescheduled to 2026-11-20 (revision 2), then completed
+  (revision 3). The UI continued to show one follow-up, not a duplicate.
+- The Company History count progressed from five through seven after
+  rescheduling/completion. The completion event was visible with operator
+  `emprex` and a stable follow-up record ID.
+- Company sector correction to `Synthetic engineering services`
+  was saved; history progressed to eight events.
+- Contact `Sam Taylor` was corrected from `Project Manager` to
+  `Senior Project Manager`. The new role was read back from the Contacts
+  view and Company History showed nine events with a contact
+  `job_title` update. Contact count stayed at two.
+- Two **presentation-only issues** were found after successful writes:
+  company and contact field corrections both rendered as
+  `Company Contact Change`; and after the company follow-up was completed
+  the headline still displayed the separate opportunity's next action
+  under `RECORDED FOLLOW-UP`. The PR now distinguishes source kinds and
+  opportunity action vs open company follow-ups; **Debian operator
+  re-test on the corrected exact SHA remains pending**.
+
+**Still required before UAT-01 acceptance:** independent read-only inspection
+of the synthetic PostgreSQL records/side-effect counts, no implicit ticket,
+mail, invoice, contract or assessment creation; negative-path verification;
+confirmation of the latest presentation fixes on Debian; and an explicit
+human acceptance decision. Do not reset the existing test database or
+re-run the 113 migrations. PR #583 remains draft/not merged.
