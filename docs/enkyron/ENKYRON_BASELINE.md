@@ -88,6 +88,17 @@ Ces sources orientent la **conception cible**. Elles ne prouvent pas que les fon
 - Convention de diagnostic adoptée : `psql -X`, `\pset pager off`, `\pset border 2`, largeur bornée et colonnes décrites ligne par ligne. Ne pas modifier le `~/.psqlrc` ni écrire de fichier.
 - **ENK-00 demeure PARTIEL**, en attente du registre de migrations, des relations de tables, de l'interface Debian et de la recette des parcours.
 
+## 4 quater. Registre des migrations appliquées (12 novembre 2026)
+
+**Observation utilisateur :** consultation `psql` en transaction `READ ONLY`, base `arl_local`.
+
+- Table `public.schema_migrations` confirmée : `version TEXT`, `checksum TEXT`, `applied_at TIMESTAMPTZ` ; conforme à la définition dans `src/migrations.js`.
+- **115 enregistrements** ; préfixe minimal affiché `001`, maximal `114`, dernier enregistrement par ordre lexicographique : `114_enkyron_ticket_scope_reviews.sql` à `2026-11-11 23:44`.
+- Les migrations 100–114 affichées possèdent des checksums préfixés ; **les empreintes complètes n'ont pas été comparées** aux fichiers locaux.
+- **Source GitHub :** branche locale déclarée `feat/miniagent-offline-assessment-lab-20261112` : 114 fichiers SQL numérotés, avec `114_enkyron_ticket_scope_reviews.sql`. Branche UX de PR #579 : seulement 113 fichiers numérotés, dernier `113_enkyron_mail_content_archive.sql`. Le contenu de 114 relève du pilote KYRTHOS, suspendu ; ne pas le recopier ni changer la pile Git.
+- **Écart documentaire ouvert, non classé comme corruption :** le registre contient 115 entrées pour 114 fichiers numérotés dans cette branche GitHub. Identifier le nom et l'origine de la ligne supplémentaire avant de conclure à une divergence ou de lancer un outil de migration ; cela peut provenir d'un renommage, d'un historique plus ancien ou d'un enregistrement hors patron.
+- **Prochaine lecture locale :** comptage par préfixe et entrées au nom hors patron, puis inventaire des contraintes `FOREIGN KEY` sur les dossiers société / contact / ticket / follow-up. Aucune mutation SQL.
+
 ## 5. Méthode et conditions d'arrêt de ENK-00
 
 **Réalisation dans ce bloc :** lecture GitHub, inventaire d'interface, extrait du catalogue des migrations, revue de routes et d'autorité ; documentation uniquement.
