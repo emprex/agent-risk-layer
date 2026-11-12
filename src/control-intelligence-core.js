@@ -1,4 +1,5 @@
-import crypto from 'node:crypto';
+import {canonicalJson,intelligenceDigest} from './canonical-intelligence-digest.mjs';
+export {canonicalJson,intelligenceDigest};
 import { db, id, nowIso } from './db.js';
 import { getSeveritySemantics } from './risk-knowledge-core.js';
 import { runtimeApprovalActionDigest } from './access-control.js';
@@ -20,12 +21,6 @@ const SYSTEM_RISK_TIERS = new Set(['low','medium','high','critical']);
 const SYSTEM_RISK_TIER_RANK = { low:1, medium:2, high:3, critical:4 };
 const SYSTEM_RISK_CLASSIFICATION_METHOD = 'ARL-IMPACT-CLASSIFICATION-1.0.0';
 
-export function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
-  return JSON.stringify(value);
-}
-export function intelligenceDigest(value) { return crypto.createHash('sha256').update(canonicalJson(value)).digest('hex'); }
 
 export async function createSystemSnapshot({ projectId, userId, input = {} }) {
   validateSnapshotInput(input);

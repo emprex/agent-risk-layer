@@ -938,6 +938,11 @@ class EnkyronWindow(QMainWindow):
         self.record_button.setEnabled(False)
         self.record_button.clicked.connect(self.inspect_records)
         toolbar.addWidget(self.record_button)
+        self.record_integrity_button = QPushButton("Check selected record integrity · read-only")
+        self.record_integrity_button.setObjectName("kb001RecordIntegrityReadOnly")
+        self.record_integrity_button.setEnabled(False)
+        self.record_integrity_button.clicked.connect(self.inspect_record_integrity)
+        toolbar.addWidget(self.record_integrity_button)
         toolbar.addStretch()
         ledger_l.addLayout(toolbar)
         self.records_notice = QLabel("Select a linked assessment ticket.")
@@ -15858,6 +15863,7 @@ class EnkyronWindow(QMainWindow):
         self.evidence_previous.setEnabled(False)
         self.evidence_next.setEnabled(False)
         self.records_seq += 1
+        self.record_integrity_button.setEnabled(False)
         self.record_items = []
         self.test_items = []
         self.records_table.setRowCount(0)
@@ -16751,6 +16757,7 @@ class EnkyronWindow(QMainWindow):
         if self.current_id and self.current_ticket:
             self.active_control_by_ticket[self.current_id] = self.record_control.value()
         self.records_seq += 1
+        self.record_integrity_button.setEnabled(False)
         self.record_items = []
         self.test_items = []
         self.records_table.setRowCount(0)
@@ -16875,6 +16882,7 @@ class EnkyronWindow(QMainWindow):
             self.show_test_details()
 
     def show_record_details(self):
+        self.record_integrity_button.setEnabled(False)
         if self.record_views.currentIndex() != 0:
             return
         rows = self.records_table.selectionModel().selectedRows()
@@ -16885,6 +16893,12 @@ class EnkyronWindow(QMainWindow):
         if not 0 <= index < len(self.record_items):
             return
         record = self.record_items[index]
+        self.record_integrity_button.setEnabled(
+            record.get("entry_id") == "ARL-KB-001"
+            and record.get("source_type") == "arl_frozen_source_candidate"
+            and record.get("verification_state") == "unverified"
+            and self.current_ticket is not None
+        )
         details = [
             "Evidence: " + str(record.get("id") or "unknown"),
             "Control: " + str(record.get("entry_id") or "unknown"),
@@ -16912,6 +16926,85 @@ class EnkyronWindow(QMainWindow):
             "No raw evidence or credential source displayed. Human verification required.",
         ]
         self.record_details.setPlainText("\n".join(details))
+
+    def inspect_record_integrity(self):
+        """Inspect the stored ARL digest and claimed Git binding without writes."""
+        if not self.record_integrity_button.isEnabled() or not self.current_id:
+            return
+        selected = self.records_table.selectionModel().selectedRows()
+        if len(selected) != 1:
+            return
+        index = selected[0].row()
+        if not 0 <= index < len(self.record_items):
+            return
+        item = self.record_items[index]
+        evidence_id = str(item.get("id") or "")
+        ticket_id = self.current_id
+        seq = self.records_seq
+        if (item.get("entry_id") != "ARL-KB-001" or
+                item.get("source_type") != "arl_frozen_source_candidate" or
+                item.get("verification_state") != "unverified"):
+            return
+        self.record_integrity_button.setEnabled(False)
+        self.record_details.setPlainText(
+            "Recomputing the stored record digest against the verified Master. "
+            "No evidence trust promotion or source replay."
+        )
+        payload = {
+            "ticket_id": ticket_id,
+            "control_id": "ARL-KB-001",
+            "evidence_id": evidence_id,
+        }
+
+        def received(data, error):
+            if (ticket_id != self.current_id or seq != self.records_seq
+                    or self.record_control.value() != 1):
+                return
+            rows = self.records_table.selectionModel().selectedRows()
+            if (len(rows) != 1 or
+                    self.record_items[rows[0].row()].get("id") != evidence_id):
+                return
+            self.record_integrity_button.setEnabled(True)
+            if error or not isinstance(data, dict) or data.get("available") is not True:
+                self.record_details.setPlainText(
+                    "KB-001 integrity inspection REFUSED: " +
+                    str(error or "No verified result") +
+                    "\nNo evidence verification, verdict or database write."
+                )
+                return
+            if (data.get("evidence_id") != evidence_id or
+                    data.get("ticket_id") != ticket_id or
+                    data.get("control_id") != "ARL-KB-001" or
+                    data.get("record_integrity") != "descriptor_digest_consistent" or
+                    data.get("source_reference_binding") != "recorded_sha_matches_master" or
+                    data.get("verification_state") != "unverified" or
+                    data.get("original_source_authenticated") is not False or
+                    data.get("source_material_replay") != "not_performed"):
+                self.record_details.setPlainText(
+                    "KB-001 integrity response rejected: lineage or state mismatch."
+                )
+                return
+            self.record_details.setPlainText("\n".join([
+                "READ-ONLY RECORD INTEGRITY REVIEW — KB-001 REQUIREMENT 1",
+                "Evidence: " + evidence_id,
+                "Snapshot: " + str(data.get("snapshot_id")),
+                "Frozen Git SHA: " + str(data.get("target_sha")),
+                "Stored descriptor: DIGEST CONSISTENT WITH DATABASE FIELDS",
+                "Recorded Git reference: MATCHES MASTER SHA",
+                "Projection SHA256: " + str(data.get("projection_sha256")),
+                "Collection SHA256: " + str(data.get("collection_sha256")),
+                "",
+                "Original source material: NOT AUTHENTICATED / NOT REPLAYED",
+                "Approved deployment and owner authorisations: NOT VERIFIED",
+                "Evidence verification state: unverified — UNCHANGED",
+                "Control PASS/FAIL: NOT ASSESSED",
+                "",
+                "A matching record digest does NOT establish source authenticity,",
+                "approved purpose, environmental scope or control compliance.",
+                "Next: obtain original authorised material and verify its lineage.",
+            ]))
+
+        self.bridge.call("evidence-integrity-read", payload=payload, callback=received)
 
     def show_test_details(self):
         if self.record_views.currentIndex() != 1:

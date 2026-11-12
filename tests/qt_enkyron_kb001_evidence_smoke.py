@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox, QTableWidgetItem
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
 TICKET = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
@@ -140,6 +140,57 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
                 self.assertEqual(w.record_control.value(), 15)
                 self.assertEqual(w.active_control_by_ticket[TICKET], 2)
                 self.assertEqual(w.active_control_by_ticket[other_ticket], 15)
+        finally:
+            self.dispose(w)
+
+    def test_existing_kb001_record_integrity_inspection_is_read_only(self):
+        """Evidence Register uses an exact evidence ID and reports limited integrity."""
+        w = self.make_window()
+        calls = []
+        row = {
+            "id": "cei_a16a08432bdd4801b3c7aa753a9d21ea",
+            "entry_id": "ARL-KB-001",
+            "snapshot_id": SNAP,
+            "verification_state": "unverified",
+            "retention_status": "active",
+            "source_type": "arl_frozen_source_candidate",
+        }
+        def fake(_bridge, action, arg="", payload=None, callback=None):
+            calls.append((action, payload))
+            self.assertEqual(action, "evidence-integrity-read")
+            self.assertEqual(payload, {
+                "ticket_id": TICKET,
+                "control_id": "ARL-KB-001",
+                "evidence_id": row["id"],
+            })
+            callback({
+                "available": True, "ticket_id": TICKET,
+                "control_id": "ARL-KB-001",
+                "evidence_id": row["id"], "snapshot_id": SNAP,
+                "target_sha": SHA, "projection_sha256": "b" * 64,
+                "collection_sha256": "a" * 64,
+                "record_integrity": "descriptor_digest_consistent",
+                "source_reference_binding": "recorded_sha_matches_master",
+                "source_material_replay": "not_performed",
+                "original_source_authenticated": False,
+                "verification_state": "unverified",
+            }, None)
+        try:
+            w.record_items = [row]
+            w.records_table.setRowCount(1)
+            w.records_table.setItem(0, 0, QTableWidgetItem(row["id"]))
+            w.records_table.selectRow(0)
+            w.show_record_details()
+            self.assertTrue(w.record_integrity_button.isEnabled())
+            with patch.object(DesktopBridge, "call", new=fake):
+                w.inspect_record_integrity()
+            self.assertEqual(len(calls), 1)
+            self.assertIn("DIGEST CONSISTENT", w.record_details.toPlainText())
+            self.assertIn("NOT AUTHENTICATED", w.record_details.toPlainText())
+            self.assertIn("unverified", w.record_details.toPlainText())
+            self.assertNotIn("PASS —", w.record_details.toPlainText())
+            w.record_control.setValue(15)
+            self.assertFalse(w.record_integrity_button.isEnabled())
         finally:
             self.dispose(w)
 
