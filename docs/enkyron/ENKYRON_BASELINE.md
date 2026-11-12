@@ -60,6 +60,17 @@ Il existe des PR empilées (#564, #575–#578, #579), non assimilables à des fo
 
 Ces sources orientent la **conception cible**. Elles ne prouvent pas que les fonctionnalités ENKYRON sont implémentées.
 
+## 4 bis. Observation de l'opérateur sur Debian (12 novembre 2026)
+
+**Source :** sortie terminal transmise par l'opérateur ; preuve locale rapportée, non rejouée depuis GitHub.
+
+- Répertoire : `~/agent-risk-layer`, branche `feat/miniagent-offline-assessment-lab-20261112` ; commit local `c7661e8cc64711caab2b37782d43c1e59f92dd51`.
+- `git status --short --branch` : aucune ligne de fichier **suivi modifié** dans la sortie ; plusieurs fichiers/répertoires **non suivis** (notamment `data/backups/`, scripts de secours et diagnostics). Conserver tous ces fichiers, ne jamais faire `git clean`, `reset --hard` ou changement de branche non vérifié.
+- `pg_isready -h /var/run/postgresql -p 5432` : `accepting connections`.
+- `to_regclass` dans la base `arl_local` : `arl_workbench_tickets`, `enkyron_crm_companies`, `enkyron_identity_sessions`, `enkyron_mail_local_threads` sont **présentes**.
+- Cela ne prouve ni toutes les migrations, ni le contenu/les colonnes, ni les droits d'accès multiutilisateur, ni le fonctionnement des workflows, ni l'installation locale de la branche UX de PR #579.
+- **Décision :** `ENK-00 = PARTIEL`. Prochaine observation : registre des migrations et schéma en lecture seule, sans toucher à la branche du pilote.
+
 ## 5. Méthode et conditions d'arrêt de ENK-00
 
 **Réalisation dans ce bloc :** lecture GitHub, inventaire d'interface, extrait du catalogue des migrations, revue de routes et d'autorité ; documentation uniquement.
