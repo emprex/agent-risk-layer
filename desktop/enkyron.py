@@ -5422,6 +5422,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_snapshot = None
         self.crm_dossier_company_editor = None
         self.crm_dossier_company_pending = False
+        self.crm_dossier_opportunity_saving = False
         dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
@@ -5845,7 +5846,8 @@ class EnkyronWindow(QMainWindow):
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
-                or self.crm_dossier_company_pending):
+                or self.crm_dossier_company_pending
+                or self.crm_dossier_opportunity_saving):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
         if self.crm_dossier_company_editor is not None:
@@ -5942,6 +5944,12 @@ class EnkyronWindow(QMainWindow):
         dialog = self.crm_dossier_dialog
         company_id = self.crm_dossier_company_id
         if not dialog or not dialog.isVisible() or not company_id:
+            return
+        if self.crm_dossier_opportunity_saving:
+            QMessageBox.information(
+                dialog, "CRM save in progress",
+                "Review the opportunity save result before refreshing."
+            )
             return
         if self.crm_dossier_followup_editor is not None:
             QMessageBox.information(
@@ -6341,6 +6349,23 @@ class EnkyronWindow(QMainWindow):
                             add_contact.setMaximumWidth(190)
                             page_layout.addWidget(
                                 add_contact, alignment=Qt.AlignmentFlag.AlignRight
+                            )
+                        else:
+                            # ENK-03: reuse the existing company-only write path.
+                            # No ticket, contact or assessment is created.
+                            add_opportunity = QPushButton("New opportunity")
+                            add_opportunity.setObjectName("crmDossierNewOpportunity")
+                            add_opportunity.setMaximumWidth(190)
+                            add_opportunity.setEnabled(
+                                not self.crm_dossier_opportunity_saving
+                            )
+                            add_opportunity.clicked.connect(
+                                lambda _checked=False, scoped_company=company_id:
+                                self.open_dossier_direct_opportunity(scoped_company)
+                            )
+                            page_layout.addWidget(
+                                add_opportunity,
+                                alignment=Qt.AlignmentFlag.AlignRight
                             )
                         if not rows:
                             empty = QLabel(
@@ -7531,6 +7556,111 @@ class EnkyronWindow(QMainWindow):
         self.crm_ticket_opportunity_button.setEnabled(
             active and self.crm_ticket_items[row].get("status") != "closed"
             if active else False
+        )
+
+    def open_dossier_direct_opportunity(self, company_id):
+        """Create one company-only opportunity without leaving the 360 dossier."""
+        dialog = self.crm_dossier_dialog
+        company = self.crm_dossier_company_snapshot
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or not isinstance(company, dict)
+                or company.get("id") != company_id
+                or self.crm_dossier_opportunity_saving):
+            return
+        if (self.crm_dossier_company_editor is not None
+                or self.crm_dossier_contact_editor is not None
+                or self.crm_dossier_followup_editor is not None):
+            QMessageBox.information(
+                dialog, "Finish current edit",
+                "Save or cancel the open company, contact or next-action edit first."
+            )
+            return
+        busy, drafts = self.company_dossier_pending_or_unsaved()
+        if busy or drafts:
+            QMessageBox.information(
+                dialog, "Finish current work",
+                "Finish pending saves or unsaved dossier work first."
+            )
+            return
+        name = str(company.get("name") or "")
+        if not 1 <= len(name) <= 300:
+            QMessageBox.warning(
+                dialog, "Company identity unavailable",
+                "Refresh the company dossier before creating an opportunity."
+            )
+            return
+        action, accepted = QInputDialog.getMultiLineText(
+            dialog, "ENKYRON · New company opportunity",
+            "Company: {}\n\nNext commercial action (5–1000 characters):".format(name),
+            "Prepare a written introduction and record replies in the CRM."
+        )
+        if not accepted:
+            return
+        action = action.strip()
+        if not 5 <= len(action) <= 1000:
+            QMessageBox.warning(
+                dialog, "Next action required",
+                "Enter a specific next step in 5–1000 characters."
+            )
+            return
+        if QMessageBox.question(
+            dialog, "Confirm commercial opportunity",
+            ("Create one internal CRM opportunity for {}?\n\n"
+             "No service ticket, email, contract, testing authorisation "
+             "or assessment is created.").format(name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        # Modal dialogs can process asynchronous callbacks while open.
+        # Never submit an action for a dossier that has changed underneath us.
+        if (dialog is not self.crm_dossier_dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or (self.crm_dossier_company_snapshot or {}).get("id") != company_id
+                or (self.crm_dossier_company_snapshot or {}).get("name") != name
+                or self.crm_dossier_opportunity_saving):
+            return
+        self.crm_dossier_opportunity_saving = True
+        button = dialog.findChild(QPushButton, "crmDossierNewOpportunity")
+        if button is not None:
+            button.setEnabled(False)
+        payload = {
+            "company_id": company_id,
+            "company_name_at_review": name,
+            "next_action": action,
+            "due_date": None,
+            "confirmed": True
+        }
+
+        def received(result, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or company_id != self.crm_dossier_company_id
+                    or not dialog.isVisible()):
+                return
+            self.crm_dossier_opportunity_saving = False
+            if (error or not isinstance(result, dict)
+                    or not result.get("id")
+                    or result.get("company_id") != company_id
+                    or result.get("source_ticket_id") is not None):
+                if button is not None:
+                    button.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Opportunity save not confirmed",
+                    "Refresh and inspect existing opportunities before trying again "
+                    "to avoid a duplicate. " + str(error or "")
+                )
+                return
+            self.status.setText(
+                "CRM opportunity recorded for the selected company. No ticket created."
+            )
+            # Re-read canonical PostgreSQL data; do not invent a new card from
+            # the submit payload or navigate away from the active company.
+            self.refresh_company_dossier()
+
+        self.bridge.call(
+            "crm-company-direct-opportunity-create",
+            payload=payload, callback=received
         )
 
     def open_company_direct_opportunity(self):
