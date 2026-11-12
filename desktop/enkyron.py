@@ -873,6 +873,32 @@ class EnkyronWindow(QMainWindow):
         self.batch_replay_results.setMaximumHeight(205)
         self.batch_replay_results.setVisible(False)
         evidence_l.addWidget(self.batch_replay_results)
+        self.batch_review_heading = section_title(
+            "108-CONTROL EVIDENCE REVIEW MATRIX · READ-ONLY")
+        self.batch_review_heading.setVisible(False)
+        evidence_l.addWidget(self.batch_review_heading)
+        self.batch_review_table = QTableWidget(0, 6)
+        self.batch_review_table.setObjectName("batchEvidenceReviewMatrix")
+        self.batch_review_table.setHorizontalHeaderLabels(
+            ["KB", "Control / category", "Source", "Owner documents",
+             "Authorised tests", "Workflow stage"])
+        self.batch_review_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self.batch_review_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection)
+        self.batch_review_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.batch_review_table.setMaximumHeight(260)
+        self.batch_review_table.setVisible(False)
+        self.batch_review_table.itemSelectionChanged.connect(
+            self.select_batch_review_control)
+        evidence_l.addWidget(self.batch_review_table)
+        self.batch_review_open = QPushButton(
+            "Review selected control · no automatic decision…")
+        self.batch_review_open.setVisible(False)
+        self.batch_review_open.setEnabled(False)
+        self.batch_review_open.clicked.connect(self.open_control_review)
+        evidence_l.addWidget(self.batch_review_open)
         self.static_collect_results = make_text_area()
         self.static_collect_results.setObjectName("ticketStaticCandidatePreview")
         self.static_collect_results.setMaximumHeight(165)
@@ -15851,6 +15877,11 @@ class EnkyronWindow(QMainWindow):
         self.batch_replay_button.setEnabled(False)
         self.batch_replay_results.clear()
         self.batch_replay_results.setVisible(False)
+        self.batch_review_table.setRowCount(0)
+        self.batch_review_table.setVisible(False)
+        self.batch_review_heading.setVisible(False)
+        self.batch_review_open.setVisible(False)
+        self.batch_review_open.setEnabled(False)
         self.kb001_candidate = None
         self.kb001_record_button.setEnabled(False)
         self.kb001_record_button.setVisible(False)
@@ -16349,6 +16380,11 @@ class EnkyronWindow(QMainWindow):
                 or not self.batch_replay_button.isEnabled()):
             return
         self.batch_replay_button.setEnabled(False)
+        self.batch_review_table.setRowCount(0)
+        self.batch_review_table.setVisible(False)
+        self.batch_review_heading.setVisible(False)
+        self.batch_review_open.setVisible(False)
+        self.batch_review_open.setEnabled(False)
         self.batch_replay_results.setVisible(True)
         self.batch_replay_results.setPlainText(
             "Recollecting source metadata once for 108 controls, then comparing "
@@ -16414,7 +16450,9 @@ class EnkyronWindow(QMainWindow):
                 "Other 107 controls: source projections prepared, NOT accepted evidence.",
                 "No DB writes, tests, PASS/FAIL, owner approvals or Master revision.",
                 "",
-                "PER-CONTROL WORK QUEUE · STATIC METADATA ONLY",
+                "Use the 108-control matrix below to inspect a control.",
+                "Source routes, owner documents and authorised tests are separate.",
+                "The matrix does not record applicability or approve evidence.",
             ]
             for item in data["per_control"]:
                 cid = str(item.get("control_id") or "")
@@ -16423,13 +16461,65 @@ class EnkyronWindow(QMainWindow):
                         "Batch replay rejected: malformed control work queue."
                     )
                     return
-                lines.append("{} · projected {}/{} · incomplete {} · review required".format(
-                    cid, item.get("metadata_projected_unverified"),
-                    item.get("source_requirements"),
-                    item.get("incomplete_source_projections")))
+                # The table below replaces the old 108-line text dump.
             self.batch_replay_results.setPlainText("\n".join(lines))
+            self.batch_review_table.setRowCount(108)
+            seen_controls = set()
+            for index, item in enumerate(data["per_control"]):
+                control_id = item["control_id"]
+                if control_id in seen_controls or control_id != "ARL-KB-{:03d}".format(index + 1):
+                    self.batch_review_table.setRowCount(0)
+                    self.batch_replay_results.setPlainText(
+                        "Batch review matrix rejected: duplicate or reordered canonical control.")
+                    return
+                seen_controls.add(control_id)
+                for key in ("source_requirements", "metadata_projected_unverified",
+                            "human_document_requirements",
+                            "authorised_runtime_requirements"):
+                    if not isinstance(item.get(key), int) or not 0 <= item[key] <= 40:
+                        self.batch_review_table.setRowCount(0)
+                        self.batch_replay_results.setPlainText(
+                            "Batch review matrix rejected: invalid evidence route counts.")
+                        return
+                cells = [
+                    control_id,
+                    str(item.get("title") or "Control title unavailable")[:180],
+                    "{}/{} projected · unverified".format(
+                        item["metadata_projected_unverified"], item["source_requirements"]),
+                    str(item["human_document_requirements"]) + " to obtain",
+                    str(item["authorised_runtime_requirements"]) + " not authorised",
+                    str(item.get("stage") or "unknown"),
+                ]
+                for column, value in enumerate(cells):
+                    cell = QTableWidgetItem(value)
+                    if column == 1:
+                        cell.setToolTip(str(item.get("category") or ""))
+                    self.batch_review_table.setItem(index, column, cell)
+            self.batch_review_heading.setVisible(True)
+            self.batch_review_table.setVisible(True)
+            self.batch_review_open.setVisible(True)
+            self.batch_review_open.setEnabled(False)
 
         self.bridge.call("batch-source-replay", ticket_id, callback=received)
+
+    def select_batch_review_control(self):
+        """Navigate to an existing canonical KB, without any decision or write."""
+        rows = self.batch_review_table.selectionModel().selectedRows()
+        if len(rows) != 1 or not self.current_id or not self.current_ticket:
+            self.batch_review_open.setEnabled(False)
+            return
+        row = rows[0].row()
+        if not 0 <= row < self.batch_review_table.rowCount():
+            self.batch_review_open.setEnabled(False)
+            return
+        cell = self.batch_review_table.item(row, 0)
+        control_id = cell.text() if cell else ""
+        if not re.fullmatch(r"ARL-KB-(?:00[1-9]|0[1-9][0-9]|10[0-8])",
+                            control_id):
+            self.batch_review_open.setEnabled(False)
+            return
+        self.set_active_ticket_control(self.current_id, control_id)
+        self.batch_review_open.setEnabled(True)
 
     def collect_static_candidates(self):
         """Project bounded read-only source metadata for the existing 108 controls."""

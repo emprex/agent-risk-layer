@@ -16,6 +16,12 @@ const preview={available:true,ticket_id:ticket,project_id:master.project_id,
  kb001_candidate:{control_id:'ARL-KB-001',criterion_number:1,
    target_sha:sha,snapshot_id:snap,projection_sha256:projection,
    collection_sha256:collection},
+ review_workplan:Array.from({length:108},(_,i)=>({
+  control_id:'ARL-KB-'+String(i+1).padStart(3,'0'),
+  title:'Fixture control '+String(i+1),category:'Fixture governance',
+  stage:'applicability',source_requirements:1,
+  human_document_requirements:2,authorised_runtime_requirements:1
+ })),
  criteria:Array.from({length:108},(_,i)=>({
   control_id:'ARL-KB-'+String(i+1).padStart(3,'0'),criterion_number:1,
   state:'static_metadata_projected_unverified',projection_sha256:
@@ -32,6 +38,12 @@ test('108-control replay preparation is single-pass, read-only and KB-001 digest
  assert.equal(output.available,true);
  assert.equal(output.controls_total,108);
  assert.equal(output.controls_with_source_routes,108);
+ assert.equal(output.controls_without_static_routes,0);
+ assert.equal(output.human_document_requirements_total,216);
+ assert.equal(output.authorised_runtime_requirements_total,108);
+ assert.equal(output.per_control[14].title,'Fixture control 15');
+ assert.equal(output.per_control[14].human_document_requirements,2);
+ assert.equal(output.per_control[14].authorised_runtime_requirements,1);
  assert.equal(output.source_criteria_total,108);
  assert.equal(output.metadata_projected_unverified,108);
  assert.equal(output.kb001_replay_status,'recorded_source_fingerprints_reproduced');
@@ -74,6 +86,9 @@ test('fail closed on snapshot mismatch, malformed controls, or unverified record
    {preview:{...preview,evidence_persisted:1}},
    {preview:{...preview,criteria:[...preview.criteria,{...preview.criteria[0]}]}},
    {preview:{...preview,criteria:[{...preview.criteria[0],control_id:'ARL-KB-109'}]}},
+   {preview:{...preview,review_workplan:preview.review_workplan.slice(1)}},
+   {preview:{...preview,review_workplan:preview.review_workplan.map((x,i)=>
+     i===15?{...x,source_requirements:0}:x)}},
    {record:{...record,record_integrity:'unverified'}},
    {record:{...record,target_sha:'f'.repeat(40)}},
  ];
