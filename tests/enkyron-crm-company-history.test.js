@@ -55,6 +55,30 @@ test('chronological reader is exact-ID, read-only and bounded in both sort order
     assert.doesNotMatch(q.sql,/INSERT INTO|UPDATE\s+enkyron_|DELETE FROM/);
   }
 });
+test('proposal draft revisions appear in company history only through exact linked opportunity',()=>{
+  const start=COMPANY_HISTORY_SQL.indexOf(
+    "SELECT pe.id,'proposal_draft',p.id,pe.event_type,"
+  );
+  const end=COMPANY_HISTORY_SQL.indexOf(
+    "SELECT de.id,'mail_draft',d.id,de.event_type,",start
+  );
+  assert.ok(start>=0&&end>start,'proposal event UNION source is present');
+  const sql=COMPANY_HISTORY_SQL.slice(start,end);
+  assert.match(sql,/FROM enkyron_crm_proposal_draft_events pe/);
+  assert.match(sql,/JOIN enkyron_crm_proposal_drafts p/);
+  assert.match(sql,/p[.]workspace_key=pe[.]workspace_key AND p[.]id=pe[.]proposal_id/);
+  assert.match(sql,/JOIN linked_opportunities o ON o[.]id=p[.]opportunity_id/);
+  assert.match(sql,/WHERE pe[.]workspace_key=[$]1/);
+  assert.match(sql,/pe[.]actor_local,pe[.]recorded_at/);
+  assert.match(sql,/pe[.]revision::text/);
+  assert.match(sql,/not issued or sent/);
+  assert.doesNotMatch(sql,/name_at_creation|p[.]title|p[.]scope_text|amount_minor|content_sha256/);
+  assert.doesNotMatch(sql,/INSERT|UPDATE|DELETE|WHERE p[.]title/);
+  // No new history row is fabricated by the UI: this reads an actual
+  // append-only event with an exact company-linked draft.
+  assert.equal(COMPANY_HISTORY_SQL.match(/SELECT pe[.]id,'proposal_draft'/g)?.length,1);
+});
+
 test('invalid paging, wrong local operator and other company fail closed',async()=>{
   const d=fakeDb();
   for(const payload of [

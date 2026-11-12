@@ -134,6 +134,20 @@ entries AS (
   FROM arl_workbench_notes n
   WHERE n.ticket_id IN (SELECT ticket_id FROM reviewed_tickets)
   UNION ALL
+  -- Proposal creation/edit events belong to Company History as internal
+  -- commercial documentary events, not evidence of issuing or acceptance.
+  -- Link via the exact opportunity ID and local workspace; never a name.
+  -- Exclude content, amount, and hash from the visible history summary.
+  SELECT pe.id,'proposal_draft',p.id,pe.event_type,
+    'Internal proposal draft revision '||pe.revision::text
+      ||' (not issued or sent)',
+    pe.actor_local,pe.recorded_at
+  FROM enkyron_crm_proposal_draft_events pe
+  JOIN enkyron_crm_proposal_drafts p
+    ON p.workspace_key=pe.workspace_key AND p.id=pe.proposal_id
+  JOIN linked_opportunities o ON o.id=p.opportunity_id
+  WHERE pe.workspace_key=$1
+  UNION ALL
   SELECT de.id,'mail_draft',d.id,de.event_type,
     'Internal draft revision '||de.revision::text||' (not sent)',
     de.actor_local,de.recorded_at

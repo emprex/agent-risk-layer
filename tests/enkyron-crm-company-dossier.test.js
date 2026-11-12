@@ -63,8 +63,12 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
     'enkyron_crm_activities','enkyron_crm_qualification_reviews',
     'enkyron_crm_prospect_links','enkyron_crm_ticket_links',
     'enkyron_crm_ticket_link_revocations','enkyron_crm_ticket_reassignments',
-    'enkyron_crm_mail_draft_events','enkyron_crm_mail_manual_sends'
+    'enkyron_crm_mail_draft_events','enkyron_crm_mail_manual_sends',
+    'enkyron_crm_proposal_draft_events','enkyron_crm_proposal_drafts'
   ])assert.match(history,new RegExp(source));
+  assert.match(history,/JOIN linked_opportunities o ON o[.]id=p[.]opportunity_id/);
+  assert.match(history,/Internal proposal draft revision/);
+  assert.match(history,/not issued or sent/);
   assert.match(history,/ORDER BY recorded_at DESC,event_id DESC/);
   assert.match(history,/LIMIT 21/);
   assert.match(history,/e[.]event_type NOT IN \('updated','linked'\)/);
