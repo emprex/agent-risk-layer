@@ -497,7 +497,7 @@ class EnkyronWindow(QMainWindow):
         go_tickets.setMinimumHeight(44)
         go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
         quick_actions_top.addWidget(go_tickets, 1)
-        go_crm = QPushButton("Clients & CRM · sales")
+        go_crm = QPushButton("Clients && CRM · sales")
         go_crm.setObjectName("enkyronHomeOpenCRM")
         go_crm.setMinimumHeight(44)
         go_crm.clicked.connect(lambda: self.navigation.setCurrentRow(2))
@@ -510,7 +510,7 @@ class EnkyronWindow(QMainWindow):
         go_mail.setMinimumHeight(44)
         go_mail.clicked.connect(lambda: self.navigation.setCurrentRow(3))
         quick_actions_bottom.addWidget(go_mail, 1)
-        go_calendar = QPushButton("Calendar · appointments & tasks")
+        go_calendar = QPushButton("Calendar · appointments && tasks")
         go_calendar.setObjectName("enkyronHomeOpenCalendar")
         go_calendar.setMinimumHeight(44)
         go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
@@ -548,7 +548,22 @@ class EnkyronWindow(QMainWindow):
         self.sales_overview_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
-        home_l.addWidget(self.sales_overview_table, 1)
+        self.sales_overview_table.setVisible(False)
+        home_l.addWidget(self.sales_overview_table, 10)
+        # Display an intentional empty/error/loading state instead of a
+        # blank, full-height table when no priority rows are returned.
+        self.sales_overview_empty = QLabel("Loading opportunity follow-ups…")
+        self.sales_overview_empty.setObjectName("enkyronHomeEmptyFollowups")
+        self.sales_overview_empty.setTextFormat(Qt.TextFormat.PlainText)
+        self.sales_overview_empty.setWordWrap(True)
+        self.sales_overview_empty.setMinimumHeight(105)
+        self.sales_overview_empty.setMaximumHeight(150)
+        self.sales_overview_empty.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.sales_overview_empty.setStyleSheet(
+            "background: #f5f9fc; border: 1px solid #d8e2ea; "
+            "border-radius: 6px; padding: 16px 18px; color: #34495e;"
+        )
+        home_l.addWidget(self.sales_overview_empty)
         # Opportunity and company-owned follow-ups are distinct records.
         # Give both a direct Home entry, without inventing combined counts.
         followups_actions = QHBoxLayout()
@@ -563,6 +578,8 @@ class EnkyronWindow(QMainWindow):
         )
         followups_actions.addWidget(self.home_company_followups_button)
         home_l.addLayout(followups_actions)
+        # Let the background absorb spare space when the table is hidden.
+        home_l.addStretch(1)
         self.pages.addWidget(home)
 
         ticket_page = QWidget()
@@ -3865,6 +3882,9 @@ class EnkyronWindow(QMainWindow):
         self.sales_overview_metrics.setText("Loading commercial overview…")
         self.sales_overview_attention.clear()
         self.sales_overview_table.setRowCount(0)
+        self.sales_overview_table.setVisible(False)
+        self.sales_overview_empty.setText("Loading opportunity follow-ups…")
+        self.sales_overview_empty.setVisible(True)
 
         def received(data, error):
             if seq != self.sales_overview_seq:
@@ -3875,6 +3895,10 @@ class EnkyronWindow(QMainWindow):
                     error or (data or {}).get(
                         "notice", "Commercial overview is unavailable."
                     )
+                )
+                self.sales_overview_empty.setText(
+                    "Opportunity follow-ups cannot be displayed. "
+                    "Review the commercial overview error above."
                 )
                 return
             numbers = data["overview"]
@@ -3896,6 +3920,14 @@ class EnkyronWindow(QMainWindow):
             )
             priorities = numbers.get("priority_items", [])
             self.sales_overview_table.setRowCount(len(priorities))
+            self.sales_overview_table.setVisible(bool(priorities))
+            self.sales_overview_empty.setVisible(not bool(priorities))
+            if not priorities:
+                self.sales_overview_empty.setText(
+                    "No upcoming opportunity follow-ups in this view. "
+                    "Open Opportunity follow-ups below to review or schedule "
+                    "the next action. Company-owned follow-ups are separate."
+                )
             for row, item in enumerate(priorities):
                 values = [
                     item.get("company_name_at_creation") or "",
