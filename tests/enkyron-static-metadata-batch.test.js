@@ -41,8 +41,9 @@ const authorization={ticket_id:ticket,snapshot_id:snapshot,target_sha:sha,
   acknowledgement:'I AUTHORISE UNVERIFIED STATIC METADATA RECORDING ONLY',
   rationale:'I examined the frozen static manifest and authorise recording metadata as unverified candidates only; no source or approval is authenticated.'};
 
-function fakeEnvironment({previous=[],badOwner=false,scopeDrift=false,failAfter=null}={}){
+function fakeEnvironment({previous=[],badOwner=false,scopeDrift=false,failAfter=null,singleConnection=false}={}){
   const records=[...previous],queries=[],calls={writer:0,collect:0,scope:0,master:0};
+  let leased=false;
   const client={
     async query(sql,args){
       queries.push(sql);
@@ -54,11 +55,17 @@ function fakeEnvironment({previous=[],badOwner=false,scopeDrift=false,failAfter=
           .map(x=>({id:x.id,verification_state:x.verification_state,
             retention_status:x.retention_status}))};
       return {rows:[]};
-    },release(){}
+    },release(){leased=false;}
   };
   const pool={
-    async connect(){return client;},
+    async connect(){
+      if(singleConnection&&leased)throw Error('single-connection pool already leased');
+      leased=true;
+      return client;
+    },
     async query(sql){
+      if(singleConnection&&leased)
+        throw Error('pool.query would deadlock while sole client is leased');
       if(!sql.includes('FROM arl_workbench_tickets'))throw Error('unexpected pool query');
       return {rows:[{assigned_to:badOwner?'other':'emprex',
         assessor_name:'emprex',status:'scoping',archived_at:null}]};
@@ -66,9 +73,17 @@ function fakeEnvironment({previous=[],badOwner=false,scopeDrift=false,failAfter=
   };
   const deps={
     collect:async()=>{calls.collect++;return preview;},
-    scopeReader:async()=>{calls.scope++;
+    scopeReader:async(db)=>{
+      if(singleConnection&&leased&&db!==client)
+        throw Error('scope recheck must use leased client');
+      calls.scope++;
       return {...scope,...(scopeDrift?{target_sha:'f'.repeat(40)}:{})};},
-    masterReader:async()=>{calls.master++;return {integrity:'verified'};},
+    masterReader:async(db)=>{
+      if(singleConnection&&leased&&db!==client)
+        throw Error('Master recheck must use leased client');
+      calls.master++;
+      return {integrity:'verified'};
+    },
     bindingReader:async()=>({scope,binding:{
       projectId:project,assessmentId:assessment,userId:'usr_fixture'}}),
     writer:async ({projectId,controlId,userId,input})=>{
@@ -140,6 +155,16 @@ test('Read-only preview reports precise 103 candidates and no DB writes',async()
   assert.equal(env.calls.writer,0);
   assert.match(env.queries[0],/READ ONLY/);
   assert.equal(env.queries.at(-1),'COMMIT');
+});
+
+test('Batch rechecks use leased client with a single-connection PostgreSQL pool',async()=>{
+  const env=fakeEnvironment({singleConnection:true});
+  const result=await recordStaticMetadataBatchChunk(
+    env.pool,authorization,'emprex',env.deps);
+  assert.equal(result.created,16);
+  assert.equal(env.records.length,16);
+  assert.ok(env.calls.scope>=17);
+  assert.ok(env.calls.master>=17);
 });
 
 test('One explicit confirmation processes 103 other KBs in resumable 16-record chunks with idempotency',async()=>{
