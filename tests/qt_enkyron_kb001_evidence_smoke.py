@@ -211,8 +211,13 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
             "active_tests_executed": 0, "human_review_required": True,
             "per_control": [
                 {"control_id": "ARL-KB-{:03d}".format(n),
+                 "title": "Synthetic KB {}".format(n),
+                 "category": "Security policy",
+                 "stage": "applicability",
                  "source_requirements": 1,
                  "metadata_projected_unverified": 1,
+                 "human_document_requirements": 2,
+                 "authorised_runtime_requirements": 1,
                  "incomplete_source_projections": 0}
                 for n in range(1, 109)
             ]
@@ -232,7 +237,17 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
             output = w.batch_replay_results.toPlainText()
             self.assertIn("108 CANONICAL CONTROLS", output)
             self.assertIn("KB-001 existing evidence: REPRODUCED", output)
-            self.assertIn("ARL-KB-108", output)
+            self.assertIn("108-control matrix", output)
+            self.assertEqual(w.batch_review_table.rowCount(), 108)
+            self.assertEqual(w.batch_review_table.item(14, 0).text(), "ARL-KB-015")
+            self.assertEqual(w.batch_review_table.item(14, 3).text(), "2 to obtain")
+            self.assertEqual(w.batch_review_table.item(14, 4).text(), "1 not authorised")
+            w.batch_review_table.selectRow(14)
+            self.assertEqual(w.active_control_by_ticket[TICKET], 15)
+            self.assertEqual(w.record_control.value(), 15)
+            self.assertTrue(w.batch_review_open.isEnabled())
+            w.batch_review_table.selectRow(1)
+            self.assertEqual(w.active_control_by_ticket[TICKET], 2)
             self.assertIn("NOT accepted evidence", output)
             self.assertIn("No DB writes", output)
             self.assertIsNone(w.kb001_candidate)
