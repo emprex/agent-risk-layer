@@ -195,6 +195,12 @@ jobs:
           node --check scripts/enkyron-clean-test-companies.mjs
           node --test tests/enkyron-crm-test-archive.test.js
 
+      - name: ENK-01B Home labels and empty follow-ups (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_home_empty_followups_smoke.py'
+
       - name: ENKYRON local Mail + Calendar integration and DST (offline)
         env:
           QT_QPA_PLATFORM: offscreen
