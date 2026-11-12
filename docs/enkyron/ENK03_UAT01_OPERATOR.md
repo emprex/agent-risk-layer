@@ -231,3 +231,64 @@ proof of its title.
 observed assertions. UAT-01 remains IN PROGRESS, not human accepted;
 negative UI/server denial tests and end-to-end operator acceptance remain.
 PR #583 stays draft; no merge or production DB writes.
+
+## Operator checkpoint — step 9–12, 12 November 2026
+
+**Build under Debian UAT:** `e2a2353152cec93f8745d5d052a15df2917c44be`
+of PR #583 in the isolated `~/enkyron-ux-preview-583` checkout;
+`ENKYRON_UAT_DATABASE=enkyron_uat_enk03` and
+`ENKYRON_UAT_GUARD=ENK03_SYNTHETIC_ONLY`.
+Operator-reported screenshots and terminal evidence are the primary manual
+UAT observations, not direct database access by this reviewer.
+
+- **9A PASS (UI):** Existing follow-up is `completed`, revision 3,
+  due 2026-11-20; `Reschedule / edit`, `Mark completed` and
+  `Cancel follow-up` remain disabled despite checked confirmation.
+  `Add follow-up` remains available for creating a distinct reminder.
+- **9B PASS (UI):** The sole company-only opportunity remains at
+  `Research`; duplicate creation is disabled, and the history remains
+  at nine entries. A clipped disabled `Opportunity already recorded`
+  label was corrected on exact SHA `e2a2353`; the operator confirmed
+  the whole label can now be read.
+- **10A PASS (UI):** A synthetic action draft was cancelled without
+  saving; original next-action text and nine history entries were
+  observed after a dossier refresh.
+- **10B PASS (UI):** Closing a dossier with an unsaved edited next action
+  displayed `Discard unsaved work?`, with `No`/`Yes` actions.
+  Operator subsequently confirmed cancellation and return to the
+  original text. Screenshot demonstrates guard prompt, not server audit.
+- **10C PASS (targeted guard test):** Operator terminal printed seven
+  blocks and `ENK-03 STEP 10C: PASS`: `mail-send-draft`,
+  `create-ticket`, `assessment-link`, `crm-invoice-issue`,
+  `crm-update-opportunity`, `crm-mail-manual-send` through the
+  UAT command predicate; `crm-prospects` refused via local IPC.
+  The six sensitive commands were **not actually dispatched through
+  IPC**. This is not a general authorization/security penetration test.
+- **11 PASS (visual persistence):** After restarting the guarded
+  application, without manual refresh, the same company and
+  `Synthetic engineering services` sector, two contacts
+  (Sam Taylor `Senior Project Manager`, Alex Martin `Technical
+  Director`), one opportunity, zero tickets, nine history items
+  and `No open company follow-ups` were visible. The earlier
+  read-only SQL check independently showed one `completed` follow-up,
+  version 3 and three events.
+
+**Exact GitHub HEAD before documentation-only checkpoint:**
+`e2a2353152cec93f8745d5d052a15df2917c44be`.
+ENKYRON Desktop run `43299199254` SUCCESS; CI run `43299199247`
+SUCCESS, including PostgreSQL integration. Automated native tests cover
+a refused opportunity confirmation, incomplete readback staying
+unverified, and in-flight close guards. Automated tests are not a
+substitute for unexecuted human fault injection.
+
+**Step 12 — evidence consolidated, human acceptance pending.**
+Remaining limits: stale/failed readback and switching selected company
+during a pending write have not been completely exercised by the
+operator on Debian; the six sensitive commands were predicate-only
+denial checks; full security, multi-user authorization and production
+readiness are outside this UAT. No production `arl_local` database
+write, data migration, merge or release is authorized by this report.
+
+**Disposition: ENK-03 UAT positive business flow PASSED; full UAT-01
+acceptance remains PENDING explicit human decision / documented
+disposition of residual checks. PR #583 remains DRAFT, unmerged.**
