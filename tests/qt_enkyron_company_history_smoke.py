@@ -1,230 +1,195 @@
-"""ENK-03: one Company History in the Company 360 dossier.
+"""ENK-03: one readable, expandable Company History story.
 
-Synthetic Qt fixture only. No PostgreSQL, email, assessment or real user data.
+Native Qt synthetic callbacks only; no real PostgreSQL or external writes.
 """
 import gc
 import os
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QApplication, QTableWidget, QPlainTextEdit, QPushButton, QLabel
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtWidgets import (
+    QApplication, QLabel, QComboBox, QPushButton, QScrollArea
+)
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
 COMPANY = "11111111-2222-4333-8444-555555555555"
 
 
-class CompanyHistorySmoke(unittest.TestCase):
+def event(identifier, kind, action, summary, minute):
+    return {
+        "event_id": identifier, "resource_id": identifier+"-source",
+        "resource_kind": kind, "action": action, "summary": summary,
+        "actor_local": "ci-local", "recorded_at": "2026-11-12T18:%02d:00Z" % minute,
+    }
+
+
+class CompanyHistoryStorySmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_single_visible_chronological_history_and_no_legacy_audit_tabs(self):
-        old = DesktopBridge.call
-        calls = []
+    def setUp(self):
+        self.old_call = DesktopBridge.call
+        self.calls = []
 
-        def fake(_bridge, command, arg="", payload=None, callback=None):
-            calls.append((command, arg, payload, callback))
-
-        def last(name):
-            for command, arg, payload, callback in reversed(calls):
-                if command == name:
-                    return callback
-            self.fail("Missing IPC call: " + name)
-
+        def fake(_bridge, name, arg="", payload=None, callback=None):
+            self.calls.append((name, arg, payload, callback))
         DesktopBridge.call = fake
-        window = None
+        self.window = EnkyronWindow()
+        self.window.crm_company_id = COMPANY
+        self.window.open_company_dossier()
+
+    def tearDown(self):
         try:
-            window = EnkyronWindow()
-            window.crm_company_id = COMPANY
-            window.open_company_dossier()
-            last("crm-company-dossier")({
-                "available": True,
-                "company": {
-                    "id": COMPANY, "name": "Synthetic Engineering Ltd",
-                    "relationship_state": "prospect", "record_version": 1,
-                },
-                "sections": {
-                    "company_history": {
-                        "total": 3, "more": False,
-                        "items": [
-                            {
-                                "event_id": "e-3", "resource_id": "o-1",
-                                "resource_kind": "opportunity", "action": "created",
-                                "summary": "Stage: research | Next: Prepare introduction",
-                                "actor_local": "ci", "recorded_at": "2026-11-12T18:10:00Z",
-                            },
-                            {
-                                "event_id": "e-2", "resource_id": "c-1",
-                                "resource_kind": "contact", "action": "created",
-                                "summary": "Contact: Alex Martin",
-                                "actor_local": "ci", "recorded_at": "2026-11-12T18:02:00Z",
-                            },
-                            {
-                                "event_id": "e-1", "resource_id": COMPANY,
-                                "resource_kind": "company", "action": "created",
-                                "summary": "Company record", "actor_local": "ci",
-                                "recorded_at": "2026-11-12T18:00:00Z",
-                            },
-                        ],
-                    },
-                    "audit_events": {"total": 2, "items": [], "more": False},
-                    "audit_changes": {"total": 0, "items": [], "more": False},
-                    "ticket_history": {"total": 0, "items": [], "more": False},
-                },
-            }, None)
-            labels = [window.crm_dossier_nav.item(i).text()
-                      for i in range(window.crm_dossier_nav.count())]
-            self.assertEqual(sum("Company History" in x for x in labels), 1)
-            self.assertFalse(any(x.startswith(("CRM audit", "Field changes", "Ticket history"))
-                                 for x in labels))
-            row = next(i for i, x in enumerate(labels) if x.startswith("Company History"))
-            self.assertFalse(window.crm_dossier_nav.isRowHidden(row))
-            window.crm_dossier_nav.setCurrentRow(row)
-            table = window.crm_dossier_tabs.widget(row).findChild(QTableWidget)
-            self.assertIsNotNone(table)
-            self.assertEqual(table.rowCount(), 3)
-            self.assertEqual(table.item(0, 1).text(), "opportunity")
-            self.assertEqual(table.item(1, 1).text(), "contact")
-            self.assertEqual(table.item(2, 1).text(), "company")
-            self.assertEqual(table.item(0, 3).text(),
-                             "Stage: research | Next: Prepare introduction")
-            self.assertEqual(table.item(0, 4).text(), "ci")
-            detail = window.crm_dossier_tabs.widget(row).findChild(
-                QPlainTextEdit, "crmCompanyHistoryDetail"
-            )
-            self.assertIsNotNone(detail)
-            self.assertTrue(detail.isReadOnly())
-            self.assertIn("Stage: research | Next: Prepare introduction",
-                          detail.toPlainText())
-            table.selectRow(1)
-            self.assertIn("Contact: Alex Martin", detail.toPlainText())
-            self.assertIn("Record ID: c-1", detail.toPlainText())
-            self.assertFalse(any(x[0].startswith(("crm-create", "mail-send", "create-ticket"))
-                                 for x in calls))
+            if self.window.crm_dossier_dialog:
+                self.window.crm_dossier_dialog.close_guard = lambda: True
+                self.window.crm_dossier_dialog.reject()
+            self.window.close()
+            self.window.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.app.processEvents()
+            gc.collect()
         finally:
-            if window:
-                if window.crm_dossier_dialog:
-                    window.crm_dossier_dialog.close_guard = lambda: True
-                    window.crm_dossier_dialog.reject()
-                window.close()
-                window.deleteLater()
-                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-                self.app.processEvents()
-                gc.collect()
-            DesktopBridge.call = old
+            DesktopBridge.call = self.old_call
 
+    def callback(self, name):
+        for cmd, arg, payload, callback in reversed(self.calls):
+            if cmd == name:
+                self.assertIsNotNone(callback)
+                return arg, payload, callback
+        self.fail("Missing IPC call "+name)
 
-
-    def test_full_summary_and_all_pages_inside_the_same_dossier(self):
-        previous = DesktopBridge.call
-        calls = []
-
-        def fake(_bridge, command, arg="", payload=None, callback=None):
-            calls.append((command, arg, payload, callback))
-
-        def last(name):
-            for command, arg, payload, reply in reversed(calls):
-                if command == name:
-                    return arg, payload, reply
-            self.fail("Missing IPC: " + name)
-
-        DesktopBridge.call = fake
-        window = None
-        try:
-            window = EnkyronWindow()
-            window.crm_company_id = COMPANY
-            window.open_company_dossier()
-            first_page = [
-                {
-                    "event_id": "event-%02d" % i, "resource_id": "item-%02d" % i,
-                    "resource_kind": "opportunity", "action": "updated",
-                    "summary": "Business event %02d" % i, "actor_local": "ci",
-                    "recorded_at": "2026-11-12T18:%02d:00Z" % (39-i),
-                }
-                for i in range(20)
-            ]
-            last("crm-company-dossier")[2]({
-                "available": True,
-                "company": {"id": COMPANY, "name": "Synthetic Engineering Ltd",
-                            "relationship_state": "prospect", "record_version": 1},
-                "sections": {
-                    "company_history": {
-                        "total": 22, "more": True, "items": first_page
-                    },
+    def dossier(self, history, total):
+        self.callback("crm-company-dossier")[2]({
+            "available": True,
+            "company": {
+                "id": COMPANY, "name": "Synthetic Engineering Ltd",
+                "record_version": 1, "relationship_state": "prospect"
+            },
+            "sections": {
+                "company_history": {
+                    "items": history, "total": total, "more": total>20,
                 },
-            }, None)
-            idx = next(i for i in range(window.crm_dossier_nav.count())
-                       if window.crm_dossier_nav.item(i).text().startswith("Company History"))
-            window.crm_dossier_nav.setCurrentRow(idx)
-            panel = window.crm_dossier_tabs.widget(idx)
-            detail = panel.findChild(QPlainTextEdit, "crmCompanyHistoryDetail")
-            older = panel.findChild(QPushButton, "crmCompanyHistoryOlder")
-            newer = panel.findChild(QPushButton, "crmCompanyHistoryNewer")
-            status = panel.findChild(QLabel, "crmCompanyHistoryPageStatus")
-            table = panel.findChild(QTableWidget, "crmCompanyHistoryTable")
-            self.assertEqual(table.rowCount(), 20)
-            self.assertTrue(older.isEnabled())
-            self.assertFalse(newer.isEnabled())
-            self.assertEqual(status.text(), "Events 1–20 of 22")
-            older.click()
-            command, arg, payload, reply = calls[-1]
-            self.assertEqual(command, "crm-company-history")
-            self.assertEqual(arg, "")
-            self.assertEqual(payload, {"company_id": COMPANY, "page": 1})
-            self.assertFalse(older.isEnabled())
-            self.assertFalse(newer.isEnabled())
-            full_action = "Review the next business action. " + ("Important details " * 55)
-            self.assertGreater(len(full_action), 180)
-            reply({
-                "available": True, "page": 1, "page_size": 20,
-                "total": 22, "more": False,
-                "items": [
-                    {"event_id": "old-1", "resource_id": "older-record-1",
-                     "resource_kind": "opportunity", "action": "created",
-                     "summary": full_action, "actor_local": "ci",
-                     "recorded_at": "2026-11-10T09:30:00Z"},
-                    {"event_id": "old-2", "resource_id": COMPANY,
-                     "resource_kind": "company", "action": "created",
-                     "summary": "Company record", "actor_local": "ci",
-                     "recorded_at": "2026-11-09T12:00:00Z"},
-                ],
-            }, None)
-            self.assertEqual(table.rowCount(), 2)
-            self.assertEqual(status.text(), "Events 21–22 of 22")
-            self.assertEqual(table.item(0, 3).text(), full_action)
-            self.assertIn(full_action, detail.toPlainText())
-            self.assertIn("Event ID: old-1", detail.toPlainText())
-            self.assertTrue(newer.isEnabled())
-            self.assertFalse(older.isEnabled())
-            newer.click()
-            command, arg, payload, reply = calls[-1]
-            self.assertEqual(command, "crm-company-history")
-            self.assertEqual(payload, {"company_id": COMPANY, "page": 0})
-            reply({
-                "available": True, "page": 0, "page_size": 20,
-                "total": 22, "more": True, "items": first_page,
-            }, None)
-            self.assertEqual(table.rowCount(), 20)
-            self.assertEqual(status.text(), "Events 1–20 of 22")
-            self.assertTrue(older.isEnabled())
-            self.assertFalse(newer.isEnabled())
-            self.assertFalse(any(name in {
-                "crm-create-contact", "crm-create-company", "create-ticket",
-                "crm-record-activity", "mail-send-draft",
-            } for name, *_ in calls))
-        finally:
-            if window:
-                if window.crm_dossier_dialog:
-                    window.crm_dossier_dialog.close_guard = lambda: True
-                    window.crm_dossier_dialog.reject()
-                window.close()
-                window.deleteLater()
-                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-                self.app.processEvents()
-                gc.collect()
-            DesktopBridge.call = previous
+                "audit_events": {"items": [], "total": 2, "more": False},
+                "audit_changes": {"items": [], "total": 0, "more": False}
+            },
+        }, None)
+
+    def view(self):
+        labels = [self.window.crm_dossier_nav.item(i).text()
+                  for i in range(self.window.crm_dossier_nav.count())]
+        self.assertEqual(sum("Company History" in label for label in labels), 1)
+        self.assertFalse(any(label.startswith((
+            "CRM audit", "Field changes", "Ticket history"))
+            for label in labels))
+        index = next(i for i,label in enumerate(labels)
+                     if label.startswith("Company History"))
+        self.assertFalse(self.window.crm_dossier_nav.isRowHidden(index))
+        self.window.crm_dossier_nav.setCurrentRow(index)
+        panel = self.window.crm_dossier_tabs.widget(index)
+        story = panel.findChild(QScrollArea, "crmCompanyHistoryStory")
+        self.assertIsNotNone(story)
+        return panel
+
+    def cards(self, panel):
+        return panel.findChildren(QPushButton, "crmCompanyHistoryExpand")
+
+    def details(self, panel):
+        return panel.findChildren(QLabel, "crmCompanyHistoryDetail")
+
+    def test_oldest_first_and_expandable_full_details_without_popup(self):
+        latest = event("op", "opportunity", "created",
+                       "Prepare a human-led AI-agent security assessment", 12)
+        middle = event("contact", "contact", "created", "Contact: Alex Martin", 9)
+        earliest = event("company", "company", "created", "Company record", 2)
+        self.dossier([latest, middle, earliest], 3)
+        panel = self.view()
+        selector = panel.findChild(QComboBox, "crmCompanyHistoryOrder")
+        self.assertEqual(selector.currentData(), "oldest")
+        titles = [b.text() for b in self.cards(panel)]
+        self.assertTrue(titles[0].startswith("1. Company · Created"))
+        self.assertTrue(titles[1].startswith("2. Contact · Created"))
+        self.assertTrue(titles[2].startswith("3. Opportunity · Created"))
+        self.assertEqual(len(self.details(panel)), 1)
+        self.assertIn("Company record", self.details(panel)[0].text())
+        self.assertTrue(self.details(panel)[0].textInteractionFlags() &
+                        Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.cards(panel)[2].click()
+        self.assertEqual(len(self.details(panel)), 1)
+        self.assertIn("Prepare a human-led", self.details(panel)[0].text())
+        self.assertIn("Event ID: op", self.details(panel)[0].text())
+        self.cards(panel)[2].click()
+        self.assertEqual(len(self.details(panel)), 0)
+        selector.setCurrentIndex(1)
+        titles = [b.text() for b in self.cards(panel)]
+        self.assertEqual(selector.currentData(), "newest")
+        self.assertTrue(titles[0].startswith("1. Opportunity · Created"))
+        self.assertTrue(titles[-1].startswith("3. Company · Created"))
+        self.assertIn("Prepare a human-led", self.details(panel)[0].text())
+        selector.setCurrentIndex(0)
+        self.assertTrue(self.cards(panel)[0].text().startswith("1. Company"))
+        self.assertFalse(any(cmd.startswith(("crm-create", "mail-send", "create-ticket"))
+                             for cmd, *_ in self.calls))
+
+    def test_older_events_and_order_are_real_scoped_pages(self):
+        newest = [event("n-%02d"%i, "contact", "created",
+                        "Recent event %02d"%i, 39-i) for i in range(20)]
+        self.dossier(newest, 22)
+        panel = self.view()
+        order = panel.findChild(QComboBox, "crmCompanyHistoryOrder")
+        previous = panel.findChild(QPushButton, "crmCompanyHistoryPrevious")
+        following = panel.findChild(QPushButton, "crmCompanyHistoryNext")
+        status = panel.findChild(QLabel, "crmCompanyHistoryPageStatus")
+        self.assertEqual(order.currentData(), "oldest")
+        self.assertFalse(previous.isEnabled())
+        self.assertFalse(following.isEnabled())
+        self.assertEqual(self.callback("crm-company-history")[1], {
+            "company_id": COMPANY, "page": 0, "order": "oldest"
+        })
+        oldest = [
+            event("o-%02d"%i, "company", "created",
+                  "Old event %02d"%i, i) for i in range(20)
+        ]
+        self.callback("crm-company-history")[2]({
+            "available": True, "page": 0, "order": "oldest",
+            "total": 22, "items": oldest, "more": True
+        }, None)
+        self.assertEqual(status.text(), "Events 1–20 of 22")
+        self.assertTrue(self.cards(panel)[0].text().startswith("1. Company"))
+        self.assertTrue(following.isEnabled())
+        following.click()
+        self.assertEqual(self.callback("crm-company-history")[1], {
+            "company_id": COMPANY, "page": 1, "order": "oldest"
+        })
+        long_summary = "Complete business action. " + "Details " * 120
+        self.assertGreater(len(long_summary), 180)
+        self.callback("crm-company-history")[2]({
+            "available": True, "page": 1, "order": "oldest",
+            "total": 22, "items": [
+                event("o-20", "opportunity", "created", long_summary, 21),
+                event("o-21", "opportunity", "updated", "Latest event", 22),
+            ], "more": False
+        }, None)
+        self.assertEqual(status.text(), "Events 21–22 of 22")
+        self.assertIn(long_summary, self.details(panel)[0].text())
+        self.assertTrue(previous.isEnabled())
+        self.assertFalse(following.isEnabled())
+        order.setCurrentIndex(1)
+        self.assertEqual(self.callback("crm-company-history")[1], {
+            "company_id": COMPANY, "page": 0, "order": "newest"
+        })
+        self.callback("crm-company-history")[2]({
+            "available": True, "page": 0, "order": "newest",
+            "total": 22, "items": newest, "more": True
+        }, None)
+        self.assertEqual(status.text(), "Events 1–20 of 22")
+        self.assertIn("Recent event 00", self.details(panel)[0].text())
+        self.assertFalse(any(cmd in {
+            "crm-create-company", "crm-create-contact", "create-ticket",
+            "crm-record-activity", "mail-send-draft"
+        } for cmd, *_ in self.calls))
+
 
 if __name__ == "__main__":
     unittest.main()
