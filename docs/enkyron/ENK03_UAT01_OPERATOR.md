@@ -116,7 +116,7 @@ The operator requested automatic synchronization and one fewer button.
 
 Correction in this PR: after an acknowledged dossier contact creation or
 correction, re-read contacts for the **exact selected company ID** in the main
-pane; on returning to Companies, automatically reload the company list.
+pane; on entering the CRM module, automatically reload the company list once.
 Remove the top Companies `Refresh` button, preserving readback and stale
 callback guards. Native synthetic Qt regression added. **This remains a
 fix awaiting local operator re-test, not a UAT pass.** Do not duplicate the
