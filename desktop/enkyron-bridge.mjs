@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 import os from 'node:os';
 import pg from 'pg';
-import { resolveEnkyronDatabase, requireEnkyronUatCommand, verifyEnkyronUatDatabase } from './enkyron-uat-database.mjs';
+import { resolveEnkyronDatabase, requireEnkyronUatCommand, requireEnkyronUatPayload, verifyEnkyronUatDatabase } from './enkyron-uat-database.mjs';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
 import { listSalesProspects, listSalesProspectsPage, validateProspectPage } from './enkyron-crm-prospects.mjs';
@@ -313,6 +313,7 @@ async function main() {
   const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'assessment-link', 'control-applicability-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-send-draft', 'mail-reply-draft', 'mail-link-sent', 'mail-threads', 'mail-local-folder-create', 'mail-local-sync', 'mail-local-sync-bodies','mail-local-archive-sync', 'mail-local-fetch', 'mail-local-move', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command);
   const dbTarget = resolveEnkyronDatabase();
   requireEnkyronUatCommand(dbTarget, command);
+  requireEnkyronUatPayload(dbTarget, command, payload);
   const pool = new pg.Pool({
     ...config,
     database: dbTarget.database,
