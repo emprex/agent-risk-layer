@@ -3704,12 +3704,10 @@ class EnkyronWindow(QMainWindow):
         if index == 0:
             self.load_sales_overview()
         if index == 2:
-            # Returning to CRM automatically re-reads companies. The list
-            # is reconciled by canonical company ID, not display name.
-            already_on_companies = self.crm_tabs.currentIndex() == 0
+            # Returning to CRM automatically reloads companies once.
+            # Canonical-ID selection is preserved across list reloads.
             self.crm_tabs.setCurrentIndex(0)
-            if already_on_companies:
-                self.load_companies()
+            self.load_companies()
             if not self.crm_loaded:
                 self.load_prospects()
             if not self.crm_followup_loaded:
@@ -3770,10 +3768,6 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("calendar-task-complete", payload=data, callback=received)
 
     def crm_tab_changed(self, index):
-        if index == 0 and self.navigation.currentRow() == 2:
-            # Returning from Pipeline / Contacts / other CRM tabs replaces
-            # the old manual Refresh control.
-            self.load_companies()
         if index == 3:
             self.load_mail_status()
         if index == 4 and self.navigation.currentRow() == 2:
