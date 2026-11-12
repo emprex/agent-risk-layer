@@ -14,11 +14,14 @@ from PySide6.QtWidgets import (
 class ControlReviewDialog(QDialog):
     """One ticket, one canonical snapshot, one explicit human decision at a time."""
 
-    def __init__(self, parent, bridge, ticket_id, on_recorded=None):
+    def __init__(self, parent, bridge, ticket_id, on_recorded=None,
+                 on_control_selected=None, initial_control_id=None):
         super().__init__(parent)
         self.bridge = bridge
         self.ticket_id = ticket_id
         self.on_recorded = on_recorded
+        self.on_control_selected = on_control_selected
+        self.selected_control_id = initial_control_id
         self.context = None
         self.detail = None
         self.preparation_by_id = {}
@@ -206,10 +209,16 @@ class ControlReviewDialog(QDialog):
                     data["snapshot_id"]
                 )
             )
-            row = next(
-                (i for i, entry in enumerate(items)
-                 if entry.get("stage") == "applicability"), 0
-            ) if select_next else 0
+            if select_next:
+                row = next(
+                    (i for i, entry in enumerate(items)
+                     if entry.get("stage") == "applicability"), 0
+                )
+            else:
+                row = next(
+                    (i for i, entry in enumerate(items)
+                     if entry.get("control_id") == self.selected_control_id), 0
+                )
             self.controls.setCurrentRow(row)
 
         self.bridge.call("control-queue", self.ticket_id, callback=loaded)
@@ -227,6 +236,9 @@ class ControlReviewDialog(QDialog):
         if not current or not self.context or not self.same_ticket():
             return
         control_id = current.data(Qt.ItemDataRole.UserRole)
+        self.selected_control_id = control_id
+        if callable(self.on_control_selected):
+            self.on_control_selected(self.ticket_id, control_id)
         self.title.setText("{} · Reading canonical detail…".format(control_id))
         self.info.setPlainText("Checking snapshot and current applicability revision…")
 
