@@ -2,7 +2,7 @@
 // Read-only union of original append-only sources, without migrating or rewriting them.
 // Exact workspace/company/verified-link scoping; no inference from company display names.
 // Historical notes and mail bodies are excluded; external sends remain unverified claims.
-// Current view is the latest 20 events; count and truncation are explicit in UI.
+// Bounded 20-event pages; all older events remain readable through scoped pagination.
 export const COMPANY_HISTORY_SQL = `WITH linked_opportunities AS (
   SELECT o.id
   FROM enkyron_crm_opportunities o
@@ -58,7 +58,7 @@ entries AS (
   )
   UNION ALL
   SELECT e.id,'opportunity',o.id,e.event_type,
-    'Stage: '||e.new_stage||' | Next: '||left(e.new_next_action,180),
+    'Stage: '||e.new_stage||' | Next: '||e.new_next_action,
     e.actor_local,e.created_at
   FROM enkyron_crm_opportunity_events e
   JOIN linked_opportunities o ON o.id=e.opportunity_id
@@ -68,7 +68,7 @@ entries AS (
     CASE WHEN e.new_status='completed' THEN 'completed'
       WHEN e.new_status='cancelled' THEN 'cancelled'
       ELSE e.event_type END,
-    'Due '||e.new_due_date::text||' | '||left(e.new_action_text,180),
+    'Due '||e.new_due_date::text||' | '||e.new_action_text,
     e.actor_local,e.recorded_at
   FROM enkyron_crm_company_followup_events e
   JOIN enkyron_crm_company_followups f
@@ -163,3 +163,44 @@ FROM entries
 ORDER BY recorded_at DESC,event_id DESC
 LIMIT 21
 `;
+
+const PAGE_SIZE=20;
+const PAGED_SQL=COMPANY_HISTORY_SQL.replace(/LIMIT 21\s*$/, 'LIMIT 21 OFFSET $3');
+if(PAGED_SQL===COMPANY_HISTORY_SQL)throw new Error('CRM Company History page SQL missing limit');
+
+/** Bounded company-scoped read-only paging. No name-based identity inference. */
+export async function getCompanyHistoryPage(pool,payload,actor){
+  if(!payload||typeof payload!=='object'||Array.isArray(payload))
+    throw new Error('CRM invalid Company History page request');
+  const {requireCompanyId}=await import('./enkyron-crm-tickets.mjs');
+  const companyId=requireCompanyId(payload.company_id);
+  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
+    throw new Error('CRM invalid local operator');
+  const page=payload.page;
+  if(!Number.isSafeInteger(page)||page<0||page>10000)
+    throw new Error('CRM invalid history page');
+  const key='local:'+actor;
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const company=await client.query(
+      'SELECT id FROM enkyron_crm_companies WHERE workspace_key=$1 AND id=$2',
+      [key,companyId]
+    );
+    if(!company.rows[0])throw new Error('CRM company not found in local workspace');
+    const result=await client.query(PAGED_SQL,[key,companyId,page*PAGE_SIZE]);
+    const rows=result.rows;
+    const total=rows.length?Number(rows[0].total_rows):0;
+    if(!Number.isSafeInteger(total)||total<rows.length||rows.length>PAGE_SIZE+1)
+      throw new Error('CRM invalid Company History result');
+    await client.query('COMMIT');
+    return {available:true,page,page_size:PAGE_SIZE,total,
+      items:rows.slice(0,PAGE_SIZE).map(({total_rows,...item})=>item),
+      more:total>(page+1)*PAGE_SIZE};
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    if(error?.code==='42P01')return {available:false,
+      notice:'CRM Company History schema is unavailable.',items:[]};
+    throw error;
+  }finally{client.release();}
+}
