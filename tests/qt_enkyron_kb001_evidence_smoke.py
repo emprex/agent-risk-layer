@@ -167,6 +167,9 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
                 self.assertTrue(w.kb001_record_button.isEnabled())
                 self.assertIn("Not declared / not verified",
                               w.static_collect_results.toPlainText())
+                # Explicit recording of KB-001 switches current context away
+                # from a prior control only after the confirmed write.
+                w.record_control.setValue(15)
                 with patch.object(
                     QInputDialog, "getMultiLineText",
                     return_value=("I inspected the exact frozen Git SHA. "
@@ -193,6 +196,8 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
                               w.static_collect_results.toPlainText())
                 self.assertIn("UNVERIFIED",
                               w.static_collect_results.toPlainText())
+                self.assertEqual(w.record_control.value(), 1)
+                self.assertEqual(w.active_control_by_ticket[TICKET], 1)
                 self.assertIsNone(w.kb001_candidate)
         finally:
             self.dispose(w)
