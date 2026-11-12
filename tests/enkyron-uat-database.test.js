@@ -39,11 +39,12 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-company-direct-opportunity-create', 'crm-company-followup-create',
     'crm-company-followup-update', 'crm-edit-company', 'crm-edit-contact',
     'crm-update-opportunity', 'crm-activity-timeline',
+    'crm-record-activity',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
     'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
-    'crm-proposal-create', 'crm-record-activity', 'crm-record-qualification',
+    'crm-proposal-create', 'crm-record-qualification',
     'crm-invoice-prepare',
   ]) assert.throws(() => requireEnkyronUatCommand(target, command), /UAT blocks/);
 });
@@ -58,6 +59,33 @@ test('ENK-04 UAT limits update to explicitly reviewed company record', () => {
   assert.doesNotThrow(() => requireEnkyronUatPayload(target,'crm-activity-timeline',null));
   assert.doesNotThrow(() => requireEnkyronUatPayload({database:'arl_local',uat:false},'crm-update-opportunity',{}));
   assert.throws(() => requireEnkyronUatCommand(target,'mail-send-draft'), /UAT blocks/);
+});
+
+test('ENK-04 UAT permits only reviewed company-owned manual activity, never outreach', () => {
+  const target={database:'enkyron_uat_enk03',uat:true};
+  const company_id='22222222-3333-4444-8555-666666666666';
+  const reviewed={company_id,activity_type:'note',
+    detail:'Synthetic pre-discovery research note only.',reviewed:true};
+  assert.doesNotThrow(()=>requireEnkyronUatCommand(target,'crm-record-activity'));
+  assert.doesNotThrow(()=>requireEnkyronUatPayload(target,'crm-record-activity',reviewed));
+  for(const bad of [
+    null, {}, {...reviewed,reviewed:false}, {...reviewed,reviewed:undefined},
+    {...reviewed,company_id:undefined},
+    {...reviewed,company_id:'wrong'},
+    {...reviewed,company_id:'00000000-0000-4000-8000-000000000000',opportunity_id:company_id},
+    {...reviewed,opportunity_id:company_id},
+  ]){
+    assert.throws(()=>requireEnkyronUatPayload(target,'crm-record-activity',bad),
+      /reviewed company-only note/);
+  }
+  // Both checks precede pool creation; existing validator verifies category and detail.
+  assert.doesNotThrow(()=>requireEnkyronUatPayload(
+    {database:'arl_local',uat:false},'crm-record-activity',{}
+  ));
+  for(const command of ['mail-send-draft','crm-proposal-create','create-ticket',
+    'crm-record-qualification','crm-invoice-issue','assessment-link']){
+    assert.throws(()=>requireEnkyronUatCommand(target,command),/UAT blocks/);
+  }
 });
 
 test('UAT refuses unmarked, wrong or unreadable database before business operation', async () => {

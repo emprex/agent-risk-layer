@@ -347,6 +347,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
         self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_uncertain = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
         self.crm_ticket_seq = 0
@@ -5432,6 +5433,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
         self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_uncertain = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
         self.crm_dossier_followup_editor = None
@@ -7672,6 +7674,7 @@ class EnkyronWindow(QMainWindow):
             and (opportunity is None
                  or opportunity in self.crm_dossier_activity_opportunity_ids)
             and not self.crm_dossier_activity_saving
+            and not self.crm_dossier_activity_uncertain
             and self.crm_dossier_activity_record.isChecked()
             and 10 <= len(detail) <= 2000
             and self.crm_dossier_activity_confirm.isChecked()
@@ -7685,6 +7688,7 @@ class EnkyronWindow(QMainWindow):
         if (not dialog or not dialog.isVisible() or
                 self.crm_dossier_activity_company_id != company_id or
                 self.crm_dossier_activity_saving or
+                self.crm_dossier_activity_uncertain or
                 not self.crm_dossier_activity_save.isEnabled()):
             return
         opportunity_id = self.crm_dossier_activity_opportunity.currentData()
@@ -7710,22 +7714,82 @@ class EnkyronWindow(QMainWindow):
                     or not dialog.isVisible()
                     or company_id != self.crm_dossier_company_id):
                 return
-            self.crm_dossier_activity_saving = False
-            if error or not result or not result.get("id"):
-                QMessageBox.warning(
-                    dialog, "Save not confirmed",
-                    "Check the activity history before trying again to avoid "
-                    "duplicate records. " + str(error or "")
-                )
-                self.update_dossier_activity_save()
-                return
-            self.crm_dossier_activity_flash = (
-                "Activity saved to CRM. No external message was sent."
+
+            expected_target = (
+                ("company_id", company_id) if opportunity_id is None
+                else ("opportunity_id", opportunity_id)
             )
-            self.crm_dossier_activity_record.setChecked(False)
-            self.crm_dossier_activity_detail.clear()
-            self.crm_dossier_activity_confirm.setChecked(False)
-            self.refresh_company_dossier()
+            returned_id = (result or {}).get("id") if isinstance(result, dict) else None
+            valid_ack = (
+                not error and isinstance(result, dict)
+                and isinstance(returned_id, str)
+                and result.get(expected_target[0]) == expected_target[1]
+                and result.get(
+                    "opportunity_id" if opportunity_id is None else "company_id"
+                ) is None
+                and result.get("activity_type") == payload["activity_type"]
+            )
+            if not valid_ack:
+                # An IPC error may occur after COMMIT. Prevent blind duplicate
+                # appends until the operator manually inspects the record.
+                self.crm_dossier_activity_saving = False
+                self.crm_dossier_activity_uncertain = True
+                self.update_dossier_activity_save()
+                QMessageBox.warning(
+                    dialog, "Activity save not verified",
+                    "The write outcome is uncertain. Inspect Company History "
+                    "and activity records before reopening this editor. "
+                    "No automatic retry was sent. " + str(error or "")
+                )
+                return
+
+            def verified(latest, check_error):
+                if (dialog is not self.crm_dossier_dialog
+                        or not dialog.isVisible()
+                        or company_id != self.crm_dossier_company_id):
+                    return
+                company = (latest or {}).get("company") if isinstance(latest, dict) else None
+                sections = (latest or {}).get("sections") if isinstance(latest, dict) else None
+                activities = (sections or {}).get("activities") or {}
+                rows = activities.get("items") or []
+                matches = [
+                    item for item in rows
+                    if isinstance(item, dict) and item.get("id") == returned_id
+                ] if isinstance(rows, list) else []
+                valid_record = (
+                    not check_error and latest.get("available") is True
+                    and isinstance(company, dict) and company.get("id") == company_id
+                    and len(matches) == 1
+                    and matches[0].get(expected_target[0]) == expected_target[1]
+                    and matches[0].get(
+                        "opportunity_id" if opportunity_id is None else "company_id"
+                    ) is None
+                    and matches[0].get("activity_type") == payload["activity_type"]
+                    and matches[0].get("detail") == payload["detail"]
+                ) if isinstance(latest, dict) else False
+                self.crm_dossier_activity_saving = False
+                if not valid_record:
+                    self.crm_dossier_activity_uncertain = True
+                    self.update_dossier_activity_save()
+                    QMessageBox.warning(
+                        dialog, "Activity readback not verified",
+                        "The exact activity ID, target company and note were "
+                        "not confirmed by a fresh dossier read. Inspect the "
+                        "history before another attempt. No retry was sent."
+                    )
+                    return
+                self.crm_dossier_activity_uncertain = False
+                self.crm_dossier_activity_flash = (
+                    "Activity verified in Company 360. No external message was sent."
+                )
+                self.crm_dossier_activity_record.setChecked(False)
+                self.crm_dossier_activity_detail.clear()
+                self.crm_dossier_activity_confirm.setChecked(False)
+                self.refresh_company_dossier()
+
+            self.bridge.call(
+                "crm-company-dossier", company_id, callback=verified
+            )
 
         self.bridge.call("crm-record-activity", payload=payload, callback=saved)
 

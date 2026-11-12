@@ -222,6 +222,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_pipeline_company_update_smoke.py'
+      - name: ENK-04 company manual activity exact-readback (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_activity_uat_smoke.py'
 
       - name: ENK-03 CRM contact auto-refresh after dossier save (synthetic offline)
         env:
@@ -1385,7 +1390,24 @@ jobs:
           }, None)
           assert calls[-1][0] == "crm-company-dossier"
           assert calls[-1][1] == company_id
-          assert window.crm_dossier_activity_flash.startswith("Activity saved")
+          # ENK-04: an acknowledgement is not canonical proof. Exact-ID
+          # company dossier readback must confirm the append before UI success.
+          assert window.crm_dossier_activity_flash == ""
+          assert window.crm_dossier_activity_saving
+          calls[-1][3]({
+              "available": True,
+              "company": {"id": company_id},
+              "sections": {"activities": {"items": [{
+                  "id": "77777777-8888-4999-aaaa-bbbbbbbbbbbb",
+                  "company_id": company_id,
+                  "opportunity_id": None,
+                  "activity_type": "note",
+                  "detail": "LinkedIn message recorded manually, no delivery confirmed."
+              }]}}
+          }, None)
+          assert window.crm_dossier_activity_flash.startswith("Activity verified")
+          assert not window.crm_dossier_activity_saving
+          assert calls[-1][0] == "crm-company-dossier"  # refresh after verification
           assert window.crm_dossier_activity_detail.toPlainText() == ""
           assert not window.crm_dossier_activity_confirm.isChecked()
           # Read-only snapshot refresh is requested; no auto-sent message.

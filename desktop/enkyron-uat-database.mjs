@@ -12,6 +12,7 @@ const UAT_COMMANDS = new Set([
   'crm-edit-company', 'crm-edit-contact',
   'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
   'crm-opportunities', 'crm-activity-timeline', 'crm-update-opportunity',
+  'crm-record-activity',
   'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',
@@ -42,6 +43,16 @@ export function requireEnkyronUatPayload(target, command, payload) {
   if (target.uat && command === 'crm-update-opportunity' &&
       (payload?.confirmed !== true || typeof payload?.company_id !== 'string')) {
     throw new Error('ENKYRON UAT company opportunity update requires explicit reviewed company');
+  }
+  // ENK-04 activity UAT is restricted to an explicitly reviewed company-owned
+  // local note. A note attached directly to an opportunity remains blocked in
+  // this slice; normal production behavior is unchanged. No external sends.
+  if (target.uat && command === 'crm-record-activity' &&
+      (payload?.reviewed !== true ||
+       typeof payload?.company_id !== 'string' ||
+       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.company_id) ||
+       payload?.opportunity_id != null)) {
+    throw new Error('ENKYRON UAT activity requires reviewed company-only note');
   }
 }
 
