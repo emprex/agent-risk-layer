@@ -65,8 +65,10 @@ class CompanyDossierNextActionSmoke(unittest.TestCase):
                 dialog.findChild(QPushButton, "crmDossierEditCompany"))
             self.assertIsNotNone(
                 dialog.findChild(QPushButton, "crmCompanyFollowups"))
-            self.assertIn("not verified sent messages",
-                          window.crm_dossier_notice.text())
+            # This stub leaves the async read pending; the disclaimer is
+            # rendered only once the callback supplies a real dossier.
+            self.assertEqual(window.crm_dossier_notice.text(),
+                             "Loading company records…")
             self.assertFalse(any(
                 name in {
                     "crm-create-company", "crm-edit-company",
