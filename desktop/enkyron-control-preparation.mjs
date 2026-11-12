@@ -2,6 +2,7 @@
 // Requirements are copied from the canonical PostgreSQL check definitions,
 // classified using ARL's reviewed requirement router. Source Inspector findings
 // are intentionally NOT assigned to controls by keyword or model inference.
+import crypto from 'node:crypto';
 import {readLinkedAssessmentContext} from './enkyron-ticket-assessment.mjs';
 import {buildCanonicalEvidenceRequirementPlan}
   from '../src/agent/canonical-evidence-requirement-plan.mjs';
@@ -157,4 +158,164 @@ export async function readPreparedTicketControlQueue(pool,ticketId,{
     scopeReader,queueReader:async()=>queue
   });
   return {...queue,preparation};
+}
+
+
+/**
+ * One explicit read-only candidate projection for the existing 108-control
+ * workplan. This is intentionally NOT canonical evidence persistence, test
+ * execution, evidence acceptance or an applicability decision.
+ */
+export function shapeTicketStaticCandidatePreview({scope,preparation,frozen,collection}={}) {
+  if (!scope?.project_id || !scope?.assessment_id || !scope?.snapshot_id ||
+      !/^[a-f0-9]{40}$/.test(scope.target_sha || '') ||
+      preparation?.ticket_id == null || preparation?.controls_total !== 108 ||
+      preparation.project_id !== scope.project_id ||
+      preparation.snapshot_id !== scope.snapshot_id ||
+      preparation.target_sha !== scope.target_sha ||
+      !Array.isArray(preparation.dossiers) || preparation.dossiers.length !== 108 ||
+      frozen?.type !== 'frozen_inspection' ||
+      frozen?.binding?.verified !== true ||
+      frozen?.target?.dirty !== false ||
+      frozen?.target?.revision !== scope.target_sha ||
+      frozen?.target?.repositoryPath !== scope.target_reference ||
+      frozen?.binding?.revisionBefore !== scope.target_sha ||
+      frozen?.binding?.revisionAfter !== scope.target_sha ||
+      frozen?.inspection?.schema !== 'arl.inspection.bundle.v1' ||
+      frozen?.inspection?.scope?.mode !== 'read-only-static-inspection' ||
+      collection?.schema !== 'arl.deterministic-evidence-collection.v1' ||
+      collection?.targetRevision !== scope.target_sha ||
+      !Array.isArray(collection.requirementObservations)) {
+    refusal('static candidate collection is not bound to the exact clean assessment snapshot');
+  }
+  const requirements=new Map();
+  const tasks=[];
+  for (const dossier of preparation.dossiers) {
+    if (!ID.test(dossier?.control_id || '') || !Array.isArray(dossier.required_evidence)) {
+      refusal('malformed canonical control preparation');
+    }
+    for (const criterion of dossier.required_evidence) {
+      if (criterion.route !== 'machine_collectable') continue;
+      const requirement=String(criterion.requirement || '').trim();
+      if (!requirement || !Array.isArray(criterion.collectors) ||
+          !criterion.collectors.length || !Number.isSafeInteger(criterion.number) ||
+          criterion.number < 1) refusal('invalid machine-collectable requirement');
+      requirements.set(requirement,true);
+      tasks.push({control_id:dossier.control_id,criterion_number:criterion.number,
+        requirement,expected_collectors:[...criterion.collectors]});
+    }
+  }
+  if (tasks.length > 3000) refusal('static collection exceeds bounded workplan');
+  const observations=new Map();
+  for (const record of collection.requirementObservations) {
+    const requirement=String(record?.requirement || '').trim();
+    if (!requirements.has(requirement) || observations.has(requirement) ||
+        !Array.isArray(record?.collectors) ||
+        !record.observations || typeof record.observations !== 'object' ||
+        Array.isArray(record.observations)) {
+      refusal('unexpected or duplicated deterministic observation');
+    }
+    observations.set(requirement,record);
+  }
+  // Do not silently count missing requirements as successful collector runs.
+  if (observations.size !== requirements.size) refusal('incomplete deterministic collection');
+  const criteria=tasks.map(task=>{
+    const source=observations.get(task.requirement);
+    const reported=task.expected_collectors.filter(name=>
+      source.collectors.includes(name) &&
+      Object.hasOwn(source.observations,name));
+    return {
+      control_id:task.control_id,
+      criterion_number:task.criterion_number,
+      expected_collectors:task.expected_collectors,
+      projected_collectors:reported,
+      state:reported.length===task.expected_collectors.length
+        ? 'static_metadata_projected_unverified'
+        : 'static_metadata_incomplete',
+      projection_sha256:crypto.createHash('sha256')
+        .update(JSON.stringify(source)).digest('hex'),
+      evidence_accepted:false,
+      criterion_satisfied:false
+    };
+  });
+  return {
+    available:true,
+    schema:'enkyron.static-candidate-preview.v1',
+    ticket_id:preparation.ticket_id,
+    project_id:scope.project_id,
+    assessment_id:scope.assessment_id,
+    snapshot_id:scope.snapshot_id,
+    target_sha:scope.target_sha,
+    controls_total:108,
+    static_criteria:criteria.length,
+    distinct_requirements:requirements.size,
+    metadata_projections:criteria.filter(x=>
+      x.state==='static_metadata_projected_unverified').length,
+    incomplete_projections:criteria.filter(x=>
+      x.state==='static_metadata_incomplete').length,
+    inspector_files: Number.isSafeInteger(frozen.inspection.scope.filesInspected)
+      ? frozen.inspection.scope.filesInspected : null,
+    inspector_truncated:frozen.inspection.scope.truncatedByLimit===true,
+    collection_sha256:crypto.createHash('sha256')
+      .update(JSON.stringify(collection)).digest('hex'),
+    criteria,
+    evidence_persisted:0,
+    evidence_accepted:false,
+    tests_executed:0,
+    decisions_recorded:0,
+    active_tests_authorised:false,
+    human_review_required:true,
+    notice:'Read-only deterministic SOURCE METADATA preview, not stored canonical evidence. Projected metadata is not proof that a criterion is satisfied. Review and explicit evidence recording are separate steps.'
+  };
+}
+
+export async function collectTicketStaticCandidates(pool,ticketId,{
+  scopeReader=readLinkedAssessmentContext,
+  preparationReader=prepareTicketControlDossiers,
+  inspector=null,
+  collector=null,
+  freezeReader=null
+}={}) {
+  if (typeof ticketId !== 'string' || !UUID.test(ticketId))
+    refusal('exact linked ticket required for static collection');
+  const scope=await scopeReader(pool,ticketId);
+  const preparation=await preparationReader(pool,ticketId,{scopeReader});
+  if (preparation?.ticket_id !== ticketId ||
+      preparation?.project_id !== scope.project_id ||
+      preparation?.snapshot_id !== scope.snapshot_id ||
+      preparation?.target_sha !== scope.target_sha)
+    refusal('control workplan changed before source collection');
+  const {inspectFrozenRepository}=await import('../src/agent/tools/inspect-frozen-repository.mjs');
+  const frozen=await (inspector || inspectFrozenRepository)(scope.target_reference);
+  // Validate before collection; never trust the collector's own fallback SHA.
+  if (frozen?.binding?.verified !== true ||
+      frozen?.target?.revision !== scope.target_sha ||
+      frozen?.target?.dirty !== false ||
+      frozen?.target?.repositoryPath !== scope.target_reference ||
+      frozen?.binding?.revisionBefore !== scope.target_sha ||
+      frozen?.binding?.revisionAfter !== scope.target_sha ||
+      frozen?.inspection?.schema !== 'arl.inspection.bundle.v1' ||
+      frozen?.inspection?.scope?.mode !== 'read-only-static-inspection')
+    refusal('frozen Inspector does not match the exact clean target');
+  const requirements=[...new Set(preparation.dossiers.flatMap(dossier=>
+    (dossier.required_evidence || [])
+      .filter(c=>c.route==='machine_collectable')
+      .map(c=>String(c.requirement || '').trim())))];
+  const {collectDeterministicEvidence}=await import('../src/agent/deterministic-evidence-collector.mjs');
+  const collection=(collector || collectDeterministicEvidence)({
+    repositoryPath:scope.target_reference,frozen,requirements
+  });
+  const {freezeLocalRepository}=await import('../src/agent/tools/freeze-local-repository.mjs');
+  const after=await (freezeReader || freezeLocalRepository)(scope.target_reference);
+  if (after.dirty || after.revision !== scope.target_sha ||
+      after.repositoryPath !== scope.target_reference)
+    refusal('frozen Git target changed during static collection');
+  const current=await scopeReader(pool,ticketId);
+  if (current.project_id !== scope.project_id ||
+      current.assessment_id !== scope.assessment_id ||
+      current.snapshot_id !== scope.snapshot_id ||
+      current.target_sha !== scope.target_sha ||
+      current.target_reference !== scope.target_reference)
+    refusal('canonical assessment changed during static collection');
+  return shapeTicketStaticCandidatePreview({scope,preparation,frozen,collection});
 }
