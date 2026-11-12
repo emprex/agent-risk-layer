@@ -381,3 +381,34 @@ server/network fault injection, complete cross-operator access control, or
 production readiness. No UAT or production database was written by these
 tests. Functional ENK-03 evidence is PASS; **formal human UAT-01 acceptance
 and PR merge remain separate decisions**, still pending.
+
+## Human decision — conditional functional acceptance, 12 November 2026
+
+The human product owner explicitly answered **"Oui, pour le moment, je suis
+d'accord"** to the proposal to **accept ENK-03 functionally with the
+documented reservations** and to keep real fault-injection and multi-user
+authorization as separate controls **before any production deployment**.
+
+**DECISION — ACCEPTED WITH RESERVATIONS:** the synthetic single-operator
+Company 360 / prospect → contact → opportunity → manual follow-up workflow
+(ENK-03 / executed UAT-01 functional slice) is accepted as tested on Debian.
+The current evidence includes one company, two contacts, one direct
+opportunity, one follow-up with three revisions and completed state,
+nine visible company-history events, read-only PostgreSQL evidence of six
+zero side-effect table counts, cancellation/unsaved-work guards, duplicate
+button protection, and three simulated Qt failure tests PASS locally.
+
+This decision is **NOT** unconditional acceptance of all UAT-01 negative
+cases, comprehensive security, real server failure behavior, multi-operator
+permissions, provider transmission, deployment, or release. Those remain
+tracked separately as NOT VERIFIED / OUT OF SCOPE. It does **not** grant
+merge permission; PR #583 remains DRAFT/unmerged. Retain the isolated UAT DB
+and history; do not reset `arl_local`.
+
+**Handover to ENK-04:** per `ENK-PLAN-001 v1.0`, next goal is opportunity
+and commercial follow-up from Company 360 and pipeline to activities,
+owner, next contact/deadline, My Work, and proposal eligibility after
+qualification. ENK-07 separately owns detailed quote/SOW/contract delivery.
+Start ENK-04 with read-only baseline of the real current GitHub/DB state
+and clear UAT scope rather than assuming all current sales features work.
+
