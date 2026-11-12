@@ -9,7 +9,7 @@ const UAT_COMMANDS = new Set([
   'crm-companies', 'crm-contacts',
   'crm-company-duplicates', 'crm-contact-duplicates',
   'crm-create-company', 'crm-create-contact',
-  'crm-company-dossier', 'crm-company-direct-opportunity-create',
+  'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
   'crm-opportunities', 'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
 ]);
