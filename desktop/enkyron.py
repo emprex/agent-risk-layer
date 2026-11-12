@@ -7960,7 +7960,7 @@ class EnkyronWindow(QMainWindow):
             ])
             QMessageBox.information(
                 dialog, "Proposal preparation — read-only",
-                "\\n".join(lines)
+                "\n".join(lines)
             )
 
         self.bridge.call(
