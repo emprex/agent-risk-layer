@@ -195,8 +195,28 @@ class DesktopBridge:
     def __init__(self, owner):
         self.owner = owner
         self.running = set()
+        self.closing = False
+
+    def shutdown(self):
+        """Stop every child before Qt destroys its QMainWindow parent."""
+        self.closing = True
+        for process in tuple(self.running):
+            if process.state() != QProcess.ProcessState.NotRunning:
+                process.kill()
+                if not process.waitForFinished(3000):
+                    # Keep the owner alive rather than destroy a running child.
+                    self.closing = False
+                    return False
+            if process.state() != QProcess.ProcessState.NotRunning:
+                self.closing = False
+                return False
+        return True
 
     def call(self, action, arg="", payload=None, callback=None):
+        if self.closing:
+            if callback:
+                callback(None, "ENKYRON is closing")
+            return
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
         if action in ("operator-state", "evidence-summary", "evidence-pack"):
@@ -217,19 +237,26 @@ class DesktopBridge:
             process.setArguments(args)
         timer = QTimer(process)
         timer.setSingleShot(True)
-        state = {"done": False}
+        state = {"done": False, "timed_out": False}
 
         def finish(result=None, error=None):
             if state["done"]:
                 return
+            # kill() is asynchronous. Never schedule QObject deletion until
+            # QProcess actually reaches its terminal NotRunning state.
+            if process.state() != QProcess.ProcessState.NotRunning:
+                return
             state["done"] = True
             timer.stop()
             self.running.discard(process)
-            if callback:
-                callback(result, error)
             process.deleteLater()
+            if callback and not self.closing:
+                callback(result, error)
 
         def ended(code, _status):
+            if state["timed_out"]:
+                finish(None, "Local operation timed out")
+                return
             try:
                 raw = bytes(process.readAllStandardOutput()).decode("utf-8", "replace")
                 data = json.loads(raw)
@@ -240,13 +267,22 @@ class DesktopBridge:
             except (ValueError, TypeError):
                 finish(None, "Invalid local bridge response")
 
-        def on_error(_reason):
-            if process.error() == QProcess.ProcessError.FailedToStart:
-                finish(None, "Node.js is not installed or cannot start")
+        def on_error(reason):
+            # Use the delivered error enum: dereferencing a deleted C++
+            # QObject inside errorOccurred caused the reported traceback.
+            if reason == QProcess.ProcessError.FailedToStart:
+                finish(None, "Local subprocess could not start")
 
         def on_timeout():
-            process.kill()
-            finish(None, "Local operation timed out")
+            if state["done"]:
+                return
+            state["timed_out"] = True
+            if process.state() == QProcess.ProcessState.NotRunning:
+                finish(None, "Local operation timed out")
+            else:
+                # finished() will clean up and notify the caller once kill
+                # has completed; do not discard or delete a running process.
+                process.kill()
 
         process.finished.connect(ended)
         process.errorOccurred.connect(on_error)
@@ -3655,6 +3691,11 @@ class EnkyronWindow(QMainWindow):
             if self.crm_dossier_dialog.isVisible():
                 event.ignore()
                 return
+        # Qt-owned QProcess children must be stopped before the main window
+        # and its QObject tree are destroyed. No detached window is bypassed.
+        if not self.bridge.shutdown():
+            event.ignore()
+            return
         super().closeEvent(event)
 
     def module_changed(self, index):
