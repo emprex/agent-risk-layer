@@ -8,6 +8,7 @@ on:
     paths:
       - 'desktop/enkyron*'
       - 'tests/enkyron-desktop.test.js'
+      - 'tests/qt_enkyron_pilot_lab_smoke.py'
       - '.github/workflows/enkyron-desktop.yml'
 
 permissions:
@@ -143,6 +144,12 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Native pilot assessment lab UI smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_pilot_lab_smoke.py' -v
+
       - name: Native KB-001 source evidence handoff UX smoke (offline)
         env:
           QT_QPA_PLATFORM: offscreen
