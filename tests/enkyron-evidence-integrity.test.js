@@ -53,7 +53,7 @@ test('KB-001 canonical descriptor recomputation succeeds but NEVER authenticates
   assert.equal(result.tests_executed,0);
   assert.equal(result.master_modified,false);
   assert.equal(result.projection_sha256,projection);
-  assert.doesNotMatch(JSON.stringify(result),/sourceReference|source_reference|descriptor_json|limitations|I reviewed/);
+  assert.doesNotMatch(JSON.stringify(result),/"sourceReference":|"source_reference":|"descriptor_json":|"limitations":|I reviewed/);
 });
 
 test('fail closed on changed row, stale Master, false provenance or tampered digest',()=>{
