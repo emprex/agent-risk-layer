@@ -2,6 +2,7 @@
 // No client inference by name/domain, no legacy imports, no status changes or emails.
 // Local OS operator scoping is NOT remotely authenticated multi-tenant RBAC.
 import {requireCompanyId} from './enkyron-crm-tickets.mjs';
+import {COMPANY_HISTORY_SQL} from './enkyron-crm-company-history.mjs';
 
 const MAX_ITEMS=20;
 const ownerKey=(actor)=>{
@@ -207,7 +208,8 @@ const LISTS={
     +"(r.resource_kind='contact' AND EXISTS("
     +'SELECT 1 FROM enkyron_crm_contacts c WHERE c.workspace_key=r.workspace_key '
     +'AND c.id=r.resource_id AND c.company_id=$2))) '
-    +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21'
+    +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21',
+  company_history: COMPANY_HISTORY_SQL
 };
 export async function getCompanyDossier(pool,id,operator){
   const companyId=requireCompanyId(id),key=ownerKey(operator);
@@ -236,6 +238,9 @@ export async function getCompanyDossier(pool,id,operator){
         +'Commercial entries include operator documentary records and internal draft decisions, not accepted contracts, '
         +'issued invoices, completed projects or exchanged emails. '
         +'Ticket history is internal event and note metadata, not message contents. '
+        +'Company History combines recorded CRM event metadata from scoped source logs; '
+        +'display is limited to the most recent 20 events with explicit count/truncation. '
+        +'Operator-entered entries are not proof of third-party actions. '
         +'ARL project and assessment references on tickets are technical links, '
         +'not evidence of signed customer contracts or delivered missions.'};
   }catch(error){
