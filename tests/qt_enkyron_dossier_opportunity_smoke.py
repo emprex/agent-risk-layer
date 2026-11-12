@@ -125,16 +125,42 @@ class DossierOpportunitySmoke(unittest.TestCase):
             self.assertEqual(window.crm_dossier_company_id, COMPANY)
             self.assertEqual(window.crm_dossier_nav.currentRow(), 3)
             self.assertFalse(window.crm_dossier_opportunity_saving)
+            self.assertEqual(window.crm_dossier_opportunity_check_id, OPPORTUNITY)
+            self.assertIn("checking", window.status.text())
+
+            # A delayed or incomplete dossier read cannot turn a write
+            # acknowledgement into a verified persisted opportunity.
+            callback("crm-company-dossier")(dossier_data(), None)
+            self.assertIn("not confirmed", window.status.text())
+            self.assertEqual(window.crm_dossier_opportunity_check_id, OPPORTUNITY)
+            unverified_button = dialog.findChild(
+                QPushButton, "crmDossierNewOpportunity"
+            )
+            self.assertFalse(unverified_button.isEnabled())
+
+            # A second exact-ID canonical readback makes success visible.
+            window.refresh_company_dossier()
+            self.assertEqual(count("crm-company-dossier"), 3)
             callback("crm-company-dossier")(dossier_data([{
                 "opportunity_id": OPPORTUNITY,
                 "company_id": COMPANY,
+                "source_ticket_id": None,
                 "stage": "research",
                 "next_action": "Prepare a scoped introduction",
                 "due_date": None,
                 "version": 1,
             }]), None)
+            self.assertIsNone(window.crm_dossier_opportunity_check_id)
+            self.assertIn("verified", window.status.text())
+            self.assertIn("No service ticket created", window.status.text())
             self.assertIn("1", window.crm_dossier_nav.item(3).text())
-            self.assertIn("No ticket created", window.status.text())
+            # Existing direct opportunity is visible; creating a duplicate
+            # is disabled in UI and independently rejected by the backend.
+            final_button = dialog.findChild(
+                QPushButton, "crmDossierNewOpportunity"
+            )
+            self.assertFalse(final_button.isEnabled())
+            self.assertEqual(final_button.text(), "Opportunity already recorded")
             forbidden = {
                 "create-ticket", "crm-create-contact", "assessment-link",
                 "mail-send-draft", "crm-invoice-issue",
