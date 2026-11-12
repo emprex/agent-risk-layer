@@ -318,3 +318,43 @@ failures, concurrent selected-company changes and wider security permissions)
 remain expressly **NOT VERIFIED by operator UAT**, not invented PASS results.
 Formal UAT-01 human acceptance of those residuals, promotion, release and
 merging PR #583 are **NOT authorized by this record**; PR remains draft.
+
+## UAT-01 residual fault simulations — 12 November 2026
+
+**Exact functional change SHA:** `6d267c83afae8d3e0b5a5fae6f5bfd8fea8584a8`.
+The guarded company-only opportunity UI was tightened for an **ambiguous
+transport failure**: a response error, missing acknowledgement, wrong
+company ID or malformed result now leaves the create action disabled within
+the open dossier. It shows `Opportunity save not confirmed` and requires
+manual review of that company's records before closing/reopening the
+dossier. It does not auto-retry. A routine refresh cannot unlock a second
+submission while the outcome is uncertain. Server-side direct-opportunity
+uniqueness and workspace scope remain unchanged.
+
+The company dossier reader now rejects a payload whose `company.id`
+does not equal the exact ID requested. A wrong-company callback cannot
+replace the displayed company's data or mark a pending opportunity
+readback verified.
+
+Two **synthetic native Qt regressions** were added to
+`tests/qt_enkyron_dossier_opportunity_smoke.py`:
+
+1. Simulate a failed transport response after a potential server commit;
+   verify the unknown outcome stays unverified and a second create is
+   blocked even after a fresh empty readback.
+2. Simulate changing the parent selection during a pending create and
+   receiving a wrong-company dossier callback; verify the outbound command
+   retains original company ID, bad callback is ignored, and only an
+   exact-ID readback verifies the original company's opportunity.
+
+**GitHub verification on SHA `6d267c83`:**
+ENKYRON Desktop `43304780160` SUCCESS;
+CI `43304779958` SUCCESS (including PostgreSQL integration).
+No operator PostgreSQL data or production state was touched.
+**Next operator step:** install the exact updated PR SHA only in the
+isolated `enkyron-ux-preview-583` checkout and run the synthetic Qt test
+offscreen on Debian; no fault injection against live PostgreSQL.
+Real network fault injection and complete multi-user security testing
+remain out of scope. PR #583 stays draft/unmerged until explicit
+human acceptance.
+
