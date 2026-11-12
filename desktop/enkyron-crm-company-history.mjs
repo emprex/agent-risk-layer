@@ -166,8 +166,13 @@ LIMIT 21
 `;
 
 const PAGE_SIZE=20;
-const PAGED_SQL=COMPANY_HISTORY_SQL.replace(/LIMIT 21\s*$/, 'LIMIT 21 OFFSET $3');
-if(PAGED_SQL===COMPANY_HISTORY_SQL)throw new Error('CRM Company History page SQL missing limit');
+const NEWEST_SQL=COMPANY_HISTORY_SQL.replace(/LIMIT 21\s*$/, 'LIMIT 21 OFFSET $3');
+const OLDEST_SQL=NEWEST_SQL.replace(
+  'ORDER BY recorded_at DESC,event_id DESC',
+  'ORDER BY recorded_at ASC,event_id ASC'
+);
+if(NEWEST_SQL===COMPANY_HISTORY_SQL || OLDEST_SQL===NEWEST_SQL)
+  throw new Error('CRM Company History paging/sort SQL contract changed');
 
 /** Bounded company-scoped read-only paging. No name-based identity inference. */
 export async function getCompanyHistoryPage(pool,payload,actor){
@@ -179,6 +184,8 @@ export async function getCompanyHistoryPage(pool,payload,actor){
   const page=payload.page;
   if(!Number.isSafeInteger(page)||page<0||page>10000)
     throw new Error('CRM invalid history page');
+  if(!['oldest','newest'].includes(payload.order))
+    throw new Error('CRM invalid history sort order');
   const key='local:'+actor;
   const client=await pool.connect();
   try{
@@ -188,13 +195,16 @@ export async function getCompanyHistoryPage(pool,payload,actor){
       [key,companyId]
     );
     if(!company.rows[0])throw new Error('CRM company not found in local workspace');
-    const result=await client.query(PAGED_SQL,[key,companyId,page*PAGE_SIZE]);
+    const result=await client.query(
+      payload.order==='oldest'?OLDEST_SQL:NEWEST_SQL,
+      [key,companyId,page*PAGE_SIZE]
+    );
     const rows=result.rows;
     const total=rows.length?Number(rows[0].total_rows):0;
     if(!Number.isSafeInteger(total)||total<rows.length||rows.length>PAGE_SIZE+1)
       throw new Error('CRM invalid Company History result');
     await client.query('COMMIT');
-    return {available:true,page,page_size:PAGE_SIZE,total,
+    return {available:true,page,order:payload.order,page_size:PAGE_SIZE,total,
       items:rows.slice(0,PAGE_SIZE).map(({total_rows,...item})=>item),
       more:total>(page+1)*PAGE_SIZE};
   }catch(error){
