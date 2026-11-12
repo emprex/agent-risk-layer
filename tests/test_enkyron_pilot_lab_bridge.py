@@ -1,5 +1,7 @@
 """Lab artefact verification tests (no database, no external network)."""
+import csv
 import hashlib
+import io
 import json
 import tempfile
 import unittest
@@ -21,6 +23,22 @@ def record():
                   "campaign":"TP-01","controls":["ARL-KB-053"]} for n in range(1,11)]
     }
 
+def real_sized_matrix_bytes():
+    """Generate the real 576-row canonical KB requirement matrix, not a tiny fixture."""
+    knowledge=json.loads((lab.ROOT/"risk-knowledge"/"risk-knowledge-v1.json").read_text())
+    buffer=io.StringIO(newline="")
+    writer=csv.writer(buffer)
+    writer.writerow(["control_id","title","category","doc_package",
+                     "criterion_number","canonical_required_evidence",
+                     "source_kind","verification_state"])
+    for kb in sorted(knowledge["entries"], key=lambda x:x["id"]):
+        for n, requirement in enumerate(kb["check"]["required_evidence"],1):
+            writer.writerow([kb["id"],kb["title"],kb["category"],"DOC-01",n,
+                             requirement,"synthetic_owner_plan_not_original_document",
+                             "unverified"])
+    return buffer.getvalue().encode("utf-8")
+
+
 class LaboratoryManifestContract(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
@@ -31,6 +49,7 @@ class LaboratoryManifestContract(unittest.TestCase):
         rows=[]
         for name in lab.ARTIFACTS:
             raw=(json.dumps(record()).encode("utf-8") if name=="04_LAB_OBSERVATIONS.json"
+                 else real_sized_matrix_bytes() if name==lab.MATRIX_FILE
                  else b"SIMULATED off-line lab file\n")
             (self.run/name).write_bytes(raw)
             rows.append(hashlib.sha256(raw).hexdigest()+"  "+name)
@@ -46,6 +65,19 @@ class LaboratoryManifestContract(unittest.TestCase):
         self.assertEqual(data["referenced_kbs"],1)
         self.assertFalse(data["master_modified"])
         self.assertEqual(len(data["documents"]),4)
+    def test_actual_sized_matrix_is_accepted_with_hash_verified(self):
+        size=(self.run/lab.MATRIX_FILE).stat().st_size
+        self.assertGreater(size,lab.MAX_FILE)
+        self.assertLess(size,lab.MAX_MATRIX_FILE)
+        result=lab.latest(OWNER)
+        self.assertTrue(result["manifest_verified"])
+        self.assertEqual(result["matrix_file"],lab.MATRIX_FILE)
+
+    def test_extremely_large_matrix_still_blocked(self):
+        (self.run/lab.MATRIX_FILE).write_bytes(b"x"*(lab.MAX_MATRIX_FILE+1))
+        with self.assertRaisesRegex(ValueError,"oversized"):
+            lab.latest(OWNER)
+
     def test_tamper_blocks_display(self):
         with (self.run/"05_LAB_RESULT_REPORT.md").open("a") as f:
             f.write("TAMPERED")
