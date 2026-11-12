@@ -12,7 +12,7 @@ const UAT_COMMANDS = new Set([
   'crm-edit-company', 'crm-edit-contact',
   'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
   'crm-opportunities', 'crm-activity-timeline', 'crm-update-opportunity',
-  'crm-record-activity',
+  'crm-record-activity', 'crm-record-qualification',
   'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',
@@ -53,6 +53,18 @@ export function requireEnkyronUatPayload(target, command, payload) {
        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.company_id) ||
        payload?.opportunity_id != null)) {
     throw new Error('ENKYRON UAT activity requires reviewed company-only note');
+  }
+  // ENK-04: synthetic UAT is a single company-level documentary review.
+  // No person/contact review, automatic opportunity conversion, outreach
+  // or proposal is permitted by this narrowly scoped qualification gate.
+  if (target.uat && command === 'crm-record-qualification' &&
+      (payload?.confirmed !== true ||
+       typeof payload?.company_id !== 'string' ||
+       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.company_id) ||
+       payload?.contact_id != null ||
+       payload?.fit_status !== 'potential_fit' ||
+       payload?.priority !== 'normal')) {
+    throw new Error('ENKYRON UAT qualification requires reviewed company-level potential fit');
   }
 }
 
