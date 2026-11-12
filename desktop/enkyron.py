@@ -5554,6 +5554,8 @@ class EnkyronWindow(QMainWindow):
             def received(data, error):
                 if (not dialog.isVisible() or sequence != state["seq"]):
                     return
+                previous_item = selected()
+                previous_id = previous_item.get("id") if previous_item else None
                 state["items"] = []
                 table.setRowCount(0)
                 if error or not data or not data.get("available"):
@@ -5583,6 +5585,16 @@ class EnkyronWindow(QMainWindow):
                     )
                     for col, value in enumerate(values):
                         table.setItem(row, col, QTableWidgetItem(str(value)))
+                if company_id:
+                    restore_row = next(
+                        (index for index, item in enumerate(state["items"])
+                         if previous_id and item.get("id") == previous_id),
+                        -1
+                    )
+                    if restore_row < 0 and len(state["items"]) == 1:
+                        restore_row = 0
+                    if restore_row >= 0:
+                        table.selectRow(restore_row)
                 notice.setText(
                     "Showing {} company follow-ups{}".format(
                         len(state["items"]),
@@ -5594,13 +5606,17 @@ class EnkyronWindow(QMainWindow):
 
         def load_selected():
             item = selected()
-            if company_id and item is not None:
-                action.setText(item.get("action_text") or "")
-                date = QDate.fromString(
-                    str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
-                )
-                if date.isValid():
-                    due.setDate(date)
+            if company_id:
+                if item is None:
+                    action.clear()
+                    due.setDate(QDate.currentDate().addDays(7))
+                else:
+                    action.setText(item.get("action_text") or "")
+                    date = QDate.fromString(
+                        str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
+                    )
+                    if date.isValid():
+                        due.setDate(date)
                 confirmation.setChecked(False)
             controls()
 
