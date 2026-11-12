@@ -3622,6 +3622,9 @@ class EnkyronWindow(QMainWindow):
             self.evidence_layout.removeWidget(placeholder)
             if panel is not None:
                 self.evidence_layout.insertWidget(slot, panel)
+                # QMainWindow.takeCentralWidget() may leave it explicitly hidden.
+                # Like Mail/Calendar, show the reparented widget on return.
+                panel.show()
         if placeholder is not None:
             placeholder.deleteLater()
         self.batch_review_table.setMaximumHeight(390)
