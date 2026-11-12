@@ -6604,6 +6604,36 @@ class EnkyronWindow(QMainWindow):
                                 content.addWidget(
                                     edit, alignment=Qt.AlignmentFlag.AlignRight
                                 )
+                                # ENK-04: one clearly named, read-only
+                                # handoff check in this same company dossier.
+                                # No proposal or document is created here.
+                                preparation = QPushButton(
+                                    "Check proposal preparation…"
+                                )
+                                preparation.setObjectName(
+                                    "crmDossierProposalPreparation"
+                                )
+                                preparation.setToolTip(
+                                    "Read-only review of this company's "
+                                    "opportunity, qualification and drafts. "
+                                    "This does not create or issue a proposal."
+                                )
+                                preparation.setEnabled(
+                                    isinstance(item.get("opportunity_id"), str)
+                                    and item.get("company_id") == company_id
+                                    and item.get("source_ticket_id") is None
+                                )
+                                preparation.clicked.connect(
+                                    lambda _checked=False, record=item,
+                                           scoped_company=company_id:
+                                    self.review_dossier_proposal_preparation(
+                                        record, scoped_company
+                                    )
+                                )
+                                content.addWidget(
+                                    preparation,
+                                    alignment=Qt.AlignmentFlag.AlignRight
+                                )
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
                     elif section_id == "company_history":
@@ -7857,6 +7887,85 @@ class EnkyronWindow(QMainWindow):
                 self.show_invoice_draft_detail(draft)
 
         self.bridge.call(command, draft_id, callback=received)
+
+    def review_dossier_proposal_preparation(self, record, company_id):
+        """Advisory exact-ID, read-only review. No proposal is generated."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id):
+            return
+        opportunity_id = record.get("opportunity_id") if isinstance(record, dict) else None
+        if (not isinstance(opportunity_id, str)
+                or record.get("company_id") != company_id
+                or record.get("source_ticket_id") is not None):
+            QMessageBox.warning(
+                dialog, "Preparation unavailable",
+                "Choose a directly linked company opportunity in this dossier."
+            )
+            return
+        identifier = company_id + ":" + opportunity_id
+
+        def received(data, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            if (error or not isinstance(data, dict) or not data.get("available")
+                    or data.get("company_id") != company_id
+                    or data.get("opportunity_id") != opportunity_id
+                    or not isinstance(data.get("blockers"), list)
+                    or not isinstance(
+                        data.get("eligible_for_internal_draft_review"), bool
+                    )):
+                QMessageBox.warning(
+                    dialog, "Preparation not verified",
+                    "The selected company/opportunity could not be verified. "
+                    "No proposal was created."
+                )
+                return
+            opportunity = data.get("opportunity") or {}
+            qualification = data.get("qualification") or {}
+            eligible = data["eligible_for_internal_draft_review"]
+            blockers = data["blockers"]
+            if eligible and blockers:
+                QMessageBox.warning(
+                    dialog, "Inconsistent preparation result",
+                    "The preparation status contradicted its checks. "
+                    "No proposal was created."
+                )
+                return
+            lines = [
+                "Company: " + str(data.get("company_name") or "Unknown"),
+                "Opportunity stage: " + str(
+                    opportunity.get("stage") or "Not linked"
+                ).replace("_", " ").title(),
+                "Latest company review: " + str(
+                    qualification.get("fit_status") or "Not recorded"
+                ).replace("_", " "),
+                "Existing proposal drafts: " + str(
+                    data.get("existing_draft_count", "Unknown")
+                ),
+                "",
+                ("Internal draft may be prepared after human review."
+                 if eligible else "Internal draft preparation needs attention."),
+            ]
+            if blockers:
+                lines.extend(["", "Checks to resolve:"])
+                lines.extend("• " + str(reason) for reason in blockers)
+            lines.extend([
+                "",
+                "READ-ONLY CHECK. This did not create a proposal.",
+                "Buyer identity, pricing, consent and authorisation to test "
+                "are NOT verified. Nothing may be issued or sent from this check."
+            ])
+            QMessageBox.information(
+                dialog, "Proposal preparation — read-only",
+                "\n".join(lines)
+            )
+
+        self.bridge.call(
+            "crm-company-proposal-readiness", identifier, callback=received
+        )
 
     def record_company_qualification(self):
         """Record the manual commercial decision with exact company readback."""

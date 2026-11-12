@@ -13,6 +13,7 @@ const UAT_COMMANDS = new Set([
   'crm-company-dossier', 'crm-company-history', 'crm-company-direct-opportunity-create',
   'crm-opportunities', 'crm-activity-timeline', 'crm-update-opportunity',
   'crm-record-activity', 'crm-record-qualification',
+  'crm-company-proposal-readiness',
   'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',

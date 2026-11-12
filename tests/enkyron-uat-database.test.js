@@ -40,6 +40,7 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-company-followup-update', 'crm-edit-company', 'crm-edit-contact',
     'crm-update-opportunity', 'crm-activity-timeline',
     'crm-record-activity', 'crm-record-qualification',
+    'crm-company-proposal-readiness',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
@@ -85,6 +86,16 @@ test('ENK-04 UAT permits only reviewed company-owned manual activity, never outr
   for(const command of ['mail-send-draft','crm-proposal-create','create-ticket',
     'crm-invoice-issue','assessment-link']){
     assert.throws(()=>requireEnkyronUatCommand(target,command),/UAT blocks/);
+  }
+});
+
+test('ENK-04 allows read-only company proposal preparation and still blocks draft creation', () => {
+  const target={database:'enkyron_uat_enk03',uat:true};
+  assert.doesNotThrow(()=>requireEnkyronUatCommand(target,'crm-company-proposal-readiness'));
+  assert.doesNotThrow(()=>requireEnkyronUatPayload(target,'crm-company-proposal-readiness',null));
+  for(const write of ['crm-proposal-create','crm-proposal-update','crm-invoice-issue',
+    'mail-send-draft','create-ticket']){
+    assert.throws(()=>requireEnkyronUatCommand(target,write),/UAT blocks/);
   }
 });
 
