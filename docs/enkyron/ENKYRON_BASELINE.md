@@ -71,11 +71,28 @@ Ces sources orientent la **conception cible**. Elles ne prouvent pas que les fon
 - Cela ne prouve ni toutes les migrations, ni le contenu/les colonnes, ni les droits d'accès multiutilisateur, ni le fonctionnement des workflows, ni l'installation locale de la branche UX de PR #579.
 - **Décision :** `ENK-00 = PARTIEL`. Prochaine observation : registre des migrations et schéma en lecture seule, sans toucher à la branche du pilote.
 
+## 4 ter. Nouvelle lecture locale : schémas disponibles et registre (12 novembre 2026)
+
+**Source :** sortie `psql` transmise par l'opérateur depuis `arl_local`. Transaction explicitement `READ ONLY`, terminée par `COMMIT` ; quatre tables décrites.
+
+| Table existante | Colonnes observées | Présence vérifiée |
+| --- | ---: | --- |
+| `arl_workbench_tickets` | 19 | `id`, `ticket_number`, `title`, `client_name`, `status`, `assigned_to`, `archived_at` et 12 autres colonnes |
+| `enkyron_crm_companies` | 15 | `id`, `workspace_key`, `name`, `legal_name`, `relationship_state`, `record_version` et 9 autres colonnes |
+| `enkyron_identity_sessions` | 9 | `id`, `principal_id`, `token_digest`, `mfa_verified`, `expires_at`, `revoked_at` et 3 autres |
+| `enkyron_mail_local_threads` | 12 | `workspace_key`, `mailbox_key`, `thread_id`, `folder_key`, `crm_company_id`, `last_synced` et 6 autres |
+
+- Registre des versions présent : `public.schema_migrations`.
+- La source `src/migrations.js` définit pour ce registre les colonnes `version`, `checksum`, `applied_at` et vérifie l'empreinte SHA-256 des migrations. **Le nombre et la liste réellement appliqués restent à lire.**
+- Les colonnes observées ne constituent **ni** une preuve de contraintes FK/INDEX/RLS, **ni** une recette de droits, **ni** une preuve d'absence de corruption.
+- Convention de diagnostic adoptée : `psql -X`, `\pset pager off`, `\pset border 2`, largeur bornée et colonnes décrites ligne par ligne. Ne pas modifier le `~/.psqlrc` ni écrire de fichier.
+- **ENK-00 demeure PARTIEL**, en attente du registre de migrations, des relations de tables, de l'interface Debian et de la recette des parcours.
+
 ## 5. Méthode et conditions d'arrêt de ENK-00
 
 **Réalisation dans ce bloc :** lecture GitHub, inventaire d'interface, extrait du catalogue des migrations, revue de routes et d'autorité ; documentation uniquement.
 
-**Non exécuté :** requête au PostgreSQL du Debian, migration, test de charge, lancement graphique Qt de l'installation opérateur, envoi Mail, test ARL actif, rebase, merge.
+**Non exécuté :** migration ou écriture PostgreSQL, test de charge, lancement graphique Qt de l'installation opérateur, envoi Mail, test ARL actif, rebase, merge.
 
 **Sorties prévues :** `ENKYRON_BASELINE.md` (ce fichier), `ENKYRON_SCREEN_INVENTORY.md`, `ENKYRON_FLOW_MAP.md`.
 
