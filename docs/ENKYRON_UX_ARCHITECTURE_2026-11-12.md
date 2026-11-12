@@ -3,32 +3,32 @@
 **Date:** 2026-11-12  
 **Scope:** ENKYRON desktop business-operations experience; KYRTHOS assessment development is paused.  
 **Status:** Reviewed GitHub source inventory and proposed design; **not** a Debian operator acceptance or a database certification.  
-**Canonical repo:** \`emprex/agent-risk-layer\`.
+**Canonical repo:** `emprex/agent-risk-layer`.
 
 ## 1. Verified GitHub baseline and change isolation
 
-- \`main\`: \`1b0c9bb1d7d1cc1827b11d83c0be647757aebcf2\` on 2026-11-12. \`desktop/enkyron.py\` is **not** in the \`main\` desktop tree.
-- Existing native work: draft PR **#564**, \`fix/enkyron-ux-pilot-workflow-20261111\`, SHA \`c6aac9054fc7dc5499164c8b3b99e4db89587930\`. This is the **UX foundation for this small isolated change**.
-- Assessment-related draft stack: PRs **#575 → #576 → #577 → #578** (and upstream dependencies). #578 SHA when inspected: \`f20e234610c7fbfb31ebf6f5a8eda21aa1c16aa7\`; it is a descendant of #564. Do not alter, merge or discard this stack for the workstation UX change.
-- At #578, \`desktop/enkyron.py\` has **17,617 lines**; its primary Qt classes are \`GuardedCompanyWindow\`, \`DesktopBridge\`, \`DetachableModuleWindow\` and \`EnkyronWindow\`. This is a maintainability risk, not grounds for a one-shot rewrite.
-- The desktop already uses Qt6/PySide6, local Node IPC in \`desktop/enkyron-bridge.mjs\`, existing PostgreSQL models, native dialogs and real Mail/Calendar pages.
-- Migration files \`063\` through \`113\` exist on the #564 development branch; #578 additionally contains \`114\`. **Which migrations have been applied on the operator's Debian database is unverified here.** No database access or migration is required by this change.
+- `main`: `1b0c9bb1d7d1cc1827b11d83c0be647757aebcf2` on 2026-11-12. `desktop/enkyron.py` is **not** in the `main` desktop tree.
+- Existing native work: draft PR **#564**, `fix/enkyron-ux-pilot-workflow-20261111`, SHA `c6aac9054fc7dc5499164c8b3b99e4db89587930`. This is the **UX foundation for this small isolated change**.
+- Assessment-related draft stack: PRs **#575 → #576 → #577 → #578** (and upstream dependencies). #578 SHA when inspected: `f20e234610c7fbfb31ebf6f5a8eda21aa1c16aa7`; it is a descendant of #564. Do not alter, merge or discard this stack for the workstation UX change.
+- At #578, `desktop/enkyron.py` has **17,617 lines**; its primary Qt classes are `GuardedCompanyWindow`, `DesktopBridge`, `DetachableModuleWindow` and `EnkyronWindow`. This is a maintainability risk, not grounds for a one-shot rewrite.
+- The desktop already uses Qt6/PySide6, local Node IPC in `desktop/enkyron-bridge.mjs`, existing PostgreSQL models, native dialogs and real Mail/Calendar pages.
+- Migration files `063` through `113` exist on the #564 development branch; #578 additionally contains `114`. **Which migrations have been applied on the operator's Debian database is unverified here.** No database access or migration is required by this change.
 - Source of truth for identities, authority and data: backend and PostgreSQL, **never** UI labels, hidden buttons or LLM decisions.
 
 ### Existing code anchors to preserve
 
 | Concern | Source |
 | --- | --- |
-| Native shell, navigation, ticket pages, CRM tabs, Home | \`desktop/enkyron.py\` |
-| Native Mail inbox and calendar | \`desktop/enkyron_mail_workspace.py\`, \`desktop/enkyron_calendar_view.py\` |
-| IPC command routing, read/write separation | \`desktop/enkyron-bridge.mjs\` |
-| CRM entities, opportunities, drafts, links, billing | \`desktop/enkyron-crm*.mjs\` |
-| Mail transport and archives | \`desktop/enkyron-mail-*.mjs\` |
-| Access checks | \`desktop/enkyron-access-policy.mjs\`, owner/session services |
-| Persisted models and append-only changes | \`migrations/063_*.sql\` through \`113_*.sql\` (development history) |
-| Native offline acceptance pattern | \`tests/qt_enkyron_local_office_smoke.py\`, \`tests/enkyron-desktop.test.js\` |
+| Native shell, navigation, ticket pages, CRM tabs, Home | `desktop/enkyron.py` |
+| Native Mail inbox and calendar | `desktop/enkyron_mail_workspace.py`, `desktop/enkyron_calendar_view.py` |
+| IPC command routing, read/write separation | `desktop/enkyron-bridge.mjs` |
+| CRM entities, opportunities, drafts, links, billing | `desktop/enkyron-crm*.mjs` |
+| Mail transport and archives | `desktop/enkyron-mail-*.mjs` |
+| Access checks | `desktop/enkyron-access-policy.mjs`, owner/session services |
+| Persisted models and append-only changes | `migrations/063_*.sql` through `113_*.sql` (development history) |
+| Native offline acceptance pattern | `tests/qt_enkyron_local_office_smoke.py`, `tests/enkyron-desktop.test.js` |
 | Existing operator UX bug and fix | issue #563, draft PR #564 |
-| Business operation scope | \`docs/ENKYRON_PSA_ROADMAP.md\`, 17 blocks / 157 historical criteria |
+| Business operation scope | `docs/ENKYRON_PSA_ROADMAP.md`, 17 blocks / 157 historical criteria |
 
 ## 2. Product boundary and operator promise
 
@@ -113,7 +113,7 @@ All 157 historical acceptance criteria must be individually reconciled against t
 
 **User problem:** Home has only direct buttons for Tickets and Mail, while CRM and Calendar require the operator to find the sidebar. The welcome text emphasises internal technology instead of today's tasks.
 
-**Design choice:** Keep the same four functioning destinations and the same Qt \`QStackedWidget\`/CRM selection. Present a compact, keyboard-accessible two-row "Start working" area with shortcuts to **Tickets, Clients & CRM, Mail, and Calendar**. Give each control a stable object name and accessible minimum height. Keep existing opportunity/company follow-ups and their real counts. No new system state or data source.
+**Design choice:** Keep the same four functioning destinations and the same Qt `QStackedWidget`/CRM selection. Present a compact, keyboard-accessible two-row "Start working" area with shortcuts to **Tickets, Clients & CRM, Mail, and Calendar**. Give each control a stable object name and accessible minimum height. Keep existing opportunity/company follow-ups and their real counts. No new system state or data source.
 
 **Invariants:**
 - Clicking a shortcut opens exactly the existing module. Mail must keep its current internal tab selection; Calendar must keep its own page; Tickets and CRM must not be conflated.
@@ -123,7 +123,7 @@ All 157 historical acceptance criteria must be individually reconciled against t
 
 **Tests:**
 1. Native Qt offscreen fixture stubs the bridge and clicks all four buttons.
-2. Assert the actual \`navigation.currentRow()\` and \`pages.currentIndex()\` for each; verify Mail's existing CRM-tab routing.
+2. Assert the actual `navigation.currentRow()` and `pages.currentIndex()` for each; verify Mail's existing CRM-tab routing.
 3. Confirm existing four-page stack and five-entry nav remain unchanged.
 4. Verify that shortcut activation never invokes any mutating IPC action in the fixture.
 5. Run the existing ENKYRON Desktop CI on the **exact final commit**.
