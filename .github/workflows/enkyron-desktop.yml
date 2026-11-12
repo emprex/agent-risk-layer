@@ -134,7 +134,7 @@ jobs:
           node --check desktop/enkyron-ticket-controls.mjs
           node --check desktop/enkyron-control-preparation.mjs
           node --check desktop/enkyron-bridge.mjs
-          node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js
+          node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js tests/enkyron-static-evidence-handoff.test.js
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
@@ -143,6 +143,12 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Native KB-001 source evidence handoff UX smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_kb001_evidence_smoke.py'
+
       - name: Native QProcess lifecycle smoke (normal, timeout, shutdown)
         env:
           QT_QPA_PLATFORM: offscreen
