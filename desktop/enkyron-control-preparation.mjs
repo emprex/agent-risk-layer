@@ -317,5 +317,42 @@ export async function collectTicketStaticCandidates(pool,ticketId,{
       current.target_sha !== scope.target_sha ||
       current.target_reference !== scope.target_reference)
     refusal('canonical assessment changed during static collection');
-  return shapeTicketStaticCandidatePreview({scope,preparation,frozen,collection});
+  const preview=shapeTicketStaticCandidatePreview({scope,preparation,frozen,collection});
+  // Pilot handoff: expose ONLY the bounded, privacy-safe target-identity
+  // metadata for canonical KB-001 requirement 1. It is not source content,
+  // approved environment documentation, or evidence acceptance.
+  const kb001=preparation.dossiers.find(d=>d.control_id==='ARL-KB-001');
+  const criterion=kb001?.required_evidence?.find(c=>c.number===1);
+  if(criterion?.route!=='machine_collectable' ||
+     !criterion.collectors.includes('target_identity'))
+    refusal('KB-001 system identity requirement is not routed to the reviewed collector');
+  const source=collection.requirementObservations.find(
+    entry=>entry.requirement===criterion.requirement);
+  const identity=source?.observations?.target_identity;
+  const projected=preview.criteria.find(c=>
+    c.control_id==='ARL-KB-001' && c.criterion_number===1);
+  if(!projected || !identity || identity.revision!==scope.target_sha ||
+     !source.collectors.includes('target_identity'))
+    refusal('KB-001 frozen system identity metadata is missing or has drifted');
+  return {...preview,kb001_candidate:{
+    schema:'enkyron.kb001.static-identity-candidate.v1',
+    control_id:'ARL-KB-001',
+    criterion_number:1,
+    requirement:criterion.requirement,
+    projection_sha256:projected.projection_sha256,
+    collection_sha256:preview.collection_sha256,
+    target_sha:scope.target_sha,
+    snapshot_id:scope.snapshot_id,
+    collector:'target_identity',
+    observed_revision:identity.revision,
+    observed_environment:typeof identity.environment==='string'
+      ? clean(identity.environment,100):null,
+    observed_project_label:typeof identity.projectName==='string'
+      ? clean(identity.projectName,120):null,
+    metadata_only:true,
+    verified:false,
+    criterion_satisfied:false,
+    requires_human_recording:true,
+    limitations:'A frozen Git SHA does not establish approved deployment environment, business purpose, authorised tools or governance.'
+  }};
 }
