@@ -37,11 +37,12 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
   for (const command of [
     'crm-create-company', 'crm-create-contact', 'crm-company-dossier',
     'crm-company-direct-opportunity-create', 'crm-company-followup-create',
+    'crm-company-followup-update',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
     'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
-    'crm-company-followup-update', 'crm-edit-company',
+    'crm-edit-company',
   ]) assert.throws(() => requireEnkyronUatCommand(target, command), /UAT blocks/);
 });
 
