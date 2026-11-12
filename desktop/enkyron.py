@@ -6578,6 +6578,7 @@ class EnkyronWindow(QMainWindow):
                                 item = cards.takeAt(0)
                                 widget = item.widget()
                                 if widget is not None:
+                                    widget.setParent(None)
                                     widget.deleteLater()
                             if not data["items"]:
                                 info = QLabel(
@@ -6707,10 +6708,10 @@ class EnkyronWindow(QMainWindow):
                                         or not isinstance(result.get("items"), list)):
                                     data["items"] = []
                                     render_story()
+                                    update_history_navigation()
                                     page_status.setText(
                                         "History unavailable — no data changed."
                                     )
-                                    update_history_navigation()
                                     return
                                 data["page"] = target
                                 data["items"] = result["items"]
