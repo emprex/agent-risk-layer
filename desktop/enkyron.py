@@ -16438,8 +16438,10 @@ class EnkyronWindow(QMainWindow):
         if ticket_id != self.current_id or not self.current_ticket:
             return
         self.set_active_ticket_control(ticket_id, control_id)
-        self.tabs.setCurrentIndex(6)  # Evidence Register; tab_changed reads canonical DB.
-        self.inspect_records()
+        if self.tabs.currentIndex() == 6:
+            self.inspect_records()
+        else:
+            self.tabs.setCurrentIndex(6)  # tab_changed reads canonical evidence once.
 
     def show_evidence_workflow(self):
         """Load the read-only workplan and source preparation without extra clicks."""
