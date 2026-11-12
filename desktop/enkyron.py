@@ -6189,13 +6189,10 @@ class EnkyronWindow(QMainWindow):
                     )
                     ticket_notice.setWordWrap(True)
                     page_layout.addWidget(ticket_notice)
-                if section.get("more"):
+                if section.get("more") and section_id != "company_history":
                     limit_notice = QLabel(
-                        ("Showing newest {} of {} recorded events. "
-                         "Older history exists but is not shown in this preview."
-                         if section_id == "company_history" else
-                         "Showing first {} of {} records. "
-                         "Use the corresponding CRM view for more.").format(
+                        "Showing first {} of {} records. "
+                        "Use the corresponding CRM view for more.".format(
                             len(rows), count
                         )
                     )
@@ -6528,164 +6525,257 @@ class EnkyronWindow(QMainWindow):
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
                     elif section_id == "company_history":
-                        # Full on-page reading of event details, without hover,
-                        # popup dialogs or navigation out of Company 360.
-                        # The first bounded page comes from the dossier's
-                        # consistent read-only snapshot; older pages are fetched
-                        # on demand by exact company ID.
+                        # A readable, expandable story: one company, one history,
+                        # chronological by default. Page reads are scoped by
+                        # immutable IDs; no interpretation of a contact's name.
                         state = {
-                            "items": list(rows), "page": 0, "total": count,
-                            "pending": False, "request": 0
+                            "items": list(reversed(rows)) if count <= 20 else [],
+                            "page": 0, "total": count, "order": "oldest",
+                            "pending": False, "request": 0,
+                            "expanded": None
                         }
-                        history_table = table
-                        table.setObjectName("crmCompanyHistoryTable")
-                        table.setMaximumHeight(
-                            min(340, max(150, 52 + min(len(rows), 8) * 32))
+                        story_header = QHBoxLayout()
+                        story_title = QLabel("COMPANY STORY")
+                        story_title.setStyleSheet("font-weight: bold;")
+                        story_header.addWidget(story_title)
+                        story_header.addStretch()
+                        story_order = QComboBox()
+                        story_order.setObjectName("crmCompanyHistoryOrder")
+                        story_order.addItem("Oldest first", "oldest")
+                        story_order.addItem("Newest first", "newest")
+                        story_order.setToolTip(
+                            "Change reading order without changing stored events."
                         )
-                        page_layout.addWidget(table, 1)
-                        detail_title = QLabel("EVENT DETAILS — FULL RECORDED SUMMARY")
-                        detail_title.setStyleSheet("font-weight: bold;")
-                        page_layout.addWidget(detail_title)
-                        detail = QPlainTextEdit()
-                        detail.setObjectName("crmCompanyHistoryDetail")
-                        detail.setReadOnly(True)
-                        detail.setPlaceholderText(
-                            "Select an event above to read its full recorded summary."
-                        )
-                        detail.setMinimumHeight(110)
-                        detail.setMaximumHeight(170)
-                        page_layout.addWidget(detail)
+                        story_header.addWidget(story_order)
+                        page_layout.addLayout(story_header)
+
+                        story_scroll = QScrollArea()
+                        story_scroll.setObjectName("crmCompanyHistoryStory")
+                        story_scroll.setWidgetResizable(True)
+                        story_scroll.setFrameShape(QFrame.Shape.NoFrame)
+                        story_container = QWidget()
+                        story_cards = QVBoxLayout(story_container)
+                        story_cards.setContentsMargins(5, 4, 5, 4)
+                        story_cards.setSpacing(9)
+                        story_scroll.setWidget(story_container)
+                        page_layout.addWidget(story_scroll, 1)
+
                         controls = QHBoxLayout()
-                        newer = QPushButton("Newer events")
-                        newer.setObjectName("crmCompanyHistoryNewer")
-                        older = QPushButton("Older events")
-                        older.setObjectName("crmCompanyHistoryOlder")
+                        previous = QPushButton("Previous page")
+                        previous.setObjectName("crmCompanyHistoryPrevious")
+                        following = QPushButton("Next page")
+                        following.setObjectName("crmCompanyHistoryNext")
                         page_status = QLabel("")
                         page_status.setObjectName("crmCompanyHistoryPageStatus")
-                        controls.addWidget(newer)
+                        controls.addWidget(previous)
                         controls.addWidget(page_status)
-                        controls.addWidget(older)
+                        controls.addWidget(following)
                         controls.addStretch()
                         page_layout.addLayout(controls)
-                        page_layout.addStretch()
 
-                        def show_selected_event(
-                                listing=history_table, view=detail, data=state):
-                            selected_row = listing.currentRow()
-                            items = data["items"]
-                            if not 0 <= selected_row < len(items):
-                                view.clear()
-                                return
-                            event = items[selected_row]
-                            view.setPlainText(
-                                "Recorded: {}\n"
-                                "Record: {}\n"
-                                "Action: {}\n"
-                                "Operator: {}\n\n"
-                                "Full summary:\n{}\n\n"
-                                "Record ID: {}\n"
-                                "Event ID: {}".format(
-                                    display_date(event.get("recorded_at")),
-                                    event.get("resource_kind") or "",
-                                    event.get("action") or "",
-                                    event.get("actor_local") or "",
-                                    event.get("summary") or "",
-                                    event.get("resource_id") or "",
-                                    event.get("event_id") or ""
+                        def render_story(data=state, cards=story_cards):
+                            while cards.count():
+                                item = cards.takeAt(0)
+                                widget = item.widget()
+                                if widget is not None:
+                                    widget.deleteLater()
+                            if not data["items"]:
+                                info = QLabel(
+                                    "Loading history…" if data["pending"]
+                                    else "No recorded events on this page."
                                 )
-                            )
+                                info.setObjectName("crmCompanyHistoryEmpty")
+                                cards.addWidget(info)
+                            for index, event in enumerate(data["items"]):
+                                event_id = str(event.get("event_id") or "")
+                                absolute_number = data["page"] * 20 + index + 1
+                                record_kind = str(event.get("resource_kind") or "Record")
+                                action = str(event.get("action") or "recorded")
+                                date = display_date(event.get("recorded_at"))
+                                actor = str(event.get("actor_local") or "Unknown")
+                                summary = str(event.get("summary") or "")
+                                card = QFrame()
+                                card.setObjectName("crmCompanyHistoryCard")
+                                card.setStyleSheet(
+                                    "QFrame#crmCompanyHistoryCard { "
+                                    "background: #f7fafc; border: 1px solid #d5e2ea; "
+                                    "border-radius: 6px; }"
+                                )
+                                content = QVBoxLayout(card)
+                                content.setContentsMargins(12, 8, 12, 9)
+                                content.setSpacing(4)
+                                heading = QPushButton(
+                                    "{}. {} · {}     {}".format(
+                                        absolute_number,
+                                        record_kind.replace("_", " ").title(),
+                                        action.replace("_", " ").title(), date
+                                    )
+                                )
+                                heading.setObjectName("crmCompanyHistoryExpand")
+                                heading.setToolTip("Click to expand or collapse this event")
+                                heading.setStyleSheet(
+                                    "text-align: left; font-weight: bold;"
+                                )
+                                content.addWidget(heading)
+                                short = QLabel(
+                                    summary if len(summary) <= 140
+                                    else summary[:137] + "…"
+                                )
+                                short.setObjectName("crmCompanyHistoryPreview")
+                                short.setTextFormat(Qt.TextFormat.PlainText)
+                                short.setWordWrap(True)
+                                content.addWidget(short)
+                                if data["expanded"] == event_id:
+                                    full = QLabel(
+                                        "Recorded by: {}\n\n"
+                                        "Full recorded summary:\n{}\n\n"
+                                        "Record ID: {}\nEvent ID: {}".format(
+                                            actor, summary,
+                                            event.get("resource_id") or "", event_id
+                                        )
+                                    )
+                                    full.setObjectName("crmCompanyHistoryDetail")
+                                    full.setTextFormat(Qt.TextFormat.PlainText)
+                                    full.setWordWrap(True)
+                                    full.setTextInteractionFlags(
+                                        Qt.TextInteractionFlag.TextSelectableByMouse
+                                    )
+                                    full.setStyleSheet(
+                                        "background: white; padding: 8px; "
+                                        "border-radius: 4px;"
+                                    )
+                                    content.addWidget(full)
+                                heading.clicked.connect(
+                                    lambda _checked=False, ident=event_id,
+                                           data_ref=data:
+                                    expand_event(ident, data_ref)
+                                )
+                                cards.addWidget(card)
+                            cards.addStretch()
 
-                        def update_history_buttons(
-                                data=state, previous=newer, following=older,
+                        def expand_event(ident, data=state):
+                            data["expanded"] = (
+                                None if data["expanded"] == ident else ident
+                            )
+                            render_story()
+
+                        def update_history_navigation(
+                                data=state, prev=previous, nex=following,
                                 status=page_status):
                             start = data["page"] * 20
                             end = start + len(data["items"])
                             status.setText(
+                                "Loading events…" if data["pending"] else
                                 "Events {}–{} of {}".format(
                                     start + 1 if end else 0, end, data["total"]
                                 )
                             )
-                            previous.setEnabled(
+                            prev.setEnabled(
                                 not data["pending"] and data["page"] > 0
                             )
-                            following.setEnabled(
+                            nex.setEnabled(
                                 not data["pending"] and end < data["total"]
                             )
 
-                        def open_history_page(
-                                delta, data=state, listing=history_table,
-                                view=detail, cols=columns,
-                                company_scope=company_id, window=dialog,
-                                load_seq=seq):
-                            if data["pending"] or not window.isVisible():
+                        def load_history_page(
+                                target, data=state, company_scope=company_id,
+                                window=dialog, load_seq=seq):
+                            if target < 0 or target > 10000:
                                 return
-                            target = data["page"] + delta
-                            if target < 0 or (
-                                    delta > 0
-                                    and (data["page"] + 1) * 20 >= data["total"]):
+                            if data["pending"]:
                                 return
                             data["pending"] = True
                             data["request"] += 1
                             request = data["request"]
-                            update_history_buttons()
+                            order = data["order"]
+                            update_history_navigation()
+                            if not data["items"]:
+                                render_story()
 
                             def received_page(result, error):
                                 if (not window.isVisible()
                                         or load_seq != self.crm_dossier_seq
                                         or company_scope != self.crm_dossier_company_id
-                                        or data["request"] != request):
+                                        or data["request"] != request
+                                        or data["order"] != order):
                                     return
                                 data["pending"] = False
                                 if (error or not isinstance(result, dict)
                                         or not result.get("available")
                                         or result.get("page") != target
-                                        or not isinstance(result.get("items"), list)
-                                        or not result["items"]):
-                                    view.setPlainText(
-                                        "History page unavailable. No records were changed.\n"
-                                        + str(error or (result or {}).get(
-                                            "notice", "Reload the dossier to retry."
-                                        ))
+                                        or result.get("order") != order
+                                        or not isinstance(result.get("items"), list)):
+                                    data["items"] = []
+                                    render_story()
+                                    page_status.setText(
+                                        "History unavailable — no data changed."
                                     )
-                                    update_history_buttons()
+                                    update_history_navigation()
                                     return
                                 data["page"] = target
                                 data["items"] = result["items"]
                                 data["total"] = int(result.get("total", 0))
-                                listing.setRowCount(0)
-                                listing.setRowCount(len(data["items"]))
-                                for row_no, event in enumerate(data["items"]):
-                                    for col_no, (_heading, key) in enumerate(cols):
-                                        value = event.get(key)
-                                        if key == "recorded_at":
-                                            value = display_date(value)
-                                        cell = QTableWidgetItem(
-                                            str(value) if value is not None else ""
-                                        )
-                                        cell.setToolTip(cell.text())
-                                        listing.setItem(row_no, col_no, cell)
-                                listing.selectRow(0)
-                                update_history_buttons()
+                                data["expanded"] = (
+                                    str(data["items"][0].get("event_id"))
+                                    if data["items"] else None
+                                )
+                                render_story()
+                                update_history_navigation()
 
                             self.bridge.call(
                                 "crm-company-history",
                                 payload={"company_id": company_scope,
-                                         "page": target},
+                                         "page": target, "order": order},
                                 callback=received_page
                             )
 
-                        history_table.itemSelectionChanged.connect(
-                            show_selected_event
+                        def change_history_order(
+                                _index, data=state, initial=rows):
+                            requested = story_order.currentData()
+                            if requested == data["order"]:
+                                return
+                            data["request"] += 1  # Invalidate old callbacks.
+                            data["pending"] = False
+                            data["order"] = requested
+                            data["page"] = 0
+                            data["expanded"] = None
+                            if data["total"] <= 20:
+                                data["items"] = (
+                                    list(reversed(initial))
+                                    if requested == "oldest" else list(initial)
+                                )
+                                data["expanded"] = (
+                                    str(data["items"][0].get("event_id"))
+                                    if data["items"] else None
+                                )
+                                render_story()
+                                update_history_navigation()
+                            else:
+                                data["items"] = []
+                                render_story()
+                                load_history_page(0)
+
+                        story_order.currentIndexChanged.connect(
+                            change_history_order
                         )
-                        newer.clicked.connect(
-                            lambda _checked=False: open_history_page(-1)
+                        previous.clicked.connect(
+                            lambda _checked=False: load_history_page(
+                                state["page"] - 1
+                            )
                         )
-                        older.clicked.connect(
-                            lambda _checked=False: open_history_page(1)
+                        following.clicked.connect(
+                            lambda _checked=False: load_history_page(
+                                state["page"] + 1
+                            )
                         )
-                        if rows:
-                            history_table.selectRow(0)
-                        update_history_buttons()
+                        if state["items"]:
+                            state["expanded"] = str(
+                                state["items"][0].get("event_id")
+                            )
+                        render_story()
+                        update_history_navigation()
+                        if count > 20:
+                            load_history_page(0)
                     elif section_id in {
                         "prospects", "tickets", "drafts"
                     } and len(rows) <= 4:
