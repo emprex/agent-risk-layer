@@ -60,7 +60,7 @@ export function requireEnkyronUatPayload(target, command, payload) {
   if (target.uat && command === 'crm-record-qualification' &&
       (payload?.confirmed !== true ||
        typeof payload?.company_id !== 'string' ||
-       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.company_id) ||
+       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.company_id) ||
        payload?.contact_id != null ||
        payload?.fit_status !== 'potential_fit' ||
        payload?.priority !== 'normal')) {
