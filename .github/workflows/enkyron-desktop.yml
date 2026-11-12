@@ -927,7 +927,7 @@ jobs:
           window.crm_company_id = company_id
           assert calls[-1][0] == "crm-company-dossier"
           assert calls[-1][1] == company_id
-          calls[-1][3]({
+          dossier_seed = {
               "available": True,
               "company": {
                   "id": company_id, "name": "Synthetic Company",
@@ -1026,7 +1026,8 @@ jobs:
                        "recorded_at": "2026-11-07T05:00:00Z"
                    }]}
               }
-          }, None)
+          }
+          calls[-1][3](dossier_seed, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
           # UX-02: task summary is derived only from the stored dossier,
@@ -1381,17 +1382,41 @@ jobs:
               "company_id": company_id,
               "activity_type": "note",
               "detail": "LinkedIn message recorded manually, no delivery confirmed.",
-              "reviewed": True
+              "reviewed": True,
+              "confirmed": True
           }
           assert not window.crm_dossier_activity_save.isEnabled()
           calls[-1][3]({
               "id": "77777777-8888-4999-aaaa-bbbbbbbbbbbb",
+              "opportunity_id": None,
               "company_id": company_id,
               "activity_type": "note"
           }, None)
           assert calls[-1][0] == "crm-company-dossier"
           assert calls[-1][1] == company_id
-          assert window.crm_dossier_activity_flash.startswith("Activity saved")
+          assert window.crm_dossier_activity_check is not None
+          assert window.crm_dossier_activity_flash == ""
+          assert window.crm_dossier_activity_detail.toPlainText().startswith(
+              "LinkedIn message recorded manually"
+          )
+          # Acknowledgement is NOT success. Re-read the exact activity from
+          # the correct company's canonical dossier before clearing the form.
+          from copy import deepcopy
+          canonical_dossier = deepcopy(dossier_seed)
+          canonical_dossier["sections"]["activities"]["items"].append({
+              "id": "77777777-8888-4999-aaaa-bbbbbbbbbbbb",
+              "opportunity_id": None,
+              "company_id": company_id,
+              "activity_type": "note",
+              "detail": "LinkedIn message recorded manually, no delivery confirmed.",
+              "recorded_by": "ci-local",
+              "recorded_at": "2026-11-12T21:40:00Z"
+          })
+          canonical_dossier["sections"]["activities"]["total"] = 3
+          calls[-1][3](canonical_dossier, None)
+          assert window.crm_dossier_activity_check is None
+          assert not window.crm_dossier_activity_uncertain
+          assert "verified after exact-ID" in window.status.text()
           assert window.crm_dossier_activity_detail.toPlainText() == ""
           assert not window.crm_dossier_activity_confirm.isChecked()
           # Read-only snapshot refresh is requested; no auto-sent message.
