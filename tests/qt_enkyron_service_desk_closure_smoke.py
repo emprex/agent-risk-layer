@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QApplication, QMessageBox, QInputDialog, QLabel
+from PySide6.QtWidgets import QApplication, QMessageBox, QInputDialog, QLabel, QPushButton
 
 from desktop.enkyron import EnkyronWindow, DesktopBridge
 
@@ -68,6 +68,17 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
                 self.assertIsNotNone(banner)
                 self.assertIn("SERVICE DESK ONLY", banner.text())
                 self.assertIn("not real company records", banner.text())
+                for index in (3, 4):
+                    self.assertFalse(
+                        test_window.navigation.item(index).flags()
+                        & Qt.ItemFlag.ItemIsEnabled
+                    )
+                for object_name in (
+                    "enkyronHomeOpenMail", "enkyronHomeOpenCalendar"
+                ):
+                    shortcut = test_window.findChild(QPushButton, object_name)
+                    self.assertIsNotNone(shortcut)
+                    self.assertFalse(shortcut.isEnabled())
             finally:
                 test_window.close()
                 test_window.deleteLater()
