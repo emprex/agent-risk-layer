@@ -354,6 +354,14 @@ class EnkyronWindow(QMainWindow):
         )
         if self.ux_preview_read_only:
             self.setWindowTitle("ENKYRON · SYNTHETIC PREVIEW · READ ONLY")
+        # UX context only: the Node bridge independently verifies the database
+        # name, synthetic marker and operation allowlist before every request.
+        self.enk05_uat_ui = (
+            os.environ.get("ENKYRON_UAT_DATABASE") == "enkyron_uat_enk05"
+            and os.environ.get("ENKYRON_UAT_GUARD") == "ENK05_SYNTHETIC_ONLY"
+        )
+        if self.enk05_uat_ui and not self.ux_preview_read_only:
+            self.setWindowTitle("ENKYRON · SYNTHETIC UAT-04 · SERVICE DESK")
         self.resize(1360, 840)
         self.setMinimumSize(920, 620)
         self.bridge = DesktopBridge(self)
@@ -548,6 +556,20 @@ class EnkyronWindow(QMainWindow):
             )
             outer.addWidget(preview_notice)
             self.account_profile_button.setEnabled(False)
+        elif self.enk05_uat_ui:
+            uat_notice = QLabel(
+                "SYNTHETIC UAT-04 · SERVICE DESK ONLY · "
+                "Test clients and tickets, not real company records. "
+                "Mail, Calendar, payments and security assessment actions are blocked. "
+                "Database identity is verified separately by the backend."
+            )
+            uat_notice.setObjectName("enkyronServiceDeskUatBanner")
+            uat_notice.setWordWrap(True)
+            uat_notice.setStyleSheet(
+                "background: #5a3815; color: #fff3db; "
+                "font-weight: 600; padding: 10px 18px;"
+            )
+            outer.addWidget(uat_notice)
 
         # Application-level navigation; the ticket list is no longer the main menu.
         workspace = QHBoxLayout()
