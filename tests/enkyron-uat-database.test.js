@@ -3,7 +3,7 @@ import test from 'node:test';
 import os from 'node:os';
 import {
   ENKYRON_UAT_MARKER, resolveEnkyronDatabase,
-  requireEnkyronUatCommand, requireEnkyronUatPayload, verifyEnkyronUatDatabase,
+  requireEnkyronUatCommand, requireEnkyronUatPayload, requireEnkyronUxPreviewCommand, verifyEnkyronUatDatabase,
 } from '../desktop/enkyron-uat-database.mjs';
 import {validateBootstrapTarget, migrationAdapter} from '../scripts/enkyron-enk03-uat-bootstrap.mjs';
 
@@ -264,4 +264,45 @@ test('bootstrap migration adapter commits marker atomically or rolls back', asyn
     assert.deepEqual(bound[1], ['a', 'b']);
     assert.equal(sqls.at(-1)[0], failMarker ? 'ROLLBACK' : 'COMMIT');
   }
+});
+
+
+test('ENK-04 UX preview: requires exact marked UAT DB and explicit read-only mode',()=>{
+  const normal={database:'arl_local',uat:false};
+  const expected={database:'enkyron_uat_enk03',uat:true};
+  const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk03',
+    ENKYRON_UAT_GUARD:ENKYRON_UAT_MARKER,
+    ENKYRON_UX_PREVIEW_READ_ONLY:'1'};
+  assert.deepEqual(resolveEnkyronDatabase(env),expected);
+  for(const invalid of [
+    {ENKYRON_UX_PREVIEW_READ_ONLY:'1'},
+    {ENKYRON_UX_PREVIEW_READ_ONLY:'0'},
+    {ENKYRON_UAT_DATABASE:'arl_local',
+     ENKYRON_UAT_GUARD:ENKYRON_UAT_MARKER,
+     ENKYRON_UX_PREVIEW_READ_ONLY:'1'},
+    {...env,ENKYRON_UX_PREVIEW_READ_ONLY:'false'}
+  ]) assert.throws(()=>resolveEnkyronDatabase(invalid),/UAT|preview/i);
+  assert.throws(()=>requireEnkyronUxPreviewCommand(normal,'crm-company-dossier',env),
+    /requires exact synthetic/);
+  assert.doesNotThrow(()=>requireEnkyronUxPreviewCommand(normal,'mail-send-draft',{}),
+    'legacy production dispatch is unaffected when preview flag is absent');
+});
+
+test('ENK-04 UX preview: reading R1/R2 remains allowed, every business write blocked',()=>{
+  const target={database:'enkyron_uat_enk03',uat:true};
+  const env={ENKYRON_UX_PREVIEW_READ_ONLY:'1'};
+  for(const cmd of [
+    'crm-company-dossier','crm-company-history',
+    'crm-company-proposal-readiness','crm-company-proposal-versions',
+    'crm-proposals','crm-proposal','crm-sales-pipeline',
+    'crm-companies','tickets','crm-company-followups'
+  ]) assert.doesNotThrow(()=>requireEnkyronUxPreviewCommand(target,cmd,env),cmd);
+  for(const cmd of [
+    'crm-company-proposal-revise','crm-company-proposal-create',
+    'crm-record-qualification','crm-record-activity','crm-update-opportunity',
+    'crm-create-company','crm-company-followup-create','crm-company-followup-update',
+    'crm-invoice-issue','mail-send-draft','crm-mail-manual-send','assessment-link',
+    'pilot-lab-handoff','pilot-lab-run','owner-login','unknown-future-command'
+  ]) assert.throws(()=>requireEnkyronUxPreviewCommand(target,cmd,env),
+    /preview is read-only/,cmd);
 });
