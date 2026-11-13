@@ -66,8 +66,12 @@ export function resolveEnkyronDatabase(env = process.env) {
   if (!hasName && !hasGate) {
     return Object.freeze({ database: 'arl_local', uat: false });
   }
-  if (env.ENKYRON_UAT_DATABASE === ENKYRON_ENK05_UAT_DATABASE
-      && env.ENKYRON_UAT_GUARD === ENKYRON_ENK05_UAT_MARKER) {
+  // ENK-05 name and marker are a reserved pair. A legacy ENK-03 marker
+  // must never route the ENK-05 database into the old CRM UAT rules.
+  if (env.ENKYRON_UAT_DATABASE === ENKYRON_ENK05_UAT_DATABASE) {
+    if (env.ENKYRON_UAT_GUARD !== ENKYRON_ENK05_UAT_MARKER) {
+      throw new Error('ENKYRON UAT requires the exact ENK-05 synthetic-only marker');
+    }
     return Object.freeze({ database: ENKYRON_ENK05_UAT_DATABASE,
       uat: true, marker: ENKYRON_ENK05_UAT_MARKER });
   }
