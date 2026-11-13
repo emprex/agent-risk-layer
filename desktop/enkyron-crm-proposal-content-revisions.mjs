@@ -152,11 +152,11 @@ export async function reviseCompanyProposalScope(pool,input,actor,options={}){
     await client.query(
       'INSERT INTO enkyron_crm_proposal_content_versions '
       +'(id,workspace_key,proposal_id,revision,title,scope_text,currency,'
-      +'amount_minor,content_sha256,source_event_id,snapshot_kind,recorded_by) '
-      +"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'reviewed_revision',$11)",
+      +'amount_minor,content_sha256,source_event_id,snapshot_kind,review_note,recorded_by) '
+      +"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'reviewed_revision',$11,$12)",
       [newSnapshotId,who.key,data.proposal_id,next,current.title,
        data.scope_text,current.currency,current.amount_minor,
-       newHash,eventId,who.actor]
+       newHash,eventId,data.review_note,who.actor]
     );
     await client.query('COMMIT');
     inTx=false;
@@ -197,7 +197,7 @@ export async function readCompanyProposalContentVersions(pool,request,actor){
     if(!current)throw new Error('CRM proposal not linked to this local company');
     const versions=(await client.query(
       'SELECT id,revision,title,scope_text,currency,amount_minor,'
-      +'content_sha256,source_event_id,snapshot_kind,recorded_by,recorded_at '
+      +'content_sha256,source_event_id,snapshot_kind,review_note,recorded_by,recorded_at '
       +'FROM enkyron_crm_proposal_content_versions '
       +'WHERE workspace_key=$1 AND proposal_id=$2 ORDER BY revision LIMIT 31',
       [who.key,id]
