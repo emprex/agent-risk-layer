@@ -42,6 +42,7 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-record-activity', 'crm-record-qualification',
     'crm-company-proposal-readiness',
     'crm-company-proposal-create', 'crm-proposal', 'crm-proposals',
+    'crm-company-proposal-versions', 'crm-company-proposal-revise',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
@@ -152,6 +153,38 @@ test('ENK-04 qualification UAT allows only reviewed company-level potential fit'
     'assessment-link','crm-invoice-issue']){
     assert.throws(()=>requireEnkyronUatCommand(target,sensitive),/UAT blocks/);
   }
+});
+
+test('ENK-04 synthetic R1 correction is limited to one existing draft, never the legacy updater',()=>{
+  const target={database:'enkyron_uat_enk03',uat:true};
+  const good={
+    proposal_id:'d35d86b8-b16f-41c8-940d-f8e7c1dc1db8',
+    opportunity_id:'17d0d77c-3052-40e3-a38d-33fd4867e5d4',
+    company_id:'0e5993e3-be9a-4837-9350-989079c2cc2f',
+    expected_revision:1,
+    scope_text:'ENK04 SYNTHETIC TEST ONLY.\\n\\nA reviewed draft with clean paragraphs.',
+    review_note:'Correct the accidental copied interface text, keep the test price.',
+    confirmed:true
+  };
+  assert.doesNotThrow(()=>requireEnkyronUatCommand(target,'crm-company-proposal-versions'));
+  assert.doesNotThrow(()=>requireEnkyronUatCommand(target,'crm-company-proposal-revise'));
+  assert.doesNotThrow(()=>requireEnkyronUatPayload(target,'crm-company-proposal-revise',good));
+  for(const bad of [
+    null,{}, {...good,confirmed:false},
+    {...good,proposal_id:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'},
+    {...good,company_id:'11111111-2222-4333-8444-555555555555'},
+    {...good,opportunity_id:'11111111-2222-4333-8444-555555555555'},
+    {...good,expected_revision:2},
+    {...good,scope_text:'Copy bad UI: Copier le texte'},
+    {...good,review_note:'no'}
+  ])assert.throws(
+    ()=>requireEnkyronUatPayload(target,'crm-company-proposal-revise',bad),
+    /limited to exact reviewed synthetic draft/
+  );
+  for(const command of [
+    'crm-proposal-update','crm-proposal-create','mail-send-draft',
+    'crm-invoice-issue','create-ticket','assessment-link'
+  ])assert.throws(()=>requireEnkyronUatCommand(target,command),/UAT blocks/);
 });
 
 test('UAT refuses unmarked, wrong or unreadable database before business operation', async () => {
