@@ -27,6 +27,7 @@ test('ENK-05 selects only exact dedicated synthetic DB and marker',()=>{
     {...env,ENKYRON_UAT_DATABASE:'arl_local'},
     {...env,ENKYRON_UAT_DATABASE:'enkyron_uat_enk03'},
     {...env,ENKYRON_UAT_DATABASE:'enkyron_uat_enk05_copy'},
+    {...env,ENKYRON_UAT_GUARD:ENKYRON_UAT_MARKER},
     {...env,ENKYRON_UAT_GUARD:'wrong'},
     {ENKYRON_UAT_DATABASE:env.ENKYRON_UAT_DATABASE},
     {ENKYRON_UAT_GUARD:env.ENKYRON_UAT_GUARD}
