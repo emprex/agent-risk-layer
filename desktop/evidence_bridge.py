@@ -125,6 +125,19 @@ def load_evidence_workplan(
             item["affectedControls"] > record["assessmentControls"]):
             return refused("Malformed evidence request pack")
 
+    lanes = record.get("queueLanes")
+    lane_names = (
+        "human_applicability", "test_planning", "evidence_collection",
+        "human_decision", "follow_up_blocked", "review_required",
+    )
+    if lanes is not None:
+        if (not isinstance(lanes, dict) or set(lanes) != set(lane_names) or
+            any(not count(lanes[key]) for key in lane_names) or
+            sum(lanes.values()) != 108 or
+            lanes["test_planning"] + lanes["evidence_collection"] !=
+                record["assessmentControls"]):
+            return refused("Canonical control work queue stages are inconsistent")
+
     return {
         "available": True,
         "project_id": expected_project,
@@ -134,6 +147,7 @@ def load_evidence_workplan(
         "assessment_controls": record["assessmentControls"],
         "other_workflow_controls": record["otherWorkflowControls"],
         "criterion_count": record["criterionCount"],
+        "queue_lanes": {key: lanes[key] for key in lane_names} if lanes is not None else None,
         "counts": {key: values[key] for key in COUNTS},
         "packs": [
             {

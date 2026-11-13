@@ -70,7 +70,7 @@ class ExistingAssessmentBridgeTests(unittest.TestCase):
         self.assertEqual(cmd[-2], "--json")
         self.assertEqual(cmd[-1], str(self.path))
         self.assertFalse(options["check"])
-        self.assertEqual(options["timeout"], 25)
+        self.assertEqual(options["timeout"], 75)
         self.assertNotIn("NODE_OPTIONS", options["env"])
         self.assertEqual(options["env"]["ARL_EXPECTED_TARGET_SHA"], SHA)
         self.assertEqual(options["env"]["ARL_AI_ADVISORY"], "0")
@@ -119,6 +119,23 @@ class ExistingAssessmentBridgeTests(unittest.TestCase):
         )
         self.assertFalse(result["available"])
         self.assertNotIn("PRIVATE_SERVER_ERROR", str(result))
+
+    def test_bounded_canonical_timeout_fails_closed_without_stderr(self):
+        """The desktop may wait longer, but never treats a timed-out read as a pass."""
+        def expired(command, **kwargs):
+            self.assertEqual(kwargs["timeout"], 75)
+            raise subprocess.TimeoutExpired(
+                command, kwargs["timeout"],
+                stderr=b"PRIVATE_DB_PASSWORD"
+            )
+        output = assessment_bridge.inspect_existing(
+            self.path, SHA, runner=expired
+        )
+        self.assertFalse(output["available"])
+        self.assertEqual(output["security_verdict"], "not_assessed")
+        self.assertEqual(output["readiness_decision"], "not_evaluated")
+        self.assertTrue(output["human_review_required"])
+        self.assertNotIn("PRIVATE_DB_PASSWORD", str(output))
 
     def test_invalid_target_or_sha_does_not_spawn_node(self):
         def never(*_args, **_kwargs):

@@ -1,0 +1,183 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
+
+const company='11111111-2222-4333-8444-555555555555';
+const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','commercial_docs','ticket_history','audit_events','audit_changes','company_history'];
+function mockDatabase({total='1',badSection='',missing=false,notFound=false}={}){
+  const statements=[];
+  let releases=0;
+  const db={
+    connect:async()=>({
+      query:async(sql,params)=>{
+        statements.push({sql,params});
+        if(sql.startsWith('SELECT id,name,legal_name')){
+          return {rows:notFound?[]:[{id:company,name:'Synthetic Ltd',relationship_state:'prospect'}]};
+        }
+        if(sql.startsWith('SELECT')&&!sql.startsWith('SELECT id,name,legal_name')){
+          if(missing){const e=new Error('not installed');e.code='42P01';throw e;}
+          if(sql.startsWith('SELECT id,full_name,job_title,email'))return {rows:[{id:'contact',total_rows:badSection==='contacts'?'-2':total}]};
+          return {rows:[]};
+        }
+        return {rows:[]};
+      },
+      release:()=>{releases++;}
+    })
+  };
+  return {db,statements,released:()=>releases};
+}
+test('reads only explicitly linked records under repeatable-read snapshot',async()=>{
+  const m=mockDatabase();
+  const result=await getCompanyDossier(m.db,company,'ci-operator');
+  assert.equal(result.company.name,'Synthetic Ltd');
+  assert.deepEqual(Object.keys(result.sections),names);
+  assert.equal(result.sections.contacts.total,1);
+  assert.equal(result.sections.contacts.items.length,1);
+  assert.equal(result.sections.tickets.total,0);
+  assert.equal(result.sections.prospects.total,0);
+  assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','WITH','SELECT','SELECT','WITH','COMMIT'
+  ]);
+  assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
+  assert.match(m.statements[1].sql,/country,record_version,relationship_state/);
+  assert.match(m.statements[1].sql,/WHERE workspace_key=[$]1 AND id=[$]2/);
+  assert.doesNotMatch(m.statements[1].sql,/UPDATE/);
+  // The dossier's edit metadata comes from the same read-only snapshot,
+  // scoped to this company; stale revisions are rejected by the write service.
+  assert.match(m.statements[2].sql,/phone,record_version,marketing_permission/);
+  assert.match(m.statements[2].sql,/workspace_key=[$]1 AND company_id=[$]2/);
+  assert.doesNotMatch(m.statements[2].sql,/\bUPDATE\b/);
+  assert.equal(m.released(),1);
+  assert.ok(m.statements.every(q=>!/\bINSERT INTO\b|\bUPDATE\b|\bDELETE FROM\b/i.test(q.sql)));
+  for(const q of m.statements.filter(q=>q.params)){
+    assert.deepEqual(q.params,['local:ci-operator',company]);
+  }
+  assert.ok(m.statements.slice(2,14).every(q=>/LIMIT 21/.test(q.sql)));
+  assert.match(m.statements[11].sql,/FROM enkyron_crm_events/);
+  assert.match(m.statements[12].sql,/FROM enkyron_crm_record_changes/);
+  const history=m.statements[13].sql;
+  assert.match(history,/WITH linked_opportunities AS/);
+  for(const source of [
+    'enkyron_crm_events','enkyron_crm_record_changes',
+    'enkyron_crm_opportunity_events','enkyron_crm_company_followup_events',
+    'enkyron_crm_activities','enkyron_crm_qualification_reviews',
+    'enkyron_crm_prospect_links','enkyron_crm_ticket_links',
+    'enkyron_crm_ticket_link_revocations','enkyron_crm_ticket_reassignments',
+    'enkyron_crm_mail_draft_events','enkyron_crm_mail_manual_sends',
+    'enkyron_crm_proposal_draft_events','enkyron_crm_proposal_drafts'
+  ])assert.match(history,new RegExp(source));
+  assert.match(history,/JOIN linked_opportunities o ON o[.]id=p[.]opportunity_id/);
+  assert.match(history,/Internal proposal draft revision/);
+  assert.match(history,/not issued or sent/);
+  assert.match(history,/ORDER BY recorded_at DESC,event_id DESC/);
+  assert.match(history,/LIMIT 21/);
+  assert.match(history,/e[.]event_type NOT IN \('updated','linked'\)/);
+  assert.doesNotMatch(history,/SELECT [*]|review_note|recipient_email|password_hash|body_text/);
+  assert.deepEqual(m.statements[13].params,['local:ci-operator',company]);
+  for(const sql of [m.statements[11].sql,m.statements[12].sql]){
+    assert.match(sql,/c[.]workspace_key/);
+    assert.match(sql,/c[.]company_id=[$]2/);
+    assert.doesNotMatch(sql,/review_note|recipient_email|phone|source_reference/);
+  }
+  assert.match(m.statements[4].sql,/enkyron_crm_effective_ticket_links/);
+  assert.match(m.statements[4].sql,/enkyron_crm_ticket_reassignments/);
+  assert.match(m.statements[4].sql,/r[.]workspace_key=l[.]workspace_key/);
+  assert.match(m.statements[4].sql,/r[.]destination_company_id=l[.]company_id/);
+  assert.match(m.statements[4].sql,/reviewed_initial_link/);
+  assert.match(m.statements[4].sql,/reviewed_reassignment/);
+  assert.match(m.statements[4].sql,/t[.]linked_project_id AS arl_project_ref/);
+  assert.match(m.statements[4].sql,/t[.]linked_assessment_id AS arl_assessment_ref/);
+  assert.doesNotMatch(m.statements[4].sql,/l[.]review_note|t[.]scope_text|t[.]permission_reference/);
+  assert.match(m.statements[10].sql,/enkyron_crm_effective_ticket_links/);
+  assert.match(m.statements[10].sql,/arl_workbench_ticket_events/);
+  assert.match(m.statements[10].sql,/arl_workbench_notes/);
+  assert.doesNotMatch(m.statements[10].sql,/e[.]detail|n[.]body|source_digest|source_revision/);
+  assert.match(m.statements[10].sql,/LIMIT 21/);
+  // Opportunities, notes, drafts and commercial source rows are linked through
+  // the manually reviewed prospect association, never by company name.
+  assert.match(m.statements[9].sql,/enkyron_crm_proposal_drafts/);
+  assert.match(m.statements[9].sql,/enkyron_crm_billing_worksheets/);
+  assert.match(m.statements[9].sql,/enkyron_crm_invoice_drafts/);
+  assert.match(m.statements[9].sql,/enkyron_crm_proposal_commercial_terms/);
+  assert.match(m.statements[9].sql,/commercial_terms_draft/);
+  assert.match(m.statements[9].sql,/enkyron_crm_proposal_buyer_reviews/);
+  assert.match(m.statements[9].sql,/buyer_documentary_review/);
+  assert.match(m.statements[9].sql,/enkyron_crm_proposal_internal_decisions/);
+  assert.match(m.statements[9].sql,/internal_proposal_decision/);
+  assert.doesNotMatch(m.statements[9].sql,/b[.]legal_name|b[.]registered_address|b[.]review_note|b[.]source_reference|d[.]review_note/);
+  assert.doesNotMatch(m.statements[9].sql,/t[.]payment_terms|t[.]delivery_terms|t[.]source_reference|t[.]exclusions|t[.]assumptions/);
+  assert.match(m.statements[9].sql,/internal_unaccepted_draft/);
+  for(const sql of [m.statements[5],m.statements[6],m.statements[8],m.statements[9]].map(q=>q.sql)){
+    assert.match(sql,/enkyron_crm_prospect_links/);
+    assert.match(sql,/workspace_key/);
+  }
+  for(const index of [6,8]){
+    assert.match(m.statements[index].sql,/company_id=[$]2 OR EXISTS/);
+    assert.match(m.statements[index].sql,/enkyron_crm_opportunities/);
+  }
+});
+test('reject invalid operator, bad ID, missing company, and malformed counts',async()=>{
+  const m=mockDatabase();
+  await assert.rejects(()=>getCompanyDossier(m.db,'bad','ci-operator'),/CRM/);
+  await assert.rejects(()=>getCompanyDossier(m.db,company,'operator name'),/CRM/);
+  assert.equal(m.statements.length,0);
+  for(const option of [{notFound:true},{badSection:'contacts'}]){
+    const n=mockDatabase(option);
+    await assert.rejects(()=>getCompanyDossier(n.db,company,'ci-operator'),/CRM/);
+    assert.equal(n.statements.at(-1).sql,'ROLLBACK');
+    assert.equal(n.released(),1);
+  }
+});
+test('missing schema reports unavailable and does not invent company data',async()=>{
+  const m=mockDatabase({missing:true});
+  const res=await getCompanyDossier(m.db,company,'ci-operator');
+  assert.equal(res.available,false);
+  assert.ok(!res.company);
+  assert.equal(m.statements.at(-1).sql,'ROLLBACK');
+  assert.equal(m.released(),1);
+});
+test('preview is capped at twenty entries while retaining exact counts',async()=>{
+  const queries=[];
+  const db={connect:async()=>({
+    query:async(sql,params)=>{
+      queries.push(sql);
+      if(sql.startsWith('SELECT id,name,legal_name'))
+        return {rows:[{id:company,name:'Capped Company'}]};
+      if(sql.startsWith('SELECT id,full_name,job_title,email'))
+        return {rows:Array.from({length:21},(_,i)=>({
+          id:'c'+i,full_name:'Person '+i,total_rows:'22'
+        }))};
+      return {rows:[]};
+    },release:()=>{}
+  })};
+  const result=await getCompanyDossier(db,company,'ci-operator');
+  assert.equal(result.sections.contacts.total,22);
+  assert.equal(result.sections.contacts.items.length,20);
+  assert.equal(result.sections.contacts.more,true);
+  assert.equal('total_rows' in result.sections.contacts.items[0],false);
+});
+
+test('messages display oldest to newest within the most recent twenty without hiding the latest',async()=>{
+  const db={connect:async()=>({
+    query:async(sql)=>{
+      if(sql.startsWith('SELECT id,name,legal_name'))
+        return {rows:[{id:company,name:'Threat ResQ'}]};
+      if(sql.includes('FROM enkyron_crm_activities a'))
+        return {rows:Array.from({length:21},(_,i)=>({
+          id:'message-'+(21-i),
+          detail:i===0?'Most recent LinkedIn reply':'Earlier operator note',
+          total_rows:'24'
+        }))};
+      return {rows:[]};
+    },
+    release:()=>{}
+  })};
+  const result=await getCompanyDossier(db,company,'ci-operator');
+  const messages=result.sections.activities;
+  assert.equal(messages.total,24);
+  assert.equal(messages.more,true);
+  assert.equal(messages.items.length,20);
+  assert.equal(messages.items[0].id,'message-2');
+  assert.equal(messages.items.at(-1).id,'message-21');
+  assert.equal(messages.items.at(-1).detail,'Most recent LinkedIn reply');
+});

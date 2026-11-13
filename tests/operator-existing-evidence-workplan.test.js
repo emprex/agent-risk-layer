@@ -53,6 +53,35 @@ test('read-only canonical evidence workplan exposes only bounded counts and work
   assert.equal(out.readinessDecision,'not_evaluated');
   assert.doesNotMatch(JSON.stringify(out),/SECRETVALUE|CUSTOMER_UNTRUSTED_EVIDENCE|untrusted_human/);
 });
+test('evidence workplan gives exact authoritative workflow stages, not an implicit 108-control exclusion',()=>{
+  const zero={...summary,controlsReviewed:0,excludedControls:108,criterionCount:0,
+    packs:[],summary:{
+      staticCandidates:0,staticMissing:0,humanRequirements:0,
+      runtimeRequirements:0,sourceLineageIssues:0,
+      staticSourcePackets:0,humanDocumentPackets:0,
+      runtimeValidationPackets:0,manualReviewPackets:0
+    },
+    queueLanes:{
+      human_applicability:108,follow_up_blocked:0,
+      test_planning:0,evidence_collection:0,human_decision:0,review_required:0
+    }
+  };
+  const make=(payload)=>existingEvidenceWorkplan({...input,requests:{
+    canonicalData:{...requests.canonicalData,assessmentEvidenceRequestSummary:payload}
+  }});
+  const out=make(zero);
+  assert.equal(out.available,true);
+  assert.equal(out.assessmentControls,0);
+  assert.equal(out.otherWorkflowControls,108);
+  assert.equal(out.queueLanes.human_applicability,108);
+  assert.equal(out.queueLanes.evidence_collection,0);
+  assert.equal(out.packs.length,0);
+  assert.throws(()=>make({...zero,queueLanes:{...zero.queueLanes,review_required:1}}),
+    /work queue stages/);
+  assert.throws(()=>make({...zero,queueLanes:{...zero.queueLanes,human_applicability:107,test_planning:1}}),
+    /work queue stages/);
+});
+
 test('missing binding is never bootstrapped or interpreted as completed review',()=>{
   const out=existingEvidenceWorkplan({frozenRevision:SHA});
   assert.equal(out.available,false);
