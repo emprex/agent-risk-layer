@@ -8024,7 +8024,10 @@ class EnkyronWindow(QMainWindow):
                 close.clicked.connect(editor.reject)
                 save = QPushButton("Save reviewed revision 2")
                 save.setObjectName("crmScopeRevisionSave")
-                save.setObjectName("primary")
+                save.setStyleSheet(
+                    "QPushButton#crmScopeRevisionSave { "
+                    "background: #076978; color: white; }"
+                )
                 footer.addWidget(close)
                 footer.addStretch()
                 footer.addWidget(save)
