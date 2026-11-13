@@ -22,7 +22,7 @@ export async function getSalesPipeline(pool,actor){
   try{
     const result=await pool.query(
       "WITH grouped AS ("
-      +"SELECT id,prospect_id,company_name_at_creation,stage,next_action,"
+      +"SELECT id,prospect_id,company_id,owner_local,company_name_at_creation,stage,next_action,"
       +"due_date,probability_percent,version,updated_at,"
       +"CASE WHEN stage IN ('research','qualified') THEN 'prospecting' "
       +"WHEN stage IN ('contact_planned','contacted','discovery') THEN 'engagement' "
@@ -33,7 +33,7 @@ export async function getSalesPipeline(pool,actor){
       +"SELECT *,count(*) OVER (PARTITION BY lane)::integer AS lane_total,"
       +"row_number() OVER (PARTITION BY lane ORDER BY updated_at DESC,id) AS lane_rank "
       +"FROM grouped"
-      +") SELECT id,prospect_id,company_name_at_creation,stage,next_action,due_date,"
+      +") SELECT id,prospect_id,company_id,owner_local,company_name_at_creation,stage,next_action,due_date,"
       +"probability_percent,version,updated_at,lane,lane_total "
       +"FROM ranked WHERE lane_rank <= 30 "
       +"ORDER BY CASE lane WHEN 'prospecting' THEN 1 "
@@ -59,6 +59,7 @@ export async function getSalesPipeline(pool,actor){
       lane.total=row.lane_total;
       lane.items.push({
         id:row.id,prospect_id:row.prospect_id,
+        company_id:row.company_id??null,owner_local:row.owner_local??null,
         company_name_at_creation:row.company_name_at_creation,
         stage:row.stage,next_action:row.next_action,due_date:row.due_date,
         probability_percent:row.probability_percent??null,version:row.version,updated_at:row.updated_at

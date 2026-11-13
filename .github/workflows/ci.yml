@@ -127,6 +127,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/postgres-ci-integration.test.js
 
+      - name: ENK-04 full-text proposal revision preservation — disposable PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-proposal-content-revisions-postgres.test.js
+
       - name: ENKYRON client desk PostgreSQL owner/archive roundtrip
         env:
           CI: 'true'

@@ -8,7 +8,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QDate, QEvent, QTime
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_calendar_view import _local_datetime
 
@@ -101,6 +101,52 @@ class LocalOfficeSmoke(unittest.TestCase):
             self.assertIsNone(popout.parent())
             self.assertFalse(popout.isModal())
             self.assertFalse(any(x[0] == "mail-send-draft" for x in calls))
+        finally:
+            self.dispose(window)
+            DesktopBridge.call = old
+
+    def test_home_shortcuts_reuse_existing_native_modules_without_writes(self):
+        old = DesktopBridge.call
+        calls = []
+
+        def fake(_self, command, arg="", payload=None, callback=None):
+            # No transport, PostgreSQL, or ARL process starts in this fixture.
+            calls.append(command)
+
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            self.assertEqual(window.pages.count(), 4)
+            self.assertEqual(window.navigation.count(), 5)
+            routes = [
+                ("enkyronHomeOpenTickets", 1, 1, None),
+                ("enkyronHomeOpenCRM", 2, 2, 0),
+                ("enkyronHomeOpenMail", 3, 2, 3),
+                ("enkyronHomeOpenCalendar", 4, 3, None),
+            ]
+            for object_name, nav_index, page_index, crm_tab in routes:
+                with self.subTest(shortcut=object_name):
+                    window.navigation.setCurrentRow(0)
+                    button = window.findChild(QPushButton, object_name)
+                    self.assertIsNotNone(button)
+                    self.assertGreaterEqual(button.minimumHeight(), 44)
+                    button.click()
+                    self.assertEqual(window.navigation.currentRow(), nav_index)
+                    self.assertEqual(window.pages.currentIndex(), page_index)
+                    if crm_tab is not None:
+                        self.assertEqual(window.crm_tabs.currentIndex(), crm_tab)
+
+            mutation_commands = {
+                "create-ticket", "note", "ticket-status", "crm-create-company",
+                "crm-create-opportunity", "calendar-create",
+                "calendar-task-create", "calendar-task-complete",
+                "mail-send-draft", "mail-reply-draft",
+                "assessment-link", "master-init-record",
+                "control-applicability-save",
+            }
+            self.assertFalse(mutation_commands.intersection(calls),
+                             "Home shortcuts must not mutate records")
         finally:
             self.dispose(window)
             DesktopBridge.call = old

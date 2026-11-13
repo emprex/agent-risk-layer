@@ -6,6 +6,7 @@ import hashlib
 from email.utils import parseaddr
 from datetime import datetime, timezone
 import json
+import os
 import re
 from decimal import Decimal, InvalidOperation
 import sys
@@ -219,6 +220,24 @@ class DesktopBridge:
             if callback:
                 callback(None, "ENKYRON is closing")
             return
+        # Synthetic UX preview is not a laboratory execution environment.
+        # This gate runs BEFORE QProcess creation, including the direct Python
+        # pilot bridge that does not pass through the Node UAT allowlist.
+        if os.environ.get("ENKYRON_UX_PREVIEW_READ_ONLY") == "1":
+            if action in ("pilot-lab-run", "pilot-lab-status",
+                          "operator-state", "evidence-summary", "evidence-pack"):
+                if callback:
+                    callback(None, "Read-only synthetic UX preview blocks "
+                                   "laboratory and assessment adapters")
+                return
+        # ARL master readers use separate Python adapters. They must not
+        # accidentally inspect the live assessment DB during synthetic UAT.
+        if (os.environ.get("ENKYRON_UAT_DATABASE") is not None
+                or os.environ.get("ENKYRON_UAT_GUARD") is not None):
+            if action in ("operator-state", "evidence-summary", "evidence-pack"):
+                if callback:
+                    callback(None, "Assessment adapters disabled in ENK-03 UAT")
+                return
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
         if action in ("operator-state", "evidence-summary", "evidence-pack"):
@@ -330,6 +349,11 @@ class EnkyronWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ENKYRON — Agent Security Engineering | AgentRiskLayer")
+        self.ux_preview_read_only = (
+            os.environ.get("ENKYRON_UX_PREVIEW_READ_ONLY") == "1"
+        )
+        if self.ux_preview_read_only:
+            self.setWindowTitle("ENKYRON · SYNTHETIC PREVIEW · READ ONLY")
         self.resize(1360, 840)
         self.setMinimumSize(920, 620)
         self.bridge = DesktopBridge(self)
@@ -388,8 +412,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
         self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_uncertain = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
+        self.crm_qualification_saving = False
+        self.crm_qualification_uncertain = False
+        self.crm_qualification_flash = ""
         self.crm_ticket_seq = 0
         self.crm_ticket_items = []
         self.crm_link_dialog = None
@@ -424,6 +452,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_items = []
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
+        self.crm_scope_correction_dialog = None
+        self.crm_proposal_history_dialog = None
+        self.crm_scope_revision_uncertain = False
         self.crm_issue_preflight_dialog = None
         self.crm_quote_evidence_dialog = None
         self.crm_quote_evidence_context = None
@@ -502,6 +533,20 @@ class EnkyronWindow(QMainWindow):
         self.operator_profile_state = None
         self.operator_profile_dialog = None
         outer.addWidget(top)
+        if self.ux_preview_read_only:
+            preview_notice = QLabel(
+                "SYNTHETIC UX PREVIEW · READ ONLY · No commercial changes, "
+                "laboratory runs, mail sends or live assessment. "
+                "Review company history and archived proposal versions only."
+            )
+            preview_notice.setObjectName("enkyronReadOnlyPreviewBanner")
+            preview_notice.setWordWrap(True)
+            preview_notice.setStyleSheet(
+                "background: #1d3542; color: #e1f4f4; "
+                "font-weight: 600; padding: 10px 18px;"
+            )
+            outer.addWidget(preview_notice)
+            self.account_profile_button.setEnabled(False)
 
         # Application-level navigation; the ticket list is no longer the main menu.
         workspace = QHBoxLayout()
@@ -518,6 +563,13 @@ class EnkyronWindow(QMainWindow):
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
         self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
+        if self.ux_preview_read_only:
+            # Mail/Calendar are outside this synthetic commercial review and
+            # would only lead to an unavailable service/error. Keep CRM visible.
+            for index in (3, 4):
+                item = self.navigation.item(index)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                item.setToolTip("Unavailable in synthetic read-only preview")
         self.navigation.setMaximumHeight(255)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
@@ -529,21 +581,43 @@ class EnkyronWindow(QMainWindow):
         home = QWidget()
         home_l = QVBoxLayout(home)
         home_l.setContentsMargins(32, 28, 32, 20)
-        home_l.addWidget(section_title("ENKYRON · OPERATOR WORKSPACE"))
+        home_l.addWidget(section_title("MY WORK"))
         introduction = QLabel(
-            "Your native AgentRiskLayer work environment.\n"
-            "Tickets and commercial prospect research are separate records. "
-            "No assessment or external communication runs automatically."
+            "Choose a workspace to continue your work. Open a client request, "
+            "manage a sales relationship, review mail or plan appointments. "
+            "Nothing is sent or approved just by opening a workspace."
         )
         introduction.setWordWrap(True)
         home_l.addWidget(introduction)
-        go_tickets = QPushButton("Open Client Desk")
+        home_l.addWidget(section_title("START WORKING"))
+
+        # Shortcuts reuse the existing module navigation and read-only loaders.
+        # Do not introduce new business actions, records or permission shortcuts.
+        quick_actions_top = QHBoxLayout()
+        go_tickets = QPushButton("Tickets · client requests")
+        go_tickets.setObjectName("enkyronHomeOpenTickets")
+        go_tickets.setMinimumHeight(44)
         go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
-        home_l.addWidget(go_tickets, alignment=Qt.AlignmentFlag.AlignLeft)
-        go_mail = QPushButton("Open Mail")
+        quick_actions_top.addWidget(go_tickets, 1)
+        go_crm = QPushButton("Clients && CRM · sales")
+        go_crm.setObjectName("enkyronHomeOpenCRM")
+        go_crm.setMinimumHeight(44)
+        go_crm.clicked.connect(lambda: self.navigation.setCurrentRow(2))
+        quick_actions_top.addWidget(go_crm, 1)
+        home_l.addLayout(quick_actions_top)
+
+        quick_actions_bottom = QHBoxLayout()
+        go_mail = QPushButton("Mail · conversations")
         go_mail.setObjectName("enkyronHomeOpenMail")
+        go_mail.setMinimumHeight(44)
         go_mail.clicked.connect(lambda: self.navigation.setCurrentRow(3))
-        home_l.addWidget(go_mail, alignment=Qt.AlignmentFlag.AlignLeft)
+        quick_actions_bottom.addWidget(go_mail, 1)
+        go_calendar = QPushButton("Calendar · appointments && tasks")
+        go_calendar.setObjectName("enkyronHomeOpenCalendar")
+        go_calendar.setMinimumHeight(44)
+        go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
+        quick_actions_bottom.addWidget(go_calendar, 1)
+        home_l.addLayout(quick_actions_bottom)
 
         overview_header = QHBoxLayout()
         overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
@@ -576,7 +650,22 @@ class EnkyronWindow(QMainWindow):
         self.sales_overview_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
-        home_l.addWidget(self.sales_overview_table, 1)
+        self.sales_overview_table.setVisible(False)
+        home_l.addWidget(self.sales_overview_table, 10)
+        # Display an intentional empty/error/loading state instead of a
+        # blank, full-height table when no priority rows are returned.
+        self.sales_overview_empty = QLabel("Loading opportunity follow-ups…")
+        self.sales_overview_empty.setObjectName("enkyronHomeEmptyFollowups")
+        self.sales_overview_empty.setTextFormat(Qt.TextFormat.PlainText)
+        self.sales_overview_empty.setWordWrap(True)
+        self.sales_overview_empty.setMinimumHeight(105)
+        self.sales_overview_empty.setMaximumHeight(150)
+        self.sales_overview_empty.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.sales_overview_empty.setStyleSheet(
+            "background: #f5f9fc; border: 1px solid #d8e2ea; "
+            "border-radius: 6px; padding: 16px 18px; color: #34495e;"
+        )
+        home_l.addWidget(self.sales_overview_empty)
         # Opportunity and company-owned follow-ups are distinct records.
         # Give both a direct Home entry, without inventing combined counts.
         followups_actions = QHBoxLayout()
@@ -591,6 +680,8 @@ class EnkyronWindow(QMainWindow):
         )
         followups_actions.addWidget(self.home_company_followups_button)
         home_l.addLayout(followups_actions)
+        # Let the background absorb spare space when the table is hidden.
+        home_l.addStretch(1)
         self.pages.addWidget(home)
 
         ticket_page = QWidget()
@@ -1101,9 +1192,6 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_search.setPlaceholderText("Search registered companies…")
         self.crm_company_search.setMaxLength(100)
         company_toolbar.addWidget(self.crm_company_search, 1)
-        company_refresh = QPushButton("Refresh")
-        company_refresh.clicked.connect(self.load_companies)
-        company_toolbar.addWidget(company_refresh)
         self.crm_company_add = QPushButton("+ Add company")
         self.crm_company_add.setObjectName("primary")
         self.crm_company_add.setEnabled(False)
@@ -3879,9 +3967,10 @@ class EnkyronWindow(QMainWindow):
         if index == 0:
             self.load_sales_overview()
         if index == 2:
+            # Returning to CRM automatically reloads companies once.
+            # Canonical-ID selection is preserved across list reloads.
             self.crm_tabs.setCurrentIndex(0)
-            if not self.crm_company_loaded:
-                self.load_companies()
+            self.load_companies()
             if not self.crm_loaded:
                 self.load_prospects()
             if not self.crm_followup_loaded:
@@ -4063,6 +4152,9 @@ class EnkyronWindow(QMainWindow):
         self.sales_overview_metrics.setText("Loading commercial overview…")
         self.sales_overview_attention.clear()
         self.sales_overview_table.setRowCount(0)
+        self.sales_overview_table.setVisible(False)
+        self.sales_overview_empty.setText("Loading opportunity follow-ups…")
+        self.sales_overview_empty.setVisible(True)
 
         def received(data, error):
             if seq != self.sales_overview_seq:
@@ -4073,6 +4165,10 @@ class EnkyronWindow(QMainWindow):
                     error or (data or {}).get(
                         "notice", "Commercial overview is unavailable."
                     )
+                )
+                self.sales_overview_empty.setText(
+                    "Opportunity follow-ups cannot be displayed. "
+                    "Review the commercial overview error above."
                 )
                 return
             numbers = data["overview"]
@@ -4094,6 +4190,14 @@ class EnkyronWindow(QMainWindow):
             )
             priorities = numbers.get("priority_items", [])
             self.sales_overview_table.setRowCount(len(priorities))
+            self.sales_overview_table.setVisible(bool(priorities))
+            self.sales_overview_empty.setVisible(not bool(priorities))
+            if not priorities:
+                self.sales_overview_empty.setText(
+                    "No upcoming opportunity follow-ups in this view. "
+                    "Open Opportunity follow-ups below to review or schedule "
+                    "the next action. Company-owned follow-ups are separate."
+                )
             for row, item in enumerate(priorities):
                 values = [
                     item.get("company_name_at_creation") or "",
@@ -4135,6 +4239,14 @@ class EnkyronWindow(QMainWindow):
             if request_seq != self.crm_company_seq:
                 return
             self.crm_company_loaded = True
+            # Preserve the operator's exact company identity on a successful
+            # refresh. A deliberate post-create/edit selection takes priority.
+            # Never use the displayed company name as a matching key.
+            selected_company_id = (
+                self.crm_pending_company_id
+                if self.crm_pending_company_id is not None
+                else self.crm_company_id
+            )
             self.crm_company_items = []
             self.crm_company_table.blockSignals(True)
             self.crm_company_table.setRowCount(0)
@@ -4174,7 +4286,6 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_items = data.get("items", [])
             self.crm_company_table.blockSignals(True)
             self.crm_company_table.setRowCount(len(self.crm_company_items))
-            pending = self.crm_pending_company_id
             chosen = -1
             for row, company in enumerate(self.crm_company_items):
                 values = [
@@ -4190,7 +4301,7 @@ class EnkyronWindow(QMainWindow):
                     self.crm_company_table.setItem(
                         row, col, QTableWidgetItem(str(val))
                     )
-                if pending and pending == company.get("id"):
+                if selected_company_id and selected_company_id == company.get("id"):
                     chosen = row
             self.crm_company_table.blockSignals(False)
             self.crm_pending_company_id = None
@@ -4255,6 +4366,20 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
+        self.refresh_selected_company_contacts(company_id)
+
+    def refresh_selected_company_contacts(self, company_id):
+        """Re-read contacts for the EXACT currently selected CRM company.
+
+        Used after a confirmed dossier contact save. Stale callbacks must
+        never render another company's contacts, including same-name firms.
+        """
+        row = self.crm_company_table.currentRow()
+        if (not company_id or company_id != self.crm_company_id
+                or row < 0 or row >= len(self.crm_company_items)
+                or self.crm_company_items[row].get("id") != company_id):
+            return
+        company = self.crm_company_items[row]
         self.crm_contact_seq += 1
         seq = self.crm_contact_seq
         self.crm_contacts_table.setRowCount(0)
@@ -5455,7 +5580,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_followups.clicked.connect(
             lambda: self.open_company_followups(self.crm_dossier_company_id)
         )
-        heading_row.addWidget(self.crm_dossier_company_followups)
+        # The follow-up action belongs with its recorded context, not
+        # among the global dossier header controls.
         layout.addLayout(heading_row)
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
@@ -5472,10 +5598,38 @@ class EnkyronWindow(QMainWindow):
             "font-weight: bold; padding: 4px 0;"
         )
         layout.addWidget(self.crm_dossier_glance)
+        # ENK-01A: give the recorded human follow-up a readable hierarchy.
+        # The existing callbacks still supply the exact canonical text.
+        next_action_card = QFrame()
+        next_action_card.setObjectName("crmDossierNextActionCard")
+        next_action_card.setMaximumWidth(1120)
+        next_action_card.setStyleSheet(
+            "QFrame#crmDossierNextActionCard { background: #f0f8fa; "
+            "border: 1px solid #a7cbd2; border-left: 4px solid #176e81; "
+            "border-radius: 6px; }"
+        )
+        next_action_layout = QVBoxLayout(next_action_card)
+        next_action_layout.setContentsMargins(16, 10, 16, 12)
+        next_action_layout.setSpacing(5)
+        next_action_title = QLabel("NEXT ACTION")
+        next_action_title.setObjectName("crmDossierNextActionTitle")
+        next_action_title.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #176e81; border: 0;"
+        )
+        next_action_layout.addWidget(next_action_title)
         self.crm_dossier_next_action = QLabel("")
+        self.crm_dossier_next_action.setObjectName("crmDossierNextActionText")
         self.crm_dossier_next_action.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_next_action.setWordWrap(True)
-        layout.addWidget(self.crm_dossier_next_action)
+        self.crm_dossier_next_action.setStyleSheet(
+            "font-size: 14px; font-weight: 600; color: #20354a; border: 0;"
+        )
+        next_action_layout.addWidget(self.crm_dossier_next_action)
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        action_row.addWidget(self.crm_dossier_company_followups)
+        next_action_layout.addLayout(action_row)
+        layout.addWidget(next_action_card)
         self.crm_dossier_notice = QLabel(
             "Internal CRM records: notes are not verified sent messages, "
             "and drafts are not signed contracts or issued invoices."
@@ -5486,8 +5640,8 @@ class EnkyronWindow(QMainWindow):
         # Frequent tasks stay visible; extra sections are always one toggle away.
         self.crm_dossier_show_all = QCheckBox("Show all sections")
         self.crm_dossier_show_all.setToolTip(
-            "Include research links, commercial documents, ticket history "
-            "and audit sections, even when empty."
+            "Include optional research and commercial sections, even when empty. "
+            "Company History remains visible separately."
         )
         self.crm_dossier_show_all.toggled.connect(
             self.update_dossier_section_visibility
@@ -5541,8 +5695,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
         self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_uncertain = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
+        self.crm_qualification_saving = False
+        self.crm_qualification_uncertain = False
+        self.crm_qualification_flash = ""
         self.crm_dossier_followup_editor = None
         self.crm_dossier_followup_saving = False
         self.crm_dossier_contact_editor = None
@@ -5552,6 +5710,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_snapshot = None
         self.crm_dossier_company_editor = None
         self.crm_dossier_company_pending = False
+        self.crm_dossier_opportunity_saving = False
+        self.crm_dossier_opportunity_check_id = None
+        # Transport errors may hide a committed write: keep this dossier
+        # fail-closed until the operator reviews and reopens it.
+        self.crm_dossier_opportunity_uncertain = False
         dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
@@ -5661,6 +5824,8 @@ class EnkyronWindow(QMainWindow):
             def received(data, error):
                 if (not dialog.isVisible() or sequence != state["seq"]):
                     return
+                previous_item = selected()
+                previous_id = previous_item.get("id") if previous_item else None
                 state["items"] = []
                 table.setRowCount(0)
                 if error or not data or not data.get("available"):
@@ -5690,6 +5855,16 @@ class EnkyronWindow(QMainWindow):
                     )
                     for col, value in enumerate(values):
                         table.setItem(row, col, QTableWidgetItem(str(value)))
+                if company_id:
+                    restore_row = next(
+                        (index for index, item in enumerate(state["items"])
+                         if previous_id and item.get("id") == previous_id),
+                        -1
+                    )
+                    if restore_row < 0 and len(state["items"]) == 1:
+                        restore_row = 0
+                    if restore_row >= 0:
+                        table.selectRow(restore_row)
                 notice.setText(
                     "Showing {} company follow-ups{}".format(
                         len(state["items"]),
@@ -5701,13 +5876,17 @@ class EnkyronWindow(QMainWindow):
 
         def load_selected():
             item = selected()
-            if company_id and item is not None:
-                action.setText(item.get("action_text") or "")
-                date = QDate.fromString(
-                    str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
-                )
-                if date.isValid():
-                    due.setDate(date)
+            if company_id:
+                if item is None:
+                    action.clear()
+                    due.setDate(QDate.currentDate().addDays(7))
+                else:
+                    action.setText(item.get("action_text") or "")
+                    date = QDate.fromString(
+                        str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
+                    )
+                    if date.isValid():
+                        due.setDate(date)
                 confirmation.setChecked(False)
             controls()
 
@@ -5973,9 +6152,11 @@ class EnkyronWindow(QMainWindow):
                 ("provider_submitted", "external_send_reported")):
             return True, ["Finish the open email draft before closing the dossier"]
         if (self.crm_dossier_activity_saving
+                or self.crm_qualification_saving
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
-                or self.crm_dossier_company_pending):
+                or self.crm_dossier_company_pending
+                or getattr(self, "crm_dossier_opportunity_saving", False)):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
         if self.crm_dossier_company_editor is not None:
@@ -6055,7 +6236,7 @@ class EnkyronWindow(QMainWindow):
         if not getattr(self, "crm_dossier_nav", None):
             return
         show_all = self.crm_dossier_show_all.isChecked()
-        primary = {"contacts", "opportunities", "qualifications", "activities"}
+        primary = {"contacts", "opportunities", "qualifications", "activities", "company_history"}
         # When folding advanced sections away, do not leave the content of a
         # hidden section on screen with no visible corresponding selection.
         if not show_all:
@@ -6072,6 +6253,12 @@ class EnkyronWindow(QMainWindow):
         dialog = self.crm_dossier_dialog
         company_id = self.crm_dossier_company_id
         if not dialog or not dialog.isVisible() or not company_id:
+            return
+        if self.crm_dossier_opportunity_saving:
+            QMessageBox.information(
+                dialog, "CRM save in progress",
+                "Review the opportunity save result before refreshing."
+            )
             return
         if self.crm_dossier_followup_editor is not None:
             QMessageBox.information(
@@ -6106,6 +6293,28 @@ class EnkyronWindow(QMainWindow):
                         "notice", "Company dossier is unavailable."
                     )
                 )
+                if getattr(self, "crm_dossier_opportunity_check_id", None):
+                    self.status.setText(
+                        "Opportunity write acknowledged; dossier re-read unavailable. "
+                        "Inspect CRM records before retrying."
+                    )
+                if self.crm_dossier_opportunity_uncertain:
+                    self.status.setText(
+                        "Opportunity save outcome uncertain; dossier unavailable. "
+                        "Inspect company records before another attempt."
+                    )
+                return
+            if (not isinstance(data.get("company"), dict)
+                    or data["company"].get("id") != company_id):
+                self.crm_dossier_notice.setText(
+                    "CRM dossier identity mismatch. No company details loaded."
+                )
+                if (self.crm_dossier_opportunity_check_id is not None
+                        or self.crm_dossier_opportunity_uncertain):
+                    self.status.setText(
+                        "Opportunity save not verified: company identity mismatch. "
+                        "Review company records before retrying."
+                    )
                 return
             company = data["company"]
             self.crm_dossier_company_snapshot = dict(company)
@@ -6144,16 +6353,43 @@ class EnkyronWindow(QMainWindow):
                     section_count("activities"), section_count("commercial_docs")
                 )
             )
-            opportunities = (sections.get("opportunities") or {}).get("items") or []
+            opportunity_section = sections.get("opportunities") or {}
+            opportunities = opportunity_section.get("items") or []
+            if self.crm_dossier_opportunity_uncertain:
+                self.status.setText(
+                    "Previous opportunity save outcome uncertain; review the "
+                    "visible company records and history before retrying."
+                )
+            awaiting_id = getattr(self, "crm_dossier_opportunity_check_id", None)
+            if awaiting_id:
+                verified = any(
+                    item.get("opportunity_id") == awaiting_id
+                    and item.get("company_id") == company_id
+                    for item in opportunities
+                )
+                if verified:
+                    self.crm_dossier_opportunity_check_id = None
+                    self.status.setText(
+                        "CRM opportunity verified in this company dossier. "
+                        "No service ticket created."
+                    )
+                else:
+                    self.status.setText(
+                        "Opportunity write acknowledged, but not confirmed in this "
+                        "dossier preview. Review the full CRM record before retrying."
+                    )
             next_action = next(
                 (str(item.get("next_action")).strip() for item in opportunities
                  if item.get("next_action") and str(item.get("next_action")).strip()),
                 None
             )
-            self.crm_dossier_next_action.setText(
-                "Latest recorded follow-up: " + next_action
+            opportunity_action = (
+                "Opportunity next action: " + next_action
                 if next_action else
-                "No next action recorded in the visible opportunities."
+                "No opportunity next action recorded."
+            )
+            self.crm_dossier_next_action.setText(
+                "Checking company follow-ups… " + opportunity_action
             )
             # Company tasks are independent of commercial opportunities.
             # Guard against stale callbacks when a dossier is refreshed.
@@ -6162,6 +6398,10 @@ class EnkyronWindow(QMainWindow):
                         or company_id != self.crm_dossier_company_id):
                     return
                 if error or not result or not result.get("available"):
+                    self.crm_dossier_next_action.setText(
+                        "Company follow-up status unavailable. "
+                        + opportunity_action
+                    )
                     return
                 open_tasks = [
                     item for item in result.get("items", [])
@@ -6174,6 +6414,10 @@ class EnkyronWindow(QMainWindow):
                             format_followup_due(task.get("due_date"), "research"),
                             task.get("action_text") or ""
                         )
+                    )
+                else:
+                    self.crm_dossier_next_action.setText(
+                        "No open company follow-ups. " + opportunity_action
                     )
             self.bridge.call(
                 "crm-company-followups", company_id,
@@ -6219,20 +6463,13 @@ class EnkyronWindow(QMainWindow):
                     ("Status", "status"), ("Revision", "revision"),
                     ("Recorded", "recorded_at"), ("Proposal ID", "proposal_id")
                 ]),
-                ("ticket_history", "Ticket history", [
-                    ("Ticket", "ticket_number"), ("Record", "record_kind"),
-                    ("Type", "record_type"), ("Operator", "actor"),
-                    ("Recorded", "recorded_at"), ("Source ID", "source_id")
-                ]),
-                ("audit_events", "CRM audit", [
-                    ("Record", "resource_kind"), ("Action", "event_type"),
-                    ("Record ID", "resource_id"), ("Operator", "actor_local"),
-                    ("Recorded", "created_at")
-                ]),
-                ("audit_changes", "Field changes", [
-                    ("Record", "resource_kind"), ("Record ID", "resource_id"),
-                    ("Version", "new_version"), ("Fields", "changed_fields"),
-                    ("Operator", "actor_local"), ("Recorded", "recorded_at")
+                # One human-readable chronological audit per company.
+                # Original source events remain append-only and independent.
+                ("company_history", "Company History", [
+                    ("Recorded", "recorded_at"), ("Record", "resource_kind"),
+                    ("Action", "action"), ("Summary", "summary"),
+                    ("Operator", "actor_local"), ("Record ID", "resource_id"),
+                    ("Event ID", "event_id")
                 ])
             ]
             # Keep an unsaved activity draft when the operator refreshes.
@@ -6272,7 +6509,7 @@ class EnkyronWindow(QMainWindow):
                     )
                     ticket_notice.setWordWrap(True)
                     page_layout.addWidget(ticket_notice)
-                if section.get("more"):
+                if section.get("more") and section_id != "company_history":
                     limit_notice = QLabel(
                         "Showing first {} of {} records. "
                         "Use the corresponding CRM view for more.".format(
@@ -6375,6 +6612,13 @@ class EnkyronWindow(QMainWindow):
                     )
                     qualification_hint.setWordWrap(True)
                     page_layout.addWidget(qualification_hint)
+                    if self.crm_qualification_flash:
+                        verified_note = QLabel(self.crm_qualification_flash)
+                        verified_note.setObjectName("crmQualificationVerifiedNotice")
+                        verified_note.setTextFormat(Qt.TextFormat.PlainText)
+                        verified_note.setWordWrap(True)
+                        page_layout.addWidget(verified_note)
+                        self.crm_qualification_flash = ""
                     review_form = QFormLayout()
                     self.crm_qualification_subject = QComboBox()
                     self.crm_qualification_subject.addItem(
@@ -6436,6 +6680,10 @@ class EnkyronWindow(QMainWindow):
                     review_footer.addStretch()
                     self.crm_qualification_save = QPushButton("Record review")
                     self.crm_qualification_save.setObjectName("primary")
+                    self.crm_qualification_save.setEnabled(
+                        not self.crm_qualification_saving
+                        and not self.crm_qualification_uncertain
+                    )
                     self.crm_qualification_save.clicked.connect(
                         self.record_company_qualification
                     )
@@ -6471,6 +6719,48 @@ class EnkyronWindow(QMainWindow):
                             add_contact.setMaximumWidth(190)
                             page_layout.addWidget(
                                 add_contact, alignment=Qt.AlignmentFlag.AlignRight
+                            )
+                        else:
+                            # ENK-03: reuse the existing company-only write path.
+                            # No ticket, contact or assessment is created.
+                            add_opportunity = QPushButton("New opportunity")
+                            add_opportunity.setObjectName("crmDossierNewOpportunity")
+                            add_opportunity.setMaximumWidth(190)
+                            # Mirror the backend's company-only uniqueness rule
+                            # for visible records; backend remains authoritative.
+                            direct_exists = any(
+                                item.get("company_id") == company_id
+                                and item.get("source_ticket_id") is None
+                                for item in rows
+                            )
+                            add_opportunity.setEnabled(
+                                not self.crm_dossier_opportunity_saving
+                                and self.crm_dossier_opportunity_check_id is None
+                                and not self.crm_dossier_opportunity_uncertain
+                                and not direct_exists
+                            )
+                            if direct_exists:
+                                add_opportunity.setText("Opportunity already recorded")
+                                # The disabled label is longer than the 190px action
+                                # control. Fit this one status to its real font size;
+                                # do not enlarge the regular New opportunity button.
+                                add_opportunity.setFixedWidth(max(
+                                    add_opportunity.sizeHint().width(),
+                                    add_opportunity.fontMetrics().horizontalAdvance(
+                                        add_opportunity.text()
+                                    ) + 44
+                                ))
+                                add_opportunity.setToolTip(
+                                    "Use the existing opportunity above. "
+                                    "No duplicate company-only lead is created."
+                                )
+                            add_opportunity.clicked.connect(
+                                lambda _checked=False, scoped_company=company_id:
+                                self.open_dossier_direct_opportunity(scoped_company)
+                            )
+                            page_layout.addWidget(
+                                add_opportunity,
+                                alignment=Qt.AlignmentFlag.AlignRight
                             )
                         if not rows:
                             empty = QLabel(
@@ -6573,11 +6863,316 @@ class EnkyronWindow(QMainWindow):
                                 content.addWidget(
                                     edit, alignment=Qt.AlignmentFlag.AlignRight
                                 )
+                                # ENK-04: one clearly named, read-only
+                                # handoff check in this same company dossier.
+                                # No proposal or document is created here.
+                                preparation = QPushButton(
+                                    "Check proposal preparation…"
+                                )
+                                preparation.setObjectName(
+                                    "crmDossierProposalPreparation"
+                                )
+                                preparation.setToolTip(
+                                    "Read-only review of this company's "
+                                    "opportunity, qualification and drafts. "
+                                    "This does not create or issue a proposal."
+                                )
+                                preparation.setEnabled(
+                                    isinstance(item.get("opportunity_id"), str)
+                                    and item.get("company_id") == company_id
+                                    and item.get("source_ticket_id") is None
+                                )
+                                preparation.clicked.connect(
+                                    lambda _checked=False, record=item,
+                                           scoped_company=company_id:
+                                    self.review_dossier_proposal_preparation(
+                                        record, scoped_company
+                                    )
+                                )
+                                content.addWidget(
+                                    preparation,
+                                    alignment=Qt.AlignmentFlag.AlignRight
+                                )
+                                new_draft = QPushButton(
+                                    "Prepare internal draft…"
+                                )
+                                new_draft.setObjectName(
+                                    "crmDossierPrepareInternalDraft"
+                                )
+                                new_draft.setToolTip(
+                                    "Opens a human-priced, unsent draft only "
+                                    "after a fresh company qualification check. "
+                                    "No email, quote or contract is issued."
+                                )
+                                new_draft.setEnabled(preparation.isEnabled())
+                                new_draft.clicked.connect(
+                                    lambda _checked=False, record=item,
+                                           scoped_company=company_id:
+                                    self.open_dossier_internal_proposal(
+                                        record, scoped_company
+                                    )
+                                )
+                                content.addWidget(
+                                    new_draft,
+                                    alignment=Qt.AlignmentFlag.AlignRight
+                                )
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
+                    elif section_id == "company_history":
+                        # A readable, expandable story: one company, one history,
+                        # chronological by default. Page reads are scoped by
+                        # immutable IDs; no interpretation of a contact's name.
+                        state = {
+                            "items": list(reversed(rows)) if count <= 20 else [],
+                            "page": 0, "total": count, "order": "oldest",
+                            "pending": False, "request": 0,
+                            "expanded": None
+                        }
+                        story_header = QHBoxLayout()
+                        story_title = QLabel("COMPANY STORY")
+                        story_title.setStyleSheet("font-weight: bold;")
+                        story_header.addWidget(story_title)
+                        story_header.addStretch()
+                        story_order = QComboBox()
+                        story_order.setObjectName("crmCompanyHistoryOrder")
+                        story_order.addItem("Oldest first", "oldest")
+                        story_order.addItem("Newest first", "newest")
+                        story_order.setToolTip(
+                            "Change reading order without changing stored events."
+                        )
+                        story_header.addWidget(story_order)
+                        page_layout.addLayout(story_header)
+
+                        story_scroll = QScrollArea()
+                        story_scroll.setObjectName("crmCompanyHistoryStory")
+                        story_scroll.setWidgetResizable(True)
+                        story_scroll.setFrameShape(QFrame.Shape.NoFrame)
+                        story_container = QWidget()
+                        story_cards = QVBoxLayout(story_container)
+                        story_cards.setContentsMargins(5, 4, 5, 4)
+                        story_cards.setSpacing(9)
+                        story_scroll.setWidget(story_container)
+                        page_layout.addWidget(story_scroll, 1)
+
+                        controls = QHBoxLayout()
+                        previous = QPushButton("Previous page")
+                        previous.setObjectName("crmCompanyHistoryPrevious")
+                        following = QPushButton("Next page")
+                        following.setObjectName("crmCompanyHistoryNext")
+                        page_status = QLabel("")
+                        page_status.setObjectName("crmCompanyHistoryPageStatus")
+                        controls.addWidget(previous)
+                        controls.addWidget(page_status)
+                        controls.addWidget(following)
+                        controls.addStretch()
+                        page_layout.addLayout(controls)
+
+                        def render_story(data=state, cards=story_cards):
+                            while cards.count():
+                                item = cards.takeAt(0)
+                                widget = item.widget()
+                                if widget is not None:
+                                    widget.setParent(None)
+                                    widget.deleteLater()
+                            if not data["items"]:
+                                info = QLabel(
+                                    "Loading history…" if data["pending"]
+                                    else "No recorded events on this page."
+                                )
+                                info.setObjectName("crmCompanyHistoryEmpty")
+                                cards.addWidget(info)
+                            for index, event in enumerate(data["items"]):
+                                event_id = str(event.get("event_id") or "")
+                                absolute_number = data["page"] * 20 + index + 1
+                                record_kind = str(event.get("resource_kind") or "Record")
+                                action = str(event.get("action") or "recorded")
+                                date = display_date(event.get("recorded_at"))
+                                actor = str(event.get("actor_local") or "Unknown")
+                                summary = str(event.get("summary") or "")
+                                card = QFrame()
+                                card.setObjectName("crmCompanyHistoryCard")
+                                card.setStyleSheet(
+                                    "QFrame#crmCompanyHistoryCard { "
+                                    "background: #f7fafc; border: 1px solid #d5e2ea; "
+                                    "border-radius: 6px; }"
+                                )
+                                content = QVBoxLayout(card)
+                                content.setContentsMargins(12, 8, 12, 9)
+                                content.setSpacing(4)
+                                heading = QPushButton(
+                                    "{}. {} · {}     {}".format(
+                                        absolute_number,
+                                        record_kind.replace("_", " ").title(),
+                                        action.replace("_", " ").title(), date
+                                    )
+                                )
+                                heading.setObjectName("crmCompanyHistoryExpand")
+                                heading.setToolTip("Click to expand or collapse this event")
+                                heading.setStyleSheet(
+                                    "text-align: left; font-weight: bold;"
+                                )
+                                content.addWidget(heading)
+                                short = QLabel(
+                                    summary if len(summary) <= 140
+                                    else summary[:137] + "…"
+                                )
+                                short.setObjectName("crmCompanyHistoryPreview")
+                                short.setTextFormat(Qt.TextFormat.PlainText)
+                                short.setWordWrap(True)
+                                content.addWidget(short)
+                                if data["expanded"] == event_id:
+                                    full = QLabel(
+                                        "Recorded by: {}\n\n"
+                                        "Full recorded summary:\n{}\n\n"
+                                        "Record ID: {}\nEvent ID: {}".format(
+                                            actor, summary,
+                                            event.get("resource_id") or "", event_id
+                                        )
+                                    )
+                                    full.setObjectName("crmCompanyHistoryDetail")
+                                    full.setTextFormat(Qt.TextFormat.PlainText)
+                                    full.setWordWrap(True)
+                                    full.setTextInteractionFlags(
+                                        Qt.TextInteractionFlag.TextSelectableByMouse
+                                    )
+                                    full.setStyleSheet(
+                                        "background: white; padding: 8px; "
+                                        "border-radius: 4px;"
+                                    )
+                                    content.addWidget(full)
+                                heading.clicked.connect(
+                                    lambda _checked=False, ident=event_id,
+                                           data_ref=data:
+                                    expand_event(ident, data_ref)
+                                )
+                                cards.addWidget(card)
+                            cards.addStretch()
+
+                        def expand_event(ident, data=state):
+                            data["expanded"] = (
+                                None if data["expanded"] == ident else ident
+                            )
+                            render_story()
+
+                        def update_history_navigation(
+                                data=state, prev=previous, nex=following,
+                                status=page_status):
+                            start = data["page"] * 20
+                            end = start + len(data["items"])
+                            status.setText(
+                                "Loading events…" if data["pending"] else
+                                "Events {}–{} of {}".format(
+                                    start + 1 if end else 0, end, data["total"]
+                                )
+                            )
+                            prev.setEnabled(
+                                not data["pending"] and data["page"] > 0
+                            )
+                            nex.setEnabled(
+                                not data["pending"] and end < data["total"]
+                            )
+
+                        def load_history_page(
+                                target, data=state, company_scope=company_id,
+                                window=dialog, load_seq=seq):
+                            if target < 0 or target > 10000:
+                                return
+                            if data["pending"]:
+                                return
+                            data["pending"] = True
+                            data["request"] += 1
+                            request = data["request"]
+                            order = data["order"]
+                            update_history_navigation()
+                            if not data["items"]:
+                                render_story()
+
+                            def received_page(result, error):
+                                if (not window.isVisible()
+                                        or load_seq != self.crm_dossier_seq
+                                        or company_scope != self.crm_dossier_company_id
+                                        or data["request"] != request
+                                        or data["order"] != order):
+                                    return
+                                data["pending"] = False
+                                if (error or not isinstance(result, dict)
+                                        or not result.get("available")
+                                        or result.get("page") != target
+                                        or result.get("order") != order
+                                        or not isinstance(result.get("items"), list)):
+                                    data["items"] = []
+                                    render_story()
+                                    update_history_navigation()
+                                    page_status.setText(
+                                        "History unavailable — no data changed."
+                                    )
+                                    return
+                                data["page"] = target
+                                data["items"] = result["items"]
+                                data["total"] = int(result.get("total", 0))
+                                data["expanded"] = (
+                                    str(data["items"][0].get("event_id"))
+                                    if data["items"] else None
+                                )
+                                render_story()
+                                update_history_navigation()
+
+                            self.bridge.call(
+                                "crm-company-history",
+                                payload={"company_id": company_scope,
+                                         "page": target, "order": order},
+                                callback=received_page
+                            )
+
+                        def change_history_order(
+                                _index, data=state, initial=rows):
+                            requested = story_order.currentData()
+                            if requested == data["order"]:
+                                return
+                            data["request"] += 1  # Invalidate old callbacks.
+                            data["pending"] = False
+                            data["order"] = requested
+                            data["page"] = 0
+                            data["expanded"] = None
+                            if data["total"] <= 20:
+                                data["items"] = (
+                                    list(reversed(initial))
+                                    if requested == "oldest" else list(initial)
+                                )
+                                data["expanded"] = (
+                                    str(data["items"][0].get("event_id"))
+                                    if data["items"] else None
+                                )
+                                render_story()
+                                update_history_navigation()
+                            else:
+                                data["items"] = []
+                                render_story()
+                                load_history_page(0)
+
+                        story_order.currentIndexChanged.connect(
+                            change_history_order
+                        )
+                        previous.clicked.connect(
+                            lambda _checked=False: load_history_page(
+                                state["page"] - 1
+                            )
+                        )
+                        following.clicked.connect(
+                            lambda _checked=False: load_history_page(
+                                state["page"] + 1
+                            )
+                        )
+                        if state["items"]:
+                            state["expanded"] = str(
+                                state["items"][0].get("event_id")
+                            )
+                        render_story()
+                        update_history_navigation()
+                        if count > 20:
+                            load_history_page(0)
                     elif section_id in {
-                        "prospects", "tickets", "drafts",
-                        "ticket_history", "audit_events", "audit_changes"
+                        "prospects", "tickets", "drafts"
                     } and len(rows) <= 4:
                         if not rows:
                             empty_hints = {
@@ -6605,9 +7200,20 @@ class EnkyronWindow(QMainWindow):
                     page_layout.insertWidget(0, guidance)
                     commercial_buttons = QHBoxLayout()
                     open_source = QPushButton("Open source proposal…")
+                    view_revisions = QPushButton("View draft revisions…")
+                    view_revisions.setObjectName("crmDossierViewRevisions")
+                    view_revisions.setToolTip("Read-only full-text revision archive and human review reasons. Nothing is edited or issued.")
+                    correct_scope = QPushButton("Correct draft scope (new revision)…")
+                    correct_scope.setObjectName("crmDossierCorrectScope")
+                    correct_scope.setToolTip(
+                        "Archives the full original draft before a manually "
+                        "reviewed scope-only edit. Does not change the fee or issue anything."
+                    )
                     open_invoice = QPushButton("Open invoice draft…")
                     review_invoice = QPushButton("Review invoice blockers…")
                     commercial_buttons.addWidget(open_source)
+                    commercial_buttons.addWidget(view_revisions)
+                    commercial_buttons.addWidget(correct_scope)
                     commercial_buttons.addWidget(open_invoice)
                     commercial_buttons.addWidget(review_invoice)
                     commercial_buttons.addStretch()
@@ -6623,6 +7229,23 @@ class EnkyronWindow(QMainWindow):
                             "unissued_invoice_draft" and document.get("document_id")
                         )
                         open_source.setEnabled(bool(document and document.get("proposal_id")))
+                        is_proposal = bool(
+                            document and document.get("document_kind") == "proposal_draft"
+                            and document.get("proposal_id")
+                        )
+                        view_revisions.setEnabled(is_proposal)
+                        # The reviewed editor is deliberately R1 -> R2 only.
+                        # Do not offer a misleading edit action on an existing R2.
+                        correct_scope.setEnabled(bool(
+                            is_proposal and document.get("revision") == 1
+                            and not self.crm_scope_revision_uncertain
+                        ))
+                        if is_proposal and document.get("revision") != 1:
+                            correct_scope.setToolTip(
+                                "Revision 2 is already recorded. Review its full "
+                                "history here; another edit requires a new "
+                                "human-reviewed workflow."
+                            )
                         open_invoice.setEnabled(is_invoice)
                         review_invoice.setEnabled(is_invoice)
 
@@ -6630,6 +7253,23 @@ class EnkyronWindow(QMainWindow):
                         document = selected_document()
                         if document and document.get("proposal_id"):
                             self.open_dossier_source_proposal(document["proposal_id"])
+
+                    def view_source_revisions():
+                        document = selected_document()
+                        if (document and document.get("document_kind") == "proposal_draft"
+                                and document.get("proposal_id")):
+                            self.open_dossier_proposal_history(
+                                document["proposal_id"], company_id
+                            )
+
+                    def correct_source_document():
+                        document = selected_document()
+                        if (document and document.get("document_kind") == "proposal_draft"
+                                and document.get("proposal_id")
+                                and not self.crm_scope_revision_uncertain):
+                            self.open_dossier_scope_correction(
+                                document["proposal_id"], company_id
+                            )
 
                     def open_invoice_document(review=False):
                         document = selected_document()
@@ -6639,6 +7279,8 @@ class EnkyronWindow(QMainWindow):
 
                     table.itemSelectionChanged.connect(update_document_actions)
                     open_source.clicked.connect(open_source_document)
+                    view_revisions.clicked.connect(view_source_revisions)
+                    correct_scope.clicked.connect(correct_source_document)
                     open_invoice.clicked.connect(lambda: open_invoice_document(False))
                     review_invoice.clicked.connect(lambda: open_invoice_document(True))
                     page_layout.addLayout(commercial_buttons)
@@ -7126,6 +7768,9 @@ class EnkyronWindow(QMainWindow):
                 return
             finish()
             self.refresh_company_dossier()
+            # After a confirmed save, keep the parent Companies & Contacts
+            # pane consistent without asking the operator to press Refresh.
+            self.refresh_selected_company_contacts(company_id)
 
         def submit():
             if (state["pending"] or state["failed"] or
@@ -7406,6 +8051,7 @@ class EnkyronWindow(QMainWindow):
             and (opportunity is None
                  or opportunity in self.crm_dossier_activity_opportunity_ids)
             and not self.crm_dossier_activity_saving
+            and not self.crm_dossier_activity_uncertain
             and self.crm_dossier_activity_record.isChecked()
             and 10 <= len(detail) <= 2000
             and self.crm_dossier_activity_confirm.isChecked()
@@ -7419,6 +8065,7 @@ class EnkyronWindow(QMainWindow):
         if (not dialog or not dialog.isVisible() or
                 self.crm_dossier_activity_company_id != company_id or
                 self.crm_dossier_activity_saving or
+                self.crm_dossier_activity_uncertain or
                 not self.crm_dossier_activity_save.isEnabled()):
             return
         opportunity_id = self.crm_dossier_activity_opportunity.currentData()
@@ -7444,22 +8091,82 @@ class EnkyronWindow(QMainWindow):
                     or not dialog.isVisible()
                     or company_id != self.crm_dossier_company_id):
                 return
-            self.crm_dossier_activity_saving = False
-            if error or not result or not result.get("id"):
-                QMessageBox.warning(
-                    dialog, "Save not confirmed",
-                    "Check the activity history before trying again to avoid "
-                    "duplicate records. " + str(error or "")
-                )
-                self.update_dossier_activity_save()
-                return
-            self.crm_dossier_activity_flash = (
-                "Activity saved to CRM. No external message was sent."
+
+            expected_target = (
+                ("company_id", company_id) if opportunity_id is None
+                else ("opportunity_id", opportunity_id)
             )
-            self.crm_dossier_activity_record.setChecked(False)
-            self.crm_dossier_activity_detail.clear()
-            self.crm_dossier_activity_confirm.setChecked(False)
-            self.refresh_company_dossier()
+            returned_id = (result or {}).get("id") if isinstance(result, dict) else None
+            valid_ack = (
+                not error and isinstance(result, dict)
+                and isinstance(returned_id, str)
+                and result.get(expected_target[0]) == expected_target[1]
+                and result.get(
+                    "opportunity_id" if opportunity_id is None else "company_id"
+                ) is None
+                and result.get("activity_type") == payload["activity_type"]
+            )
+            if not valid_ack:
+                # An IPC error may occur after COMMIT. Prevent blind duplicate
+                # appends until the operator manually inspects the record.
+                self.crm_dossier_activity_saving = False
+                self.crm_dossier_activity_uncertain = True
+                self.update_dossier_activity_save()
+                QMessageBox.warning(
+                    dialog, "Activity save not verified",
+                    "The write outcome is uncertain. Inspect Company History "
+                    "and activity records before reopening this editor. "
+                    "No automatic retry was sent. " + str(error or "")
+                )
+                return
+
+            def verified(latest, check_error):
+                if (dialog is not self.crm_dossier_dialog
+                        or not dialog.isVisible()
+                        or company_id != self.crm_dossier_company_id):
+                    return
+                company = (latest or {}).get("company") if isinstance(latest, dict) else None
+                sections = (latest or {}).get("sections") if isinstance(latest, dict) else None
+                activities = (sections or {}).get("activities") or {}
+                rows = activities.get("items") or []
+                matches = [
+                    item for item in rows
+                    if isinstance(item, dict) and item.get("id") == returned_id
+                ] if isinstance(rows, list) else []
+                valid_record = (
+                    not check_error and latest.get("available") is True
+                    and isinstance(company, dict) and company.get("id") == company_id
+                    and len(matches) == 1
+                    and matches[0].get(expected_target[0]) == expected_target[1]
+                    and matches[0].get(
+                        "opportunity_id" if opportunity_id is None else "company_id"
+                    ) is None
+                    and matches[0].get("activity_type") == payload["activity_type"]
+                    and matches[0].get("detail") == payload["detail"]
+                ) if isinstance(latest, dict) else False
+                self.crm_dossier_activity_saving = False
+                if not valid_record:
+                    self.crm_dossier_activity_uncertain = True
+                    self.update_dossier_activity_save()
+                    QMessageBox.warning(
+                        dialog, "Activity readback not verified",
+                        "The exact activity ID, target company and note were "
+                        "not confirmed by a fresh dossier read. Inspect the "
+                        "history before another attempt. No retry was sent."
+                    )
+                    return
+                self.crm_dossier_activity_uncertain = False
+                self.crm_dossier_activity_flash = (
+                    "Activity verified in Company 360. No external message was sent."
+                )
+                self.crm_dossier_activity_record.setChecked(False)
+                self.crm_dossier_activity_detail.clear()
+                self.crm_dossier_activity_confirm.setChecked(False)
+                self.refresh_company_dossier()
+
+            self.bridge.call(
+                "crm-company-dossier", company_id, callback=verified
+            )
 
         self.bridge.call("crm-record-activity", payload=payload, callback=saved)
 
@@ -7483,6 +8190,490 @@ class EnkyronWindow(QMainWindow):
             self.show_proposal_dialog(proposal)
 
         self.bridge.call("crm-proposal", proposal_id, callback=received)
+
+    def open_dossier_proposal_history(self, proposal_id, company_id):
+        """Read full immutable proposal revisions without any business write."""
+        dossier = self.crm_dossier_dialog
+        if (not dossier or not dossier.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or not proposal_id):
+            return
+        existing = self.crm_proposal_history_dialog
+        if existing and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        def received(history, error):
+            if (dossier is not self.crm_dossier_dialog
+                    or not dossier.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            if (error or not isinstance(history, dict)
+                    or history.get("available") is not True
+                    or history.get("company_id") != company_id
+                    or history.get("proposal_id") != proposal_id
+                    or not isinstance(history.get("current_revision"), int)
+                    or history["current_revision"] < 1
+                    or not isinstance(history.get("versions"), list)):
+                QMessageBox.warning(
+                    dossier, "Draft revision history unavailable",
+                    "The exact company, proposal and immutable history "
+                    "could not be verified. No data was changed."
+                )
+                return
+            current_revision = history["current_revision"]
+            versions = history["versions"]
+            # Historical full text only exists from the first controlled edit.
+            # A revised draft must not masquerade as having a complete archive.
+            numbers = [v.get("revision") if isinstance(v, dict) else None
+                       for v in versions]
+            if ((current_revision > 1 and
+                 numbers != list(range(1, current_revision + 1)))
+                    or (current_revision == 1 and bool(versions))):
+                QMessageBox.warning(
+                    dossier, "Incomplete revision history",
+                    "The complete version sequence is not available. "
+                    "No versions have been invented and nothing was changed."
+                )
+                return
+            for version in versions:
+                revision = version["revision"]
+                sha = version.get("content_sha256")
+                if (not isinstance(version.get("title"), str)
+                        or not isinstance(version.get("scope_text"), str)
+                        or not isinstance(version.get("currency"), str)
+                        or not isinstance(version.get("amount_minor"), (int, str))
+                        or not isinstance(version.get("source_event_id"), str)
+                        or not isinstance(version.get("recorded_by"), str)
+                        or not isinstance(sha, str)
+                        or re.fullmatch(r"[a-f0-9]{64}", sha) is None
+                        or version.get("snapshot_kind") != (
+                            "pre_edit_archive" if revision == 1 else "reviewed_revision"
+                        )):
+                    QMessageBox.warning(
+                        dossier, "Invalid revision archive",
+                        "A stored version is incomplete or inconsistent. "
+                        "No content will be displayed as verified."
+                    )
+                    return
+
+            window = QDialog(dossier)
+            window.setWindowTitle("ENKYRON · Full draft revision history (read only)")
+            window.setMinimumSize(760, 590)
+            layout = QVBoxLayout(window)
+            notice = QLabel(
+                "Stored full-text versions for the selected company draft. "
+                "This is an internal, unsent proposal. Stored SHA-256 values "
+                "are audit references, not digital signatures. No editing, "
+                "sending or contractual approval is available here."
+            )
+            notice.setWordWrap(True)
+            layout.addWidget(notice)
+            summary = QLabel(
+                "Current revision: {} · Full-text archives: {}\n"
+                "Proposal ID: {}".format(
+                    current_revision, len(versions), proposal_id
+                )
+            )
+            summary.setObjectName("crmProposalRevisionHistorySummary")
+            summary.setWordWrap(True)
+            layout.addWidget(summary)
+            # Each stored revision is shown in its own read-only pane.
+            # Never concatenate or normalize historical scope_text: the
+            # original R1 artefacts must remain inspectable exactly as saved.
+            tabs = QTabWidget()
+            tabs.setObjectName("crmProposalRevisionTabs")
+            if not versions:
+                empty = QPlainTextEdit()
+                empty.setObjectName("crmProposalRevisionTextR1")
+                empty.setReadOnly(True)
+                empty.setPlainText(
+                    "Revision 1 is the current unsent draft. No previous "
+                    "full-text archive exists yet. Use Open source proposal "
+                    "to view the current document."
+                )
+                tabs.addTab(empty, "R1 · No archive yet")
+            for version in versions:
+                revision = version["revision"]
+                reason = version.get("review_note") or (
+                    "Original text archived before the first human-reviewed edit."
+                    if revision == 1 else "Not recorded"
+                )
+                minor_units = str(version["amount_minor"])
+                if (not re.fullmatch(r"[0-9]{1,18}", minor_units)
+                        or (version["currency"] == "GBP"
+                            and int(minor_units) < 1)):
+                    QMessageBox.warning(
+                        dossier, "Invalid revision price",
+                        "A stored archive price is not a valid amount. "
+                        "No history was changed."
+                    )
+                    return
+                if version["currency"] == "GBP":
+                    price = "£{:,.2f}".format(
+                        Decimal(minor_units) / Decimal(100)
+                    )
+                else:
+                    # Keep original minor-unit representation for any other
+                    # currency: minor-unit scales vary by ISO currency.
+                    price = "{} {} minor units".format(
+                        version["currency"], minor_units
+                    )
+                pane = QWidget()
+                pane_layout = QVBoxLayout(pane)
+                rationale = QLabel(
+                    ("Original archive" if revision == 1 else
+                     "HUMAN REVIEW REASON") + "\n" + reason
+                )
+                rationale.setObjectName(
+                    "crmProposalRevisionReasonR{}".format(revision)
+                )
+                rationale.setWordWrap(True)
+                rationale.setTextInteractionFlags(
+                    Qt.TextInteractionFlag.TextSelectableByMouse
+                )
+                pane_layout.addWidget(rationale)
+                metadata = QLabel(
+                    "Title: {}\nLocked price: {} · {} minor units\n"
+                    "Recorded: {} · Operator: {}\n"
+                    "Source event ID: {}\nStored SHA-256: {}"
+                    .format(version["title"], price, minor_units,
+                            version.get("recorded_at", ""),
+                            version["recorded_by"],
+                            version["source_event_id"],
+                            version["content_sha256"])
+                )
+                metadata.setObjectName(
+                    "crmProposalRevisionMetadataR{}".format(revision)
+                )
+                metadata.setWordWrap(True)
+                metadata.setTextInteractionFlags(
+                    Qt.TextInteractionFlag.TextSelectableByMouse
+                )
+                pane_layout.addWidget(metadata)
+                full_text = QPlainTextEdit()
+                full_text.setObjectName(
+                    "crmProposalRevisionTextR{}".format(revision)
+                )
+                full_text.setReadOnly(True)
+                full_text.setPlainText(version["scope_text"])
+                pane_layout.addWidget(full_text, 1)
+                tabs.addTab(
+                    pane,
+                    "R{} · {}".format(
+                        revision, "Original archive" if revision == 1
+                        else "Reviewed revision"
+                    )
+                )
+            if versions:
+                tabs.setCurrentIndex(len(versions) - 1)
+            layout.addWidget(tabs, 1)
+            close = QPushButton("Close history")
+            close.clicked.connect(window.reject)
+            layout.addWidget(close)
+            self.crm_proposal_history_dialog = window
+            window.finished.connect(
+                lambda _result: setattr(self, "crm_proposal_history_dialog", None)
+            )
+            window.open()
+
+        self.bridge.call(
+            "crm-company-proposal-versions",
+            company_id + ":" + proposal_id,
+            callback=received
+        )
+
+    def open_dossier_scope_correction(self, proposal_id, company_id):
+        """Open a scope-only, full-content version-preserving correction."""
+        dossier = self.crm_dossier_dialog
+        if (not dossier or not dossier.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or self.crm_scope_revision_uncertain):
+            return
+        existing = self.crm_scope_correction_dialog
+        if existing and existing.isVisible():
+            existing.raise_()
+            return
+
+        def original_received(data, error):
+            if (dossier is not self.crm_dossier_dialog
+                    or not dossier.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            proposal = (data or {}).get("proposal") if isinstance(data, dict) else None
+            if (error or not isinstance(proposal, dict)
+                    or data.get("available") is not True
+                    or proposal.get("id") != proposal_id
+                    or proposal.get("company_id") != company_id
+                    or not isinstance(proposal.get("opportunity_id"), str)
+                    or not isinstance(proposal.get("revision"), int)
+                    or proposal["revision"] < 1
+                    or not isinstance(proposal.get("scope_text"), str)
+                    or not isinstance(proposal.get("title"), str)
+                    or not isinstance(proposal.get("currency"), str)):
+                QMessageBox.warning(
+                    dossier, "Draft correction unavailable",
+                    "The exact company draft could not be verified. "
+                    "No revision was created."
+                )
+                return
+
+            def history_received(history, history_error):
+                if (dossier is not self.crm_dossier_dialog
+                        or not dossier.isVisible()
+                        or company_id != self.crm_dossier_company_id):
+                    return
+                if (history_error or not isinstance(history, dict)
+                        or history.get("available") is not True
+                        or history.get("company_id") != company_id
+                        or history.get("proposal_id") != proposal_id
+                        or history.get("current_revision") != proposal["revision"]
+                        or not isinstance(history.get("versions"), list)):
+                    QMessageBox.warning(
+                        dossier, "Immutable history unavailable",
+                        "The new immutable revision archive could not be "
+                        "verified. Check migration 114 on the synthetic UAT "
+                        "database. No document was changed."
+                    )
+                    return
+                # This UAT exercise must be the *first* correction of R1.
+                if proposal["revision"] != 1 or history["versions"]:
+                    QMessageBox.warning(
+                        dossier, "Correction requires fresh review",
+                        "This exercise supports exactly the first reviewed "
+                        "revision 1 → 2. No document was changed."
+                    )
+                    return
+
+                editor = QDialog(dossier)
+                editor.setWindowTitle("ENKYRON · Correct draft scope (revision 2)")
+                editor.setMinimumSize(760, 680)
+                layout = QVBoxLayout(editor)
+                context = QLabel(
+                    "Company: " + str(company_id) + "\n"
+                    "Draft: " + str(proposal_id) + "\n"
+                    "Current revision: 1 · Next revision: 2\n"
+                    "Price: " + str(proposal["currency"]) + " " +
+                    "{:.2f}".format(int(proposal["amount_minor"]) / 100) +
+                    " (LOCKED — not editable)\n"
+                    "No quote, contract, external message or test is authorised."
+                )
+                context.setWordWrap(True)
+                layout.addWidget(context)
+                layout.addWidget(section_title(
+                    "ORIGINAL SCOPE · REVISION 1 (READ ONLY)"
+                ))
+                original = QPlainTextEdit()
+                original.setObjectName("crmScopeRevisionOriginal")
+                original.setReadOnly(True)
+                original.setPlainText(proposal["scope_text"])
+                original.setMaximumHeight(140)
+                layout.addWidget(original)
+                layout.addWidget(section_title(
+                    "CORRECTED SCOPE · REVISION 2 (HUMAN REVIEW)"
+                ))
+                revised = QPlainTextEdit()
+                revised.setObjectName("crmScopeRevisionNewText")
+                revised.setPlainText(proposal["scope_text"])
+                revised.setPlaceholderText(
+                    "Keep the internal UAT notice. Separate paragraphs and "
+                    "remove pasted interface text such as Copier le texte."
+                )
+                layout.addWidget(revised, 1)
+                note = QPlainTextEdit()
+                note.setObjectName("crmScopeRevisionReason")
+                note.setPlaceholderText(
+                    "Explain what you changed and why (30–600 characters)."
+                )
+                note.setMaximumHeight(78)
+                layout.addWidget(note)
+                confirmed = QCheckBox(
+                    "I reviewed both versions. This only corrects the scope "
+                    "of an unsent internal draft; the price stays unchanged."
+                )
+                confirmed.setObjectName("crmScopeRevisionHumanConfirmed")
+                layout.addWidget(confirmed)
+                footer = QHBoxLayout()
+                close = QPushButton("Close without saving")
+                close.clicked.connect(editor.reject)
+                save = QPushButton("Save reviewed revision 2")
+                save.setObjectName("crmScopeRevisionSave")
+                save.setStyleSheet(
+                    "QPushButton#crmScopeRevisionSave { "
+                    "background: #076978; color: white; }"
+                )
+                footer.addWidget(close)
+                footer.addStretch()
+                footer.addWidget(save)
+                layout.addLayout(footer)
+                state = {"pending": False}
+                self.crm_scope_correction_dialog = editor
+                editor.finished.connect(
+                    lambda _result: setattr(self, "crm_scope_correction_dialog", None)
+                )
+
+                def unverified(label):
+                    state["pending"] = False
+                    self.crm_scope_revision_uncertain = True
+                    save.setEnabled(False)
+                    QMessageBox.warning(
+                        editor, label,
+                        "The saved outcome may already exist. Inspect the "
+                        "exact proposal revision and immutable history in "
+                        "PostgreSQL before trying again. No retry was sent."
+                    )
+
+                def save_reviewed():
+                    if (not editor.isVisible() or state["pending"]
+                            or self.crm_scope_revision_uncertain
+                            or company_id != self.crm_dossier_company_id):
+                        return
+                    new_scope = revised.toPlainText().strip()
+                    reason = note.toPlainText().strip()
+                    if (not 20 <= len(new_scope) <= 5000
+                            or new_scope == proposal["scope_text"]
+                            or "copier le texte" in new_scope.lower()
+                            or "\n\n" not in new_scope
+                            or not 30 <= len(reason) <= 600
+                            or not confirmed.isChecked()):
+                        QMessageBox.warning(
+                            editor, "Correction not ready",
+                            "Separate paragraphs with blank lines, remove "
+                            "Copier le texte, explain the change in 30–600 "
+                            "characters, and confirm your human review."
+                        )
+                        return
+                    human = QMessageBox.question(
+                        editor, "Confirm scope correction only",
+                        "Save reviewed scope revision 2 for this exact company?\n"
+                        "The original full text remains immutable as revision 1.\n"
+                        "The fee stays " + proposal["currency"] + " " +
+                        "{:.2f}".format(int(proposal["amount_minor"]) / 100) +
+                        ".\nNo proposal will be issued or sent.",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    if human != QMessageBox.StandardButton.Yes:
+                        return
+                    payload = {
+                        "proposal_id": proposal_id,
+                        "company_id": company_id,
+                        "opportunity_id": proposal["opportunity_id"],
+                        "expected_revision": 1,
+                        "scope_text": new_scope,
+                        "review_note": reason,
+                        "confirmed": True
+                    }
+                    state["pending"] = True
+                    save.setEnabled(False)
+
+                    def saved(ack, write_error):
+                        if not editor.isVisible() or company_id != self.crm_dossier_company_id:
+                            return
+                        correct_ack = (
+                            not write_error and isinstance(ack, dict)
+                            and ack.get("id") == proposal_id
+                            and ack.get("company_id") == company_id
+                            and ack.get("opportunity_id") == proposal["opportunity_id"]
+                            and ack.get("previous_revision") == 1
+                            and ack.get("revision") == 2
+                            and ack.get("currency") == proposal["currency"]
+                            and str(ack.get("amount_minor")) ==
+                                str(proposal["amount_minor"])
+                            and isinstance(ack.get("previous_snapshot_id"), str)
+                            and isinstance(ack.get("new_snapshot_id"), str)
+                        )
+                        if not correct_ack:
+                            unverified("Scope revision save not verified")
+                            return
+
+                        def current_received(current, current_error):
+                            if not editor.isVisible() or company_id != self.crm_dossier_company_id:
+                                return
+                            draft = (current or {}).get("proposal") if isinstance(current, dict) else None
+                            correct_draft = (
+                                not current_error and isinstance(draft, dict)
+                                and current.get("available") is True
+                                and draft.get("id") == proposal_id
+                                and draft.get("company_id") == company_id
+                                and draft.get("opportunity_id") == proposal["opportunity_id"]
+                                and draft.get("revision") == 2
+                                and draft.get("title") == proposal["title"]
+                                and draft.get("currency") == proposal["currency"]
+                                and str(draft.get("amount_minor")) ==
+                                    str(proposal["amount_minor"])
+                                and draft.get("scope_text") == new_scope
+                            )
+                            if not correct_draft:
+                                unverified("Corrected draft readback not verified")
+                                return
+
+                            def versions_received(versions, versions_error):
+                                if not editor.isVisible() or company_id != self.crm_dossier_company_id:
+                                    return
+                                items = (versions or {}).get("versions") if isinstance(versions, dict) else None
+                                correct_versions = (
+                                    not versions_error and isinstance(versions, dict)
+                                    and versions.get("available") is True
+                                    and versions.get("company_id") == company_id
+                                    and versions.get("proposal_id") == proposal_id
+                                    and versions.get("current_revision") == 2
+                                    and isinstance(items, list) and len(items) == 2
+                                    and items[0].get("revision") == 1
+                                    and items[0].get("id") == ack["previous_snapshot_id"]
+                                    and items[0].get("scope_text") == proposal["scope_text"]
+                                    and items[0].get("content_sha256") ==
+                                        ack.get("previous_content_sha256")
+                                    and items[1].get("revision") == 2
+                                    and items[1].get("id") == ack["new_snapshot_id"]
+                                    and items[1].get("scope_text") == new_scope
+                                    and items[1].get("content_sha256") ==
+                                        ack.get("content_sha256")
+                                    and items[1].get("review_note") == reason
+                                    and all(x.get("title") == proposal["title"]
+                                            and x.get("currency") == proposal["currency"]
+                                            and str(x.get("amount_minor")) ==
+                                                str(proposal["amount_minor"])
+                                            for x in items)
+                                )
+                                if not correct_versions:
+                                    unverified("Immutable history readback not verified")
+                                    return
+                                state["pending"] = False
+                                editor.accept()
+                                self.refresh_company_dossier()
+                                self.load_proposals()
+                                QMessageBox.information(
+                                    self, "Scope revision 2 verified",
+                                    "Both full-text revisions and their exact "
+                                    "hashes were verified in the same company. "
+                                    "The fee is unchanged; nothing was issued."
+                                )
+
+                            self.bridge.call(
+                                "crm-company-proposal-versions",
+                                company_id + ":" + proposal_id,
+                                callback=versions_received
+                            )
+
+                        self.bridge.call(
+                            "crm-proposal", proposal_id, callback=current_received
+                        )
+
+                    self.bridge.call(
+                        "crm-company-proposal-revise", payload=payload, callback=saved
+                    )
+
+                save.clicked.connect(save_reviewed)
+                editor.open()
+
+            self.bridge.call(
+                "crm-company-proposal-versions", company_id + ":" + proposal_id,
+                callback=history_received
+            )
+
+        self.bridge.call("crm-proposal", proposal_id, callback=original_received)
 
     def open_dossier_invoice(self, draft_id, review=False):
         if not draft_id:
@@ -7510,9 +8701,154 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call(command, draft_id, callback=received)
 
-    def record_company_qualification(self):
+    def review_dossier_proposal_preparation(self, record, company_id):
+        """Advisory exact-ID, read-only review. No proposal is generated."""
         dialog = self.crm_dossier_dialog
-        if not dialog or not dialog.isVisible() or not self.crm_dossier_company_id:
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id):
+            return
+        opportunity_id = record.get("opportunity_id") if isinstance(record, dict) else None
+        if (not isinstance(opportunity_id, str)
+                or record.get("company_id") != company_id
+                or record.get("source_ticket_id") is not None):
+            QMessageBox.warning(
+                dialog, "Preparation unavailable",
+                "Choose a directly linked company opportunity in this dossier."
+            )
+            return
+        identifier = company_id + ":" + opportunity_id
+
+        def received(data, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            if (error or not isinstance(data, dict) or not data.get("available")
+                    or data.get("company_id") != company_id
+                    or data.get("opportunity_id") != opportunity_id
+                    or not isinstance(data.get("blockers"), list)
+                    or not isinstance(
+                        data.get("eligible_for_internal_draft_review"), bool
+                    )):
+                QMessageBox.warning(
+                    dialog, "Preparation not verified",
+                    "The selected company/opportunity could not be verified. "
+                    "No proposal was created."
+                )
+                return
+            opportunity = data.get("opportunity") or {}
+            qualification = data.get("qualification") or {}
+            eligible = data["eligible_for_internal_draft_review"]
+            blockers = data["blockers"]
+            if eligible and blockers:
+                QMessageBox.warning(
+                    dialog, "Inconsistent preparation result",
+                    "The preparation status contradicted its checks. "
+                    "No proposal was created."
+                )
+                return
+            lines = [
+                "Company: " + str(data.get("company_name") or "Unknown"),
+                "Opportunity stage: " + str(
+                    opportunity.get("stage") or "Not linked"
+                ).replace("_", " ").title(),
+                "Latest company review: " + str(
+                    qualification.get("fit_status") or "Not recorded"
+                ).replace("_", " "),
+                "Existing proposal drafts: " + str(
+                    data.get("existing_draft_count", "Unknown")
+                ),
+                "",
+                ("Internal draft may be prepared after human review."
+                 if eligible else "Internal draft preparation needs attention."),
+            ]
+            if blockers:
+                lines.extend(["", "Checks to resolve:"])
+                lines.extend("• " + str(reason) for reason in blockers)
+            lines.extend([
+                "",
+                "READ-ONLY CHECK. This did not create a proposal.",
+                "Buyer identity, pricing, consent and authorisation to test "
+                "are NOT verified. Nothing may be issued or sent from this check."
+            ])
+            QMessageBox.information(
+                dialog, "Proposal preparation — read-only",
+                "\n".join(lines)
+            )
+
+        self.bridge.call(
+            "crm-company-proposal-readiness", identifier, callback=received
+        )
+
+    def open_dossier_internal_proposal(self, record, company_id):
+        """Require a fresh, exact-ID readiness decision before opening editor."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id):
+            return
+        if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
+            self.crm_proposal_dialog.raise_()
+            return
+        opportunity_id = record.get("opportunity_id") if isinstance(record, dict) else None
+        if (not isinstance(opportunity_id, str)
+                or record.get("company_id") != company_id
+                or record.get("source_ticket_id") is not None):
+            QMessageBox.warning(
+                dialog, "Internal draft unavailable",
+                "Choose a directly linked company opportunity."
+            )
+            return
+
+        def received(data, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            opportunity = data.get("opportunity") if isinstance(data, dict) else None
+            qualification = data.get("qualification") if isinstance(data, dict) else None
+            valid = (
+                not error and isinstance(data, dict)
+                and data.get("available") is True
+                and data.get("company_id") == company_id
+                and data.get("opportunity_id") == opportunity_id
+                and data.get("eligible_for_internal_draft_review") is True
+                and data.get("blockers") == []
+                and data.get("existing_draft_count") == 0
+                and data.get("external_issue_authorised") is False
+                and isinstance(opportunity, dict)
+                and opportunity.get("id") == opportunity_id
+                and isinstance(opportunity.get("version"), int)
+                and opportunity["version"] >= 1
+                and isinstance(qualification, dict)
+                and isinstance(qualification.get("id"), str)
+                and qualification.get("fit_status") == "potential_fit"
+            )
+            if not valid:
+                QMessageBox.warning(
+                    dialog, "Internal draft preparation blocked",
+                    "The current company, opportunity, qualification and "
+                    "draft count were not all verified. No draft was created."
+                )
+                return
+            self.show_proposal_dialog({
+                "company_id": company_id,
+                "company_name_at_creation": data.get("company_name") or "",
+                "opportunity_id": opportunity_id,
+                "expected_opportunity_version": opportunity["version"],
+                "qualification_id": qualification["id"],
+            })
+
+        self.bridge.call(
+            "crm-company-proposal-readiness",
+            company_id + ":" + opportunity_id, callback=received
+        )
+
+    def record_company_qualification(self):
+        """Record the manual commercial decision with exact company readback."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible() or not self.crm_dossier_company_id
+                or self.crm_qualification_saving or self.crm_qualification_uncertain
+                or not self.crm_qualification_save.isEnabled()):
             return
         rationale = self.crm_qualification_rationale.toPlainText().strip()
         if not 20 <= len(rationale) <= 1500:
@@ -7527,8 +8863,9 @@ class EnkyronWindow(QMainWindow):
                 "Please confirm that this is your own commercial review."
             )
             return
+        company_id = self.crm_dossier_company_id
         payload = {
-            "company_id": self.crm_dossier_company_id,
+            "company_id": company_id,
             "contact_id": self.crm_qualification_subject.currentData(),
             "fit_status": self.crm_qualification_fit.currentData(),
             "priority": self.crm_qualification_priority.currentData(),
@@ -7537,20 +8874,75 @@ class EnkyronWindow(QMainWindow):
             "next_action": self.crm_qualification_next.text().strip(),
             "confirmed": True
         }
+        self.crm_qualification_saving = True
         self.crm_qualification_save.setEnabled(False)
-        company_id = self.crm_dossier_company_id
 
         def received(data, error):
             if not dialog.isVisible() or company_id != self.crm_dossier_company_id:
                 return
-            if error or not data or not data.get("id"):
-                self.crm_qualification_save.setEnabled(True)
+            record_id = data.get("id") if isinstance(data, dict) else None
+            valid_ack = (
+                not error and isinstance(record_id, str)
+                and data.get("company_id") == company_id
+                and data.get("contact_id") == payload["contact_id"]
+                and data.get("fit_status") == payload["fit_status"]
+                and data.get("priority") == payload["priority"]
+            )
+            if not valid_ack:
+                self.crm_qualification_saving = False
+                self.crm_qualification_uncertain = True
+                self.crm_qualification_save.setEnabled(False)
                 QMessageBox.warning(
-                    dialog, "Review not saved",
-                    error or "Unable to record the qualification."
+                    dialog, "Qualification save not verified",
+                    "The outcome may be committed. Inspect Qualification and "
+                    "Company History before another attempt. No retry was sent. "
+                    + str(error or "")
                 )
                 return
-            self.refresh_company_dossier()
+
+            def verified(latest, check_error):
+                if not dialog.isVisible() or company_id != self.crm_dossier_company_id:
+                    return
+                company = latest.get("company") if isinstance(latest, dict) else None
+                sections = latest.get("sections") if isinstance(latest, dict) else None
+                quals = (sections or {}).get("qualifications") or {}
+                rows = quals.get("items") or []
+                matches = [
+                    item for item in rows
+                    if isinstance(item, dict) and item.get("id") == record_id
+                ] if isinstance(rows, list) else []
+                valid = (
+                    not check_error and latest.get("available") is True
+                    and isinstance(company, dict) and company.get("id") == company_id
+                    and len(matches) == 1
+                    and matches[0].get("contact_id") == payload["contact_id"]
+                    and matches[0].get("fit_status") == payload["fit_status"]
+                    and matches[0].get("priority") == payload["priority"]
+                    and matches[0].get("rationale") == payload["rationale"]
+                    and matches[0].get("next_action") ==
+                        (payload["next_action"] or None)
+                    and matches[0].get("source_reference") ==
+                        (payload["source_reference"] or None)
+                ) if isinstance(latest, dict) else False
+                self.crm_qualification_saving = False
+                if not valid:
+                    self.crm_qualification_uncertain = True
+                    self.crm_qualification_save.setEnabled(False)
+                    QMessageBox.warning(
+                        dialog, "Qualification readback not verified",
+                        "The exact review and company could not be confirmed "
+                        "from PostgreSQL. Inspect records before another attempt. "
+                        "No retry was sent."
+                    )
+                    return
+                self.crm_qualification_uncertain = False
+                self.crm_qualification_flash = (
+                    "Qualification verified in this company dossier. "
+                    "Manual commercial review only; no customer status changed."
+                )
+                self.refresh_company_dossier()
+
+            self.bridge.call("crm-company-dossier", company_id, callback=verified)
 
         self.bridge.call(
             "crm-record-qualification", payload=payload, callback=received
@@ -7661,6 +9053,135 @@ class EnkyronWindow(QMainWindow):
         self.crm_ticket_opportunity_button.setEnabled(
             active and self.crm_ticket_items[row].get("status") != "closed"
             if active else False
+        )
+
+    def open_dossier_direct_opportunity(self, company_id):
+        """Create one company-only opportunity without leaving the 360 dossier."""
+        dialog = self.crm_dossier_dialog
+        company = self.crm_dossier_company_snapshot
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or not isinstance(company, dict)
+                or company.get("id") != company_id
+                or self.crm_dossier_opportunity_saving):
+            return
+        if self.crm_dossier_opportunity_uncertain:
+            QMessageBox.information(
+                dialog, "Review uncertain save",
+                "The previous save response was uncertain. Inspect the "
+                "company's opportunities and history before starting another "
+                "attempt. Close and reopen the dossier after review."
+            )
+            return
+        if self.crm_dossier_opportunity_check_id is not None:
+            QMessageBox.information(
+                dialog, "Verify previous opportunity",
+                "The previous save response has not been verified in this "
+                "dossier. Review the CRM record before trying again."
+            )
+            return
+        if (self.crm_dossier_company_editor is not None
+                or self.crm_dossier_contact_editor is not None
+                or self.crm_dossier_followup_editor is not None):
+            QMessageBox.information(
+                dialog, "Finish current edit",
+                "Save or cancel the open company, contact or next-action edit first."
+            )
+            return
+        busy, drafts = self.company_dossier_pending_or_unsaved()
+        if busy or drafts:
+            QMessageBox.information(
+                dialog, "Finish current work",
+                "Finish pending saves or unsaved dossier work first."
+            )
+            return
+        name = str(company.get("name") or "")
+        if not 1 <= len(name) <= 300:
+            QMessageBox.warning(
+                dialog, "Company identity unavailable",
+                "Refresh the company dossier before creating an opportunity."
+            )
+            return
+        action, accepted = QInputDialog.getMultiLineText(
+            dialog, "ENKYRON · New company opportunity",
+            "Company: {}\n\nNext commercial action (5–1000 characters):".format(name),
+            "Prepare a written introduction and record replies in the CRM."
+        )
+        if not accepted:
+            return
+        action = action.strip()
+        if not 5 <= len(action) <= 1000:
+            QMessageBox.warning(
+                dialog, "Next action required",
+                "Enter a specific next step in 5–1000 characters."
+            )
+            return
+        if QMessageBox.question(
+            dialog, "Confirm commercial opportunity",
+            ("Create one internal CRM opportunity for {}?\n\n"
+             "No service ticket, email, contract, testing authorisation "
+             "or assessment is created.").format(name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        # Modal dialogs can process asynchronous callbacks while open.
+        # Never submit an action for a dossier that has changed underneath us.
+        if (dialog is not self.crm_dossier_dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or (self.crm_dossier_company_snapshot or {}).get("id") != company_id
+                or (self.crm_dossier_company_snapshot or {}).get("name") != name
+                or self.crm_dossier_opportunity_saving):
+            return
+        self.crm_dossier_opportunity_saving = True
+        button = dialog.findChild(QPushButton, "crmDossierNewOpportunity")
+        if button is not None:
+            button.setEnabled(False)
+        payload = {
+            "company_id": company_id,
+            "company_name_at_review": name,
+            "next_action": action,
+            "due_date": None,
+            "confirmed": True
+        }
+
+        def received(result, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or company_id != self.crm_dossier_company_id
+                    or not dialog.isVisible()):
+                return
+            self.crm_dossier_opportunity_saving = False
+            if (error or not isinstance(result, dict)
+                    or not result.get("id")
+                    or result.get("company_id") != company_id
+                    or result.get("source_ticket_id") is not None):
+                # The server might have committed before the transport failed.
+                # No second create from this open dossier until manual review.
+                self.crm_dossier_opportunity_uncertain = True
+                if button is not None:
+                    button.setEnabled(False)
+                self.status.setText(
+                    "Opportunity save outcome uncertain; inspect the company "
+                    "record before another attempt. No retry performed."
+                )
+                QMessageBox.warning(
+                    dialog, "Opportunity save not confirmed",
+                    "The outcome may be uncertain. Inspect the company "
+                    "opportunities and history before trying again; close and "
+                    "reopen the dossier only after that review. "
+                    + str(error or "")
+                )
+                return
+            self.crm_dossier_opportunity_check_id = result["id"]
+            self.status.setText(
+                "Opportunity write acknowledged; checking the company dossier…"
+            )
+            # Success is reported only after an exact-ID canonical readback.
+            self.refresh_company_dossier()
+
+        self.bridge.call(
+            "crm-company-direct-opportunity-create",
+            payload=payload, callback=received
         )
 
     def open_company_direct_opportunity(self):
@@ -13774,6 +15295,16 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_scope.setPlainText(proposal.get("scope_text") or "")
         layout.addWidget(section_title("SCOPE AND DELIVERABLES"))
         layout.addWidget(self.crm_proposal_scope, 1)
+        if proposal.get("company_id") and not existing:
+            self.crm_company_draft_confirm = QCheckBox(
+                "I reviewed this company's internal draft scope and price. "
+                "No quote, contract, client contact or test is authorised."
+            )
+            self.crm_company_draft_confirm.setObjectName(
+                "crmCompanyDraftHumanConfirmation"
+            )
+            self.crm_company_draft_confirm.setChecked(False)
+            layout.addWidget(self.crm_company_draft_confirm)
         footer = QHBoxLayout()
         cancel = QPushButton("Close without saving")
         cancel.clicked.connect(dialog.reject)
@@ -13787,7 +15318,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_context = {
             "id": proposal.get("id"),
             "expected_revision": proposal.get("revision"),
-            "opportunity_id": proposal["opportunity_id"]
+            "opportunity_id": proposal["opportunity_id"],
+            "company_id": proposal.get("company_id"),
+            "qualification_id": proposal.get("qualification_id"),
+            "expected_opportunity_version": proposal.get(
+                "expected_opportunity_version"
+            ),
         }
         self.crm_proposal_dialog = dialog
         dialog.open()
@@ -13822,6 +15358,29 @@ class EnkyronWindow(QMainWindow):
             )
             return
         context = self.crm_proposal_context
+        company_draft = bool(context.get("company_id") and not context.get("id"))
+        if company_draft:
+            if (not hasattr(self, "crm_company_draft_confirm")
+                    or not self.crm_company_draft_confirm.isChecked()):
+                QMessageBox.warning(
+                    dialog, "Human review required",
+                    "Read the full scope, verify your own proposed fee and "
+                    "confirm this is an unsent internal draft."
+                )
+                return
+            reply = QMessageBox.question(
+                dialog, "Confirm internal draft only",
+                "Company: " + str(context["company_id"]) + "\n"
+                "Title: " + title + "\n"
+                "Your proposed fee: " + currency + " " + fee + "\n\n"
+                "This will save ONE internal draft; no email, quote, "
+                "contract or authorisation to test is created. "
+                "Save this exact scope and fee?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
         fields = {
             "title": title, "scope_text": scope,
             "currency": currency, "amount_minor": amount_minor
@@ -13832,6 +15391,18 @@ class EnkyronWindow(QMainWindow):
                 **fields, "id": context["id"],
                 "expected_revision": context["expected_revision"]
             }
+        elif company_draft:
+            command = "crm-company-proposal-create"
+            payload = {
+                **fields,
+                "company_id": context["company_id"],
+                "opportunity_id": context["opportunity_id"],
+                "qualification_id": context["qualification_id"],
+                "expected_opportunity_version": context[
+                    "expected_opportunity_version"
+                ],
+                "confirmed": True
+            }
         else:
             command = "crm-proposal-create"
             payload = {**fields, "opportunity_id": context["opportunity_id"]}
@@ -13839,6 +15410,64 @@ class EnkyronWindow(QMainWindow):
 
         def received(data, error):
             if not dialog.isVisible():
+                return
+            if company_draft:
+                record_id = data.get("id") if isinstance(data, dict) else None
+                acknowledged = (
+                    not error and isinstance(data, dict)
+                    and isinstance(record_id, str)
+                    and data.get("revision") == 1
+                    and data.get("company_id") == context["company_id"]
+                    and data.get("opportunity_id") == context["opportunity_id"]
+                    and data.get("qualification_id") == context["qualification_id"]
+                )
+                if not acknowledged:
+                    # May have COMMITted before transport failure: no blind retry.
+                    QMessageBox.warning(
+                        dialog, "Internal draft save not verified",
+                        "The write outcome is uncertain. Inspect Commercial "
+                        "drafts before another attempt. No retry was sent."
+                    )
+                    return
+
+                def verified(latest, read_error):
+                    if not dialog.isVisible():
+                        return
+                    proposal = (latest or {}).get("proposal") if isinstance(latest, dict) else None
+                    exact = (
+                        not read_error and isinstance(latest, dict)
+                        and latest.get("available") is True
+                        and isinstance(proposal, dict)
+                        and proposal.get("id") == record_id
+                        and proposal.get("company_id") == context["company_id"]
+                        and proposal.get("opportunity_id") == context["opportunity_id"]
+                        and proposal.get("revision") == 1
+                        and proposal.get("title") == fields["title"]
+                        and proposal.get("scope_text") == fields["scope_text"]
+                        and proposal.get("currency") == fields["currency"]
+                        and str(proposal.get("amount_minor")) == str(fields["amount_minor"])
+                    )
+                    if not exact:
+                        QMessageBox.warning(
+                            dialog, "Internal draft readback not verified",
+                            "The exact draft ID, company, scope or fee did not "
+                            "match the stored record. Inspect Commercial drafts "
+                            "before another attempt. No retry was sent."
+                        )
+                        return
+                    dialog.accept()
+                    if (self.crm_dossier_dialog
+                            and self.crm_dossier_dialog.isVisible()
+                            and self.crm_dossier_company_id == context["company_id"]):
+                        self.refresh_company_dossier()
+                    self.load_proposals()
+                    QMessageBox.information(
+                        self, "Internal draft verified",
+                        "Saved and verified one internal proposal draft. "
+                        "No message, contract, quote or invoice was issued."
+                    )
+
+                self.bridge.call("crm-proposal", record_id, callback=verified)
                 return
             if error or not data or not data.get("id"):
                 self.crm_proposal_save.setEnabled(True)
@@ -14820,10 +16449,14 @@ class EnkyronWindow(QMainWindow):
             "UPDATE COMMERCIAL OPPORTUNITY" if existing else
             "PLAN A PROSPECT FOLLOW-UP"
         ))
-        title = QLabel("{}: {}".format(
+        record_type = (
             "CRM company" if existing and existing.get("company_id")
-            else "Research candidate",
-            prospect.get("company_name") or "Unknown"
+            else "Research candidate"
+        )
+        owner = (existing or {}).get("owner_local")
+        title = QLabel("{}: {}{}".format(
+            record_type, prospect.get("company_name") or "Unknown",
+            "\nLocal owner: {}".format(owner) if owner else ""
         ))
         title.setTextFormat(Qt.TextFormat.PlainText)
         title.setWordWrap(True)
@@ -14929,6 +16562,24 @@ class EnkyronWindow(QMainWindow):
             if self.crm_followup_has_date.isChecked() else None
         )
         existing = self.crm_followup_context["existing"]
+        company_id = existing.get("company_id") if existing else None
+        if company_id:
+            # Review the exact company association and intended commercial edit.
+            # UI confirmation never substitutes for backend workspace/version checks.
+            approved = QMessageBox.question(
+                dialog, "Confirm company opportunity update",
+                "Company: {}\nStage: {}\nNext action: {}\nDue: {}\n\n"
+                "Save this manual commercial change? No contact or external "
+                "communication will be created.".format(
+                    self.crm_followup_context["company_name"],
+                    self.crm_followup_stage.currentText(),
+                    next_action, due_date or "Not scheduled"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if approved != QMessageBox.StandardButton.Yes:
+                return
         if existing:
             action = "crm-update-opportunity"
             payload = {
@@ -14942,6 +16593,9 @@ class EnkyronWindow(QMainWindow):
                     else self.crm_followup_probability.value()
                 )
             }
+            if company_id:
+                payload["company_id"] = company_id
+                payload["confirmed"] = True
         else:
             action = "crm-create-opportunity"
             payload = {
@@ -14952,14 +16606,7 @@ class EnkyronWindow(QMainWindow):
             }
         self.crm_followup_submit.setEnabled(False)
 
-        def received(data, error):
-            if error or not data or not data.get("id"):
-                self.crm_followup_submit.setEnabled(True)
-                QMessageBox.warning(
-                    dialog, "Follow-up not saved",
-                    error or "CRM record could not be saved."
-                )
-                return
+        def finish():
             dialog.accept()
             if self.crm_followup_context.get("return_tab") == 4:
                 self.crm_tabs.setCurrentIndex(4)
@@ -14968,6 +16615,71 @@ class EnkyronWindow(QMainWindow):
                 self.crm_tabs.setCurrentIndex(2)
             self.crm_followup_search.clear()
             self.load_followups()
+            self.load_sales_overview()
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not isinstance(data, dict) or not data.get("id"):
+                # A transport error may follow a successful commit. Do not
+                # offer a blind retry for a versioned opportunity update.
+                if not existing:
+                    self.crm_followup_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Opportunity save not confirmed" if existing
+                    else "Follow-up not saved",
+                    str(error or "The server did not confirm this write. "
+                        "Review the canonical record before another attempt.")
+                )
+                return
+            if not existing:
+                finish()
+                return
+            if (data.get("id") != existing.get("id")
+                    or data.get("version") != existing.get("version", 0) + 1):
+                QMessageBox.warning(
+                    dialog, "Opportunity save not verified",
+                    "The server response does not match the requested "
+                    "opportunity and revision. Review the record before retrying."
+                )
+                return
+
+            def verified(latest, check_error):
+                if not dialog.isVisible():
+                    return
+                row = (latest or {}).get("opportunity") if isinstance(
+                    latest, dict) and latest.get("available") else None
+                same_date = (
+                    str((row or {}).get("due_date") or "")[:10] ==
+                    str(payload["due_date"] or "")[:10]
+                )
+                valid = (
+                    not check_error and isinstance(row, dict)
+                    and row.get("id") == existing["id"]
+                    and row.get("version") == existing["version"] + 1
+                    and row.get("stage") == payload["stage"]
+                    and row.get("next_action") == payload["next_action"]
+                    and same_date
+                    and row.get("probability_percent") ==
+                        payload["probability_percent"]
+                    and (not company_id or row.get("company_id") == company_id)
+                )
+                if not valid:
+                    QMessageBox.warning(
+                        dialog, "Opportunity save not verified",
+                        "The exact opportunity could not be read back with "
+                        "the expected company, fields and revision. "
+                        "Review it before another attempt. No retry was sent."
+                    )
+                    return
+                self.status.setText(
+                    "Commercial opportunity verified after exact-ID readback."
+                )
+                finish()
+
+            self.bridge.call(
+                "crm-activity-timeline", existing["id"], callback=verified
+            )
 
         self.bridge.call(action, payload=payload, callback=received)
 

@@ -19,7 +19,8 @@ test('read-only local query delivers accurate stage counts and limited previews'
   const db={query:async(sql,params)=>{
     calls.push({sql,params});
     return {rows:[
-      {id,prospect_id:'lead_ci',company_name_at_creation:'Synthetic',
+      {id,prospect_id:null,company_id:'33333333-4444-4555-8666-777777777777',
+        owner_local:'ci-operator',company_name_at_creation:'Synthetic',
         stage:'research',lane:'prospecting',next_action:'Manual review',
         due_date:null,probability_percent:35,version:2,lane_total:31},
       {id:'22222222-3333-4444-8555-666666666666',prospect_id:'lead_two',
@@ -33,6 +34,9 @@ test('read-only local query delivers accurate stage counts and limited previews'
   assert.equal(v.total,32);
   assert.equal(v.lanes[0].total,31);
   assert.equal(v.lanes[0].items[0].probability_percent,35);
+  assert.equal(v.lanes[0].items[0].company_id,'33333333-4444-4555-8666-777777777777');
+  assert.equal(v.lanes[0].items[0].owner_local,'ci-operator');
+  assert.match(calls[0].sql,/company_id,owner_local/);
   assert.match(calls[0].sql,/probability_percent/);
   assert.equal(v.lanes[0].more,true);
   assert.equal(v.lanes[3].items[0].stage,'won');

@@ -123,5 +123,53 @@ class BridgeProcessLifecycleSmoke(unittest.TestCase):
         self.assertEqual(answers, [(None,"ENKYRON is closing")])
 
 
+    def test_synthetic_ux_preview_refuses_pilot_subprocess_without_spawning(self):
+        env = {
+            "ENKYRON_UAT_DATABASE": "enkyron_uat_enk03",
+            "ENKYRON_UAT_GUARD": "ENK03_SYNTHETIC_ONLY",
+            "ENKYRON_UX_PREVIEW_READ_ONLY": "1",
+        }
+        with patch.dict(os.environ, env):
+            for action in ("pilot-lab-run", "pilot-lab-status", "operator-state",
+                           "evidence-summary", "evidence-pack"):
+                results = []
+                self.bridge.call(action, "3385aa99-e08a-4471-b8e5-9d0b36a8412b",
+                                 callback=lambda value, error: results.append((value,error)))
+                self.assertEqual(len(results), 1)
+                self.assertIsNone(results[0][0])
+                self.assertIn("Read-only synthetic UX preview", results[0][1])
+                self.assertEqual(len(self.bridge.running), 0)
+
+    def test_synthetic_ux_preview_has_visible_operator_notice_and_disabled_mail(self):
+        env = {
+            "ENKYRON_UAT_DATABASE": "enkyron_uat_enk03",
+            "ENKYRON_UAT_GUARD": "ENK03_SYNTHETIC_ONLY",
+            "ENKYRON_UX_PREVIEW_READ_ONLY": "1",
+        }
+        with patch.dict(os.environ, env), patch.object(
+                enkyron.DesktopBridge, "call", return_value=None) as backend:
+            window = enkyron.EnkyronWindow()
+            try:
+                banner = window.findChild(
+                    enkyron.QLabel, "enkyronReadOnlyPreviewBanner"
+                )
+                self.assertIsNotNone(banner)
+                self.assertIn("READ ONLY", banner.text())
+                self.assertIn("SYNTHETIC PREVIEW", window.windowTitle())
+                self.assertFalse(window.account_profile_button.isEnabled())
+                self.assertFalse(
+                    bool(window.navigation.item(3).flags()
+                         & enkyron.Qt.ItemFlag.ItemIsEnabled)
+                )
+                self.assertFalse(
+                    bool(window.navigation.item(4).flags()
+                         & enkyron.Qt.ItemFlag.ItemIsEnabled)
+                )
+            finally:
+                window.close()
+                window.deleteLater()
+                self.app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()

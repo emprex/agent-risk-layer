@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 
 const company='11111111-2222-4333-8444-555555555555';
-const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','commercial_docs','ticket_history','audit_events','audit_changes'];
+const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','commercial_docs','ticket_history','audit_events','audit_changes','company_history'];
 function mockDatabase({total='1',badSection='',missing=false,notFound=false}={}){
   const statements=[];
   let releases=0;
@@ -36,7 +36,7 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.equal(result.sections.tickets.total,0);
   assert.equal(result.sections.prospects.total,0);
   assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','WITH','SELECT','SELECT','COMMIT'
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','WITH','SELECT','SELECT','WITH','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
   assert.match(m.statements[1].sql,/country,record_version,relationship_state/);
@@ -52,9 +52,28 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   for(const q of m.statements.filter(q=>q.params)){
     assert.deepEqual(q.params,['local:ci-operator',company]);
   }
-  assert.ok(m.statements.slice(2,13).every(q=>/LIMIT 21/.test(q.sql)));
+  assert.ok(m.statements.slice(2,14).every(q=>/LIMIT 21/.test(q.sql)));
   assert.match(m.statements[11].sql,/FROM enkyron_crm_events/);
   assert.match(m.statements[12].sql,/FROM enkyron_crm_record_changes/);
+  const history=m.statements[13].sql;
+  assert.match(history,/WITH linked_opportunities AS/);
+  for(const source of [
+    'enkyron_crm_events','enkyron_crm_record_changes',
+    'enkyron_crm_opportunity_events','enkyron_crm_company_followup_events',
+    'enkyron_crm_activities','enkyron_crm_qualification_reviews',
+    'enkyron_crm_prospect_links','enkyron_crm_ticket_links',
+    'enkyron_crm_ticket_link_revocations','enkyron_crm_ticket_reassignments',
+    'enkyron_crm_mail_draft_events','enkyron_crm_mail_manual_sends',
+    'enkyron_crm_proposal_draft_events','enkyron_crm_proposal_drafts'
+  ])assert.match(history,new RegExp(source));
+  assert.match(history,/JOIN linked_opportunities o ON o[.]id=p[.]opportunity_id/);
+  assert.match(history,/Internal proposal draft revision/);
+  assert.match(history,/not issued or sent/);
+  assert.match(history,/ORDER BY recorded_at DESC,event_id DESC/);
+  assert.match(history,/LIMIT 21/);
+  assert.match(history,/e[.]event_type NOT IN \('updated','linked'\)/);
+  assert.doesNotMatch(history,/SELECT [*]|review_note|recipient_email|password_hash|body_text/);
+  assert.deepEqual(m.statements[13].params,['local:ci-operator',company]);
   for(const sql of [m.statements[11].sql,m.statements[12].sql]){
     assert.match(sql,/c[.]workspace_key/);
     assert.match(sql,/c[.]company_id=[$]2/);
