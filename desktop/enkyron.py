@@ -220,6 +220,16 @@ class DesktopBridge:
             if callback:
                 callback(None, "ENKYRON is closing")
             return
+        # Synthetic UX preview is not a laboratory execution environment.
+        # This gate runs BEFORE QProcess creation, including the direct Python
+        # pilot bridge that does not pass through the Node UAT allowlist.
+        if os.environ.get("ENKYRON_UX_PREVIEW_READ_ONLY") == "1":
+            if action in ("pilot-lab-run", "pilot-lab-status",
+                          "operator-state", "evidence-summary", "evidence-pack"):
+                if callback:
+                    callback(None, "Read-only synthetic UX preview blocks "
+                                   "laboratory and assessment adapters")
+                return
         # ARL master readers use separate Python adapters. They must not
         # accidentally inspect the live assessment DB during synthetic UAT.
         if (os.environ.get("ENKYRON_UAT_DATABASE") is not None
@@ -339,6 +349,11 @@ class EnkyronWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ENKYRON — Agent Security Engineering | AgentRiskLayer")
+        self.ux_preview_read_only = (
+            os.environ.get("ENKYRON_UX_PREVIEW_READ_ONLY") == "1"
+        )
+        if self.ux_preview_read_only:
+            self.setWindowTitle("ENKYRON · SYNTHETIC PREVIEW · READ ONLY")
         self.resize(1360, 840)
         self.setMinimumSize(920, 620)
         self.bridge = DesktopBridge(self)
@@ -518,6 +533,20 @@ class EnkyronWindow(QMainWindow):
         self.operator_profile_state = None
         self.operator_profile_dialog = None
         outer.addWidget(top)
+        if self.ux_preview_read_only:
+            preview_notice = QLabel(
+                "SYNTHETIC UX PREVIEW · READ ONLY · No commercial changes, "
+                "laboratory runs, mail sends or live assessment. "
+                "Review company history and archived proposal versions only."
+            )
+            preview_notice.setObjectName("enkyronReadOnlyPreviewBanner")
+            preview_notice.setWordWrap(True)
+            preview_notice.setStyleSheet(
+                "background: #1d3542; color: #e1f4f4; "
+                "font-weight: 600; padding: 10px 18px;"
+            )
+            outer.addWidget(preview_notice)
+            self.account_profile_button.setEnabled(False)
 
         # Application-level navigation; the ticket list is no longer the main menu.
         workspace = QHBoxLayout()
@@ -534,6 +563,13 @@ class EnkyronWindow(QMainWindow):
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
         self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
+        if self.ux_preview_read_only:
+            # Mail/Calendar are outside this synthetic commercial review and
+            # would only lead to an unavailable service/error. Keep CRM visible.
+            for index in (3, 4):
+                item = self.navigation.item(index)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                item.setToolTip("Unavailable in synthetic read-only preview")
         self.navigation.setMaximumHeight(255)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
