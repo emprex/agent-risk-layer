@@ -50,14 +50,34 @@ export function validateIntake(data) {
   return {title, client, source:data.source, scope};
 }
 
+const REVIEWED_COMPLETION = new Set(['resolved', 'closed']);
 export function validateStatusChange(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)
+      || Object.keys(data).some(key => ![
+        'ticket_id', 'status', 'expected_status', 'review_note', 'confirmed'
+      ].includes(key))
       || typeof data.ticket_id !== 'string' || !TICKET_ID.test(data.ticket_id)
       || typeof data.status !== 'string'
       || !Object.hasOwn(TICKET_TRANSITIONS, data.status)) {
     throw new Error('Invalid ticket status request');
   }
-  return {ticketId:data.ticket_id, status:data.status};
+  if (!REVIEWED_COMPLETION.has(data.status)) {
+    return {ticketId:data.ticket_id, status:data.status};
+  }
+  // Resolution and closure are consequential human decisions. Do not accept
+  // stale, unassigned or unreviewed transitions via a bare IPC status string.
+  if (data.confirmed !== true
+      || typeof data.expected_status !== 'string'
+      || !Object.hasOwn(TICKET_TRANSITIONS, data.expected_status)
+      || !TICKET_TRANSITIONS[data.expected_status].includes(data.status)) {
+    throw new Error('Reviewed ticket resolution/closure requires expected status and confirmation');
+  }
+  const reviewNote=field(data.review_note,'completion rationale',500,true);
+  if (reviewNote.length<30) {
+    throw new Error('Ticket completion rationale must contain at least 30 characters');
+  }
+  return {ticketId:data.ticket_id, status:data.status,
+    expectedStatus:data.expected_status, reviewNote};
 }
 
 async function transaction(pool, work) {
@@ -106,11 +126,16 @@ export async function createDeskTicket(pool, data, actor, options={}) {
   });
 }
 
-export async function updateDeskTicketStatus(pool, data) {
-  const {ticketId,status} = validateStatusChange(data);
+export async function updateDeskTicketStatus(pool, data, actor=null, options={}) {
+  const {ticketId,status,expectedStatus,reviewNote}=validateStatusChange(data);
+  const completion=REVIEWED_COMPLETION.has(status);
+  const operator=completion?field(actor,'local operator',120,true):null;
+  if (completion && !/^[A-Za-z0-9_.-]{1,120}$/.test(operator)) {
+    throw new Error('Invalid local ticket operator');
+  }
   return transaction(pool, async client => {
     const current = (await client.query(
-      'SELECT status,assessor_name,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'SELECT status,assessor_name,assigned_to,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       [ticketId]
     )).rows[0];
     if (!current) throw new Error('Ticket not found');
@@ -119,6 +144,15 @@ export async function updateDeskTicketStatus(pool, data) {
         !TICKET_TRANSITIONS[current.status].includes(status)) {
       throw new Error('Status transition not allowed');
     }
+    if (completion && expectedStatus!==current.status) {
+      throw new Error('Ticket changed; reopen and review before completing');
+    }
+    if (completion && current.assigned_to!==operator) {
+      throw new Error('Assign this ticket to your local operator before completion');
+    }
+    const eventId=(options.uuid||randomUUID)();
+    const detail=current.status+' -> '+status+
+      (completion?'\\nHuman completion review: '+reviewNote:'');
     await client.query(
       'UPDATE arl_workbench_tickets SET status=$1,updated_at=NOW() WHERE id=$2',
       [status,ticketId]
@@ -126,9 +160,10 @@ export async function updateDeskTicketStatus(pool, data) {
     await client.query(
       'INSERT INTO arl_workbench_ticket_events ' +
       "(id,ticket_id,event_type,detail,actor) VALUES ($1,$2,'status_changed',$3,$4)",
-      [randomUUID(),ticketId,current.status+' -> '+status,current.assessor_name]
+      [eventId,ticketId,detail,completion?operator:current.assessor_name]
     );
-    return {ticket_id:ticketId, from:current.status, status};
+    return {ticket_id:ticketId, from:current.status, status,
+      ...(completion?{event_id:eventId}: {})};
   });
 }
 
