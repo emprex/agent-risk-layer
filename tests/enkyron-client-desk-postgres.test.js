@@ -42,8 +42,18 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     assert.equal((await fetch()).assigned_to,'ci-operator');
 
     const transitions=['scoping','in_progress','pending_review','resolved','closed'];
+    let previous='new';
     for(const status of transitions) {
-      await updateDeskTicketStatus(pool,{ticket_id:intake.id,status});
+      const humanCompletion=['resolved','closed'].includes(status);
+      const input={ticket_id:intake.id,status};
+      if(humanCompletion)Object.assign(input,{
+        expected_status:previous,confirmed:true,
+        review_note:'CI human operator reviewed the completed synthetic support work and closure evidence.'
+      });
+      const saved=await updateDeskTicketStatus(pool,input,'ci-operator');
+      assert.equal(saved.from,previous);
+      if(humanCompletion)assert.match(saved.event_id,/^[0-9a-f-]{36}$/);
+      previous=status;
     }
     await assert.rejects(
       ()=>archiveDeskTicket(pool,{ticket_id:intake.id,reason:'short'},'ci-operator'),
