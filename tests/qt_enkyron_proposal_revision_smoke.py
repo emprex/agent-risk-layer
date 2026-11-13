@@ -53,6 +53,8 @@ class DraftRevisionSmoke(unittest.TestCase):
         try:
             editor=w.crm_scope_correction_dialog
             if editor and editor.isVisible(): editor.reject()
+            history=w.crm_proposal_history_dialog
+            if history and history.isVisible(): history.reject()
             dossier.reject()
             w.close()
             w.deleteLater()
@@ -210,6 +212,88 @@ class DraftRevisionSmoke(unittest.TestCase):
                 self.assertFalse(any(x[0]=="crm-company-proposal-revise" for x in calls))
                 self.assertTrue(warning.called)
         finally:self.teardown_window(w,dossier,old)
+
+
+    def test_read_only_history_displays_both_full_texts_and_human_reason(self):
+        w,dossier,calls,old=self.setup_window()
+        try:
+            w.open_dossier_proposal_history(DRAFT,COMPANY)
+            self.assertEqual(len(calls),1)
+            self.assertEqual(self.last(calls,"crm-company-proposal-versions")[1],
+                             COMPANY+":"+DRAFT)
+            self.last(calls,"crm-company-proposal-versions")[3]({
+                "available":True,"company_id":COMPANY,
+                "proposal_id":DRAFT,"current_revision":2,
+                "versions":[
+                    {"revision":1,"id":S1,"title":"Synthetic security assessment",
+                     "scope_text":OLD,"currency":"GBP","amount_minor":"100",
+                     "source_event_id":S1,"content_sha256":HASH1,
+                     "snapshot_kind":"pre_edit_archive","recorded_by":"emprex",
+                     "recorded_at":"2026-11-13T09:31:57Z","review_note":""},
+                    {"revision":2,"id":S2,"title":"Synthetic security assessment",
+                     "scope_text":NEW,"currency":"GBP","amount_minor":"100",
+                     "source_event_id":S2,"content_sha256":HASH2,
+                     "snapshot_kind":"reviewed_revision","recorded_by":"emprex",
+                     "recorded_at":"2026-11-13T09:31:57Z","review_note":NOTE}
+                ]
+            },None)
+            self.app.processEvents()
+            history=w.crm_proposal_history_dialog
+            self.assertIsNotNone(history)
+            self.assertTrue(history.isVisible())
+            text=history.findChild(QPlainTextEdit,"crmProposalRevisionHistoryText")
+            self.assertTrue(text.isReadOnly())
+            body=text.toPlainText()
+            for piece in [OLD,NEW,NOTE,HASH1,HASH2,"REVISION 1","REVISION 2"]:
+                self.assertIn(piece,body)
+            self.assertFalse(any(c[0] in {
+                "crm-company-proposal-revise","crm-proposal-update",
+                "mail-send-draft","crm-invoice-issue"
+            } for c in calls))
+        finally:
+            self.teardown_window(w,dossier,old)
+
+    def test_history_rejects_wrong_company_and_missing_archived_revision(self):
+        w,dossier,calls,old=self.setup_window()
+        try:
+            with patch("desktop.enkyron.QMessageBox.warning") as warning:
+                w.open_dossier_proposal_history(DRAFT,COMPANY)
+                self.last(calls,"crm-company-proposal-versions")[3]({
+                    "available":True,
+                    "company_id":"99999999-2222-4333-8444-555555555555",
+                    "proposal_id":DRAFT,"current_revision":2,"versions":[]
+                },None)
+                self.assertTrue(warning.called)
+                self.assertIsNone(w.crm_proposal_history_dialog)
+                calls.clear()
+                w.open_dossier_proposal_history(DRAFT,COMPANY)
+                self.last(calls,"crm-company-proposal-versions")[3]({
+                    "available":True,"company_id":COMPANY,
+                    "proposal_id":DRAFT,"current_revision":2,"versions":[]
+                },None)
+                self.assertEqual(warning.call_count,2)
+                self.assertIsNone(w.crm_proposal_history_dialog)
+                self.assertFalse(any(c[0]=="crm-company-proposal-revise" for c in calls))
+        finally:
+            self.teardown_window(w,dossier,old)
+
+    def test_uncorrected_r1_history_explains_no_full_text_archive(self):
+        w,dossier,calls,old=self.setup_window()
+        try:
+            w.open_dossier_proposal_history(DRAFT,COMPANY)
+            self.last(calls,"crm-company-proposal-versions")[3]({
+                "available":True,"company_id":COMPANY,
+                "proposal_id":DRAFT,"current_revision":1,"versions":[]
+            },None)
+            self.app.processEvents()
+            window=w.crm_proposal_history_dialog
+            self.assertTrue(window.isVisible())
+            text=window.findChild(QPlainTextEdit,"crmProposalRevisionHistoryText")
+            self.assertTrue(text.isReadOnly())
+            self.assertIn("No previous full-text archive",text.toPlainText())
+            self.assertFalse(any(c[0]=="crm-company-proposal-revise" for c in calls))
+        finally:
+            self.teardown_window(w,dossier,old)
 
 if __name__=="__main__":
     unittest.main()
