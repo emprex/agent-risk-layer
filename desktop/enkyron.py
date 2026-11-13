@@ -858,7 +858,8 @@ class EnkyronWindow(QMainWindow):
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
         assessment_row = QHBoxLayout()
-        assessment_row.addWidget(section_title("CANONICAL ARL ASSESSMENT"))
+        self.assessment_heading = section_title("ARL ASSESSMENT")
+        assessment_row.addWidget(self.assessment_heading)
         assessment_row.addStretch()
         self.assessment_link_button = QPushButton("Select Git target / Link assessment…")
         self.assessment_link_button.setObjectName("primary")
@@ -891,18 +892,26 @@ class EnkyronWindow(QMainWindow):
         master_l.addWidget(self.master_doc, 1)
         self.tabs.addTab(master, "Master Dossier")
 
-        notes = QWidget()
-        notes_l = QVBoxLayout(notes)
+        notes = QScrollArea()
+        notes.setObjectName("ticketWorkNotesScroll")
+        notes.setWidgetResizable(True)
+        notes.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        notes_content = QWidget()
+        notes_l = QVBoxLayout(notes_content)
+        notes_l.setSpacing(12)
+        notes_l.setContentsMargins(12, 12, 12, 12)
         notes_l.addWidget(section_title("RECORDED WORK NOTES"))
         self.notes_view = make_text_area()
         self.notes_view.setObjectName("ticketRecordedNotes")
-        self.notes_view.setMinimumHeight(170)
+        self.notes_view.setFixedHeight(230)
         self.notes_view.setPlaceholderText("No recorded work notes yet.")
-        notes_l.addWidget(self.notes_view, 3)
+        notes_l.addWidget(self.notes_view)
         notes_l.addWidget(section_title("INTERNAL ACTIONS · NOT TEST APPROVAL"))
         self.ticket_actions_view = make_text_area()
         self.ticket_actions_view.setObjectName("ticketActionSummary")
-        self.ticket_actions_view.setFixedHeight(48)
+        self.ticket_actions_view.setFixedHeight(90)
         self.ticket_actions_view.setPlainText("Select a ticket to view planned actions.")
         notes_l.addWidget(self.ticket_actions_view)
         self.ticket_actions_button = QPushButton("Plan / update ticket action…")
@@ -922,6 +931,8 @@ class EnkyronWindow(QMainWindow):
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save_note)
         notes_l.addWidget(self.save_button, alignment=Qt.AlignmentFlag.AlignRight)
+        notes_l.addStretch(1)
+        notes.setWidget(notes_content)
         self.tabs.addTab(notes, "Work Notes")
 
         history = QWidget()
@@ -1420,6 +1431,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_tickets_notice.setWordWrap(True)
         company_tickets_l.addWidget(self.crm_company_tickets_notice)
         self.crm_company_tickets_table = QTableWidget(0, 4)
+        # ENK-05: keep linked ticket rows visible on the CRM page.
+        self.crm_company_tickets_table.setMinimumHeight(130)
         self.crm_company_tickets_table.setHorizontalHeaderLabels(
             ["Ticket", "Title", "Recorded client (as entered)", "Status"]
         )
@@ -17210,7 +17223,7 @@ class EnkyronWindow(QMainWindow):
 
     def _set_ticket_actions_height(self, item_count=0, unavailable=False):
         """Give real actions space, but never let an empty checklist bury work notes."""
-        height = 72 if unavailable else min(165, 44 + 48 * item_count) if item_count else 48
+        height = 90 if unavailable else min(300, 60 + 76 * item_count) if item_count else 60
         self.ticket_actions_view.setFixedHeight(height)
 
     def load_ticket_actions(self, ticket_id):
@@ -17331,6 +17344,7 @@ class EnkyronWindow(QMainWindow):
             index = state.findData(item.get("state") if item else "todo")
             state.setCurrentIndex(index if index >= 0 else 0)
             state.setEnabled(bool(item))
+            save.setText('Save changes' if item else 'Create action')
             confirmed.setChecked(False)
             reason.clear()
 
@@ -17443,17 +17457,25 @@ class EnkyronWindow(QMainWindow):
             ("Consultation", "consultation"),
         ):
             self.triage_type.addItem(label, code)
+        self.triage_type.insertItem(0, "Select request type…", None)
+        self.triage_type.setCurrentIndex(0)
         form.addRow("Request type *", self.triage_type)
         self.triage_impact = QComboBox()
         self.triage_urgency = QComboBox()
         for level in ("low", "medium", "high"):
             self.triage_impact.addItem(level.title(), level)
             self.triage_urgency.addItem(level.title(), level)
+        self.triage_impact.insertItem(0, "Select impact…", None)
+        self.triage_urgency.insertItem(0, "Select urgency…", None)
+        self.triage_impact.setCurrentIndex(0)
+        self.triage_urgency.setCurrentIndex(0)
         form.addRow("Impact *", self.triage_impact)
         form.addRow("Urgency *", self.triage_urgency)
         self.triage_priority = QComboBox()
         for level in ("low", "normal", "high", "critical"):
             self.triage_priority.addItem(level.title(), level)
+        self.triage_priority.insertItem(0, "Select priority…", None)
+        self.triage_priority.setCurrentIndex(0)
         form.addRow("Priority (human judgment) *", self.triage_priority)
         layout.addLayout(form)
         self.triage_note = QPlainTextEdit()
@@ -17480,6 +17502,15 @@ class EnkyronWindow(QMainWindow):
             if ticket_id != self.current_id or not dialog.isVisible():
                 return
             note = self.triage_note.toPlainText().strip()
+            if any(combo.currentData() is None for combo in (
+                self.triage_type, self.triage_impact,
+                self.triage_urgency, self.triage_priority
+            )):
+                QMessageBox.warning(
+                    dialog, "Classification incomplete",
+                    "Select request type, impact, urgency and priority."
+                )
+                return
             if not 30 <= len(note) <= 500 or not self.triage_confirm.isChecked():
                 QMessageBox.warning(
                     dialog, "Review required",
@@ -17677,11 +17708,23 @@ class EnkyronWindow(QMainWindow):
         ticket = self.current_ticket
         if not ticket:
             return
-        operator = self.ticket_operator_display(ticket.get("assessor_name"))
-        self.meta.setText("{}  ·  {}  ·  Engineer: {}{}".format(
-            ticket["client_name"], ticket["status"].replace("_", " ").upper(),
-            operator, " · ARCHIVED" if ticket.get("archived_at") else ""
-        ))
+        owner = self.ticket_operator_display(ticket.get("assigned_to"))
+        linked = (
+            ticket.get("target_kind") == "git"
+            and bool(ticket.get("linked_project_id"))
+            and bool(ticket.get("linked_assessment_id"))
+        )
+        meta = "{}  ·  {}  ·  Assigned: {}".format(
+            ticket["client_name"],
+            ticket["status"].replace("_", " ").upper(),
+            owner
+        )
+        if linked:
+            engineer = self.ticket_operator_display(ticket.get("assessor_name"))
+            meta += "  ·  Assessment engineer: " + engineer
+        if ticket.get("archived_at"):
+            meta += "  ·  ARCHIVED"
+        self.meta.setText(meta)
         self.owner_label.setText(
             "Assigned to: {}".format(self.ticket_operator_display(ticket.get("assigned_to")))
         )
@@ -18095,6 +18138,21 @@ class EnkyronWindow(QMainWindow):
             ticket = data["ticket"]
             self.current_ticket = ticket
             self.ticket_local_operator = data.get("local_operator")
+            linked_assessment = (
+                ticket.get("target_kind") == "git"
+                and bool(ticket.get("linked_project_id"))
+                and bool(ticket.get("linked_assessment_id"))
+            )
+            if not linked_assessment and self.tabs.currentIndex() in (1, 4, 5, 6):
+                self.tabs.setCurrentIndex(0)
+            for tab_index in (1, 4, 5, 6):
+                self.tabs.setTabVisible(tab_index, linked_assessment)
+            self.assessment_heading.setText(
+                "ARL ASSESSMENT" if linked_assessment
+                else "ARL ASSESSMENT · NOT LINKED"
+            )
+            self.binding.setVisible(linked_assessment)
+            self.scope_review_button.setVisible(linked_assessment)
             self.title.setText("{}   |   {}".format(ticket["ticket_number"], ticket["title"]))
             self._refresh_ticket_identity_labels()
             self.scope.setPlainText(
