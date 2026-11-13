@@ -113,7 +113,7 @@ export async function listDeskTickets(pool, search, actor, options={}) {
       const priorities=(await pool.query(
         `SELECT DISTINCT ON (ticket_id) ticket_id,priority
          FROM enkyron_ticket_triage_reviews
-         WHERE ticket_id=ANY($1::uuid[])
+         WHERE ticket_id=ANY($1::text[])
          ORDER BY ticket_id,recorded_at DESC,id DESC`,[ids]
       )).rows;
       const lookup=new Map(priorities.map(row=>[row.ticket_id,row.priority]));
@@ -129,7 +129,7 @@ export async function listDeskTickets(pool, search, actor, options={}) {
            SELECT DISTINCT ON (ticket_id,action_id)
              ticket_id,action_id,title,due_on,state
            FROM enkyron_ticket_action_versions
-           WHERE ticket_id=ANY($1::uuid[])
+           WHERE ticket_id=ANY($1::text[])
            ORDER BY ticket_id,action_id,revision DESC
          ) latest
          WHERE state IN ('todo','blocked') AND due_on IS NOT NULL
