@@ -21,9 +21,35 @@ const UAT_COMMANDS = new Set([
   'crm-company-followup-update',
 ]);
 
+// Optional, deliberately stricter operator UX preview. This is not a
+// production policy and does not make the ordinary UAT editable workflow read-only.
+// It is active ONLY when paired with the exact synthetic DB and marker.
+// An allowlist (not a negative list) prevents unknown operations from slipping in.
+const UX_PREVIEW_READ_COMMANDS = new Set([
+  'tickets', 'crm-sales-overview', 'crm-sales-pipeline',
+  'crm-companies', 'crm-contacts', 'crm-company-dossier',
+  'crm-company-history', 'crm-opportunities', 'crm-activity-timeline',
+  'crm-company-followups', 'crm-company-followups-upcoming',
+  'crm-company-proposal-readiness', 'crm-proposal', 'crm-proposals',
+  'crm-company-proposal-versions',
+]);
+
+export function requireEnkyronUxPreviewCommand(target,command,env=process.env) {
+  if(!Object.hasOwn(env,'ENKYRON_UX_PREVIEW_READ_ONLY')) return;
+  if(env.ENKYRON_UX_PREVIEW_READ_ONLY!=='1' || target?.uat!==true)
+    throw new Error('ENKYRON UX preview requires exact synthetic UAT routing');
+  if(!UX_PREVIEW_READ_COMMANDS.has(command))
+    throw new Error('ENKYRON UX preview is read-only; this action is unavailable');
+}
+
 export function resolveEnkyronDatabase(env = process.env) {
   const hasName = Object.hasOwn(env, 'ENKYRON_UAT_DATABASE');
   const hasGate = Object.hasOwn(env, 'ENKYRON_UAT_GUARD');
+  const hasUxPreview = Object.hasOwn(env, 'ENKYRON_UX_PREVIEW_READ_ONLY');
+  if (hasUxPreview && (env.ENKYRON_UX_PREVIEW_READ_ONLY !== '1'
+      || !hasName || !hasGate)) {
+    throw new Error('ENKYRON UX preview requires exact synthetic UAT routing');
+  }
   if (!hasName && !hasGate) {
     return Object.freeze({ database: 'arl_local', uat: false });
   }
