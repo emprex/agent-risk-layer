@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QApplication, QMessageBox, QInputDialog
+from PySide6.QtWidgets import QApplication, QMessageBox, QInputDialog, QLabel
 
 from desktop.enkyron import EnkyronWindow, DesktopBridge
 
@@ -53,6 +53,26 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
             gc.collect()
         finally:
             DesktopBridge.call=self.original
+
+    def test_synthetic_uat04_is_clearly_labelled_in_real_native_window(self):
+        with patch.dict(os.environ, {
+            "ENKYRON_UAT_DATABASE": "enkyron_uat_enk05",
+            "ENKYRON_UAT_GUARD": "ENK05_SYNTHETIC_ONLY",
+        }):
+            test_window = EnkyronWindow()
+            try:
+                self.assertIn("SYNTHETIC UAT-04", test_window.windowTitle())
+                banner = test_window.findChild(
+                    QLabel, "enkyronServiceDeskUatBanner"
+                )
+                self.assertIsNotNone(banner)
+                self.assertIn("SERVICE DESK ONLY", banner.text())
+                self.assertIn("not real company records", banner.text())
+            finally:
+                test_window.close()
+                test_window.deleteLater()
+                self.app.processEvents()
+        self.assertNotIn("SYNTHETIC UAT-04", self.w.windowTitle())
 
     def test_cancel_and_missing_rationale_never_dispatch_status(self):
         with patch.object(QInputDialog,"getMultiLineText",return_value=("",False)):
