@@ -101,16 +101,99 @@ test('unauthorised status jump and unknown ticket never update records',async()=
   for(const previous of ['new',null]) {
     const db=fakePool({previous});
     await assert.rejects(
-      ()=>updateDeskTicketStatus(db,{ticket_id:ticketId,status:'closed'}),
+      ()=>updateDeskTicketStatus(db,{
+        ticket_id:ticketId,status:'closed',expected_status:'resolved',
+        review_note:'All customer issues were addressed and reviewed by the assigned operator.',
+        confirmed:true
+      },'localoperator'),
       previous===null?/Ticket not found/:/Status transition not allowed/
     );
     assert.deepEqual(db.calls.map(x=>x.sql),[
-      'BEGIN','SELECT status,assessor_name,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'BEGIN','SELECT status,assessor_name,assigned_to,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       'ROLLBACK','RELEASE'
     ]);
   }
 });
 
+
+test('ENK-05 resolution requires reviewed current status, long rationale and confirmation',()=>{
+  const base={
+    ticket_id:ticketId,status:'resolved',
+    expected_status:'pending_review',
+    review_note:'Operator verified the documented result and informed the requester internally.',
+    confirmed:true
+  };
+  assert.deepEqual(validateStatusChange(base),{
+    ticketId,status:'resolved',expectedStatus:'pending_review',
+    reviewNote:base.review_note
+  });
+  for(const invalid of [
+    {...base,confirmed:false},{...base,expected_status:null},
+    {...base,expected_status:'new'}, {...base,review_note:'too short'},
+    {...base,review_note:'x'.repeat(501)}, {...base,review_note:undefined},
+    {...base,review_note:'one\\u0000two'}, {...base,spoof_actor:'other'},
+    {...base,status:'closed',expected_status:'pending_review'},
+  ]) assert.throws(()=>validateStatusChange(invalid));
+  assert.throws(()=>validateStatusChange({
+    ticket_id:ticketId,status:'closed'
+  }),/Reviewed ticket resolution/);
+});
+
+test('ENK-05 reviewed resolve/close appends immutable event under local operator in same transaction',async()=>{
+  const review='All work notes were reviewed and the exact customer request was resolved.';
+  const eventId='00000000-0000-4000-8000-000000000099';
+  for(const [previous,status] of [
+    ['pending_review','resolved'],['resolved','closed']
+  ]){
+    const db=fakePool({previous,assignee:'localoperator'});
+    const result=await updateDeskTicketStatus(db,{
+      ticket_id:ticketId,status,expected_status:previous,
+      review_note:review,confirmed:true
+    },'localoperator',{uuid:()=>eventId});
+    assert.deepEqual(result,{
+      ticket_id:ticketId,from:previous,status,event_id:eventId
+    });
+    assert.equal(db.calls[0].sql,'BEGIN');
+    assert.equal(db.calls[4].sql,'COMMIT');
+    assert.equal(db.calls[5].sql,'RELEASE');
+    assert.match(db.calls[2].sql,/UPDATE arl_workbench_tickets/);
+    assert.match(db.calls[3].sql,/status_changed/);
+    assert.deepEqual(db.calls[3].params.slice(0,2),[eventId,ticketId]);
+    assert.ok(db.calls[3].params[2].includes(review));
+    assert.equal(db.calls[3].params[3],'localoperator');
+    assert.ok(!db.calls.some(x=>/INSERT INTO assessments|\bDELETE FROM\b/i.test(x.sql)));
+  }
+});
+
+test('ENK-05 stale, unassigned, wrong-owner or already-resolved completion never updates ticket',async()=>{
+  const base={
+    ticket_id:ticketId,status:'resolved',expected_status:'pending_review',
+    review_note:'The operator completed each requested work item and independently reviewed the result.',
+    confirmed:true
+  };
+  for(const sample of [
+    {previous:'pending_review',assignee:null,actor:'localoperator',error:/Assign this ticket/},
+    {previous:'pending_review',assignee:'anotheroperator',actor:'localoperator',error:/Assign this ticket/},
+    {previous:'in_progress',assignee:'localoperator',actor:'localoperator',error:/Status transition not allowed/},
+    {previous:'resolved',assignee:'localoperator',actor:'localoperator',error:/Status transition not allowed/}
+  ]){
+    const db=fakePool(sample);
+    await assert.rejects(
+      ()=>updateDeskTicketStatus(db,base,sample.actor),sample.error
+    );
+    assert.equal(db.calls.some(x=>/UPDATE arl_workbench_tickets/.test(x.sql)),false);
+    assert.ok(db.calls.some(x=>x.sql==='ROLLBACK'));
+  }
+  const stale=fakePool({previous:'pending_review',assignee:'localoperator'});
+  await assert.rejects(()=>updateDeskTicketStatus(stale,{
+    ...base, expected_status:'resolved',status:'closed'
+  },'localoperator'),/Status transition not allowed/);
+  const malformed=fakePool({previous:'pending_review',assignee:'localoperator'});
+  await assert.rejects(()=>updateDeskTicketStatus(malformed,{
+    ...base,confirmed:false
+  },'localoperator'),/Reviewed ticket resolution/);
+  assert.equal(malformed.calls.length,0,'Missing confirmation must fail before any DB connection');
+});
 
 test('self-assignment is atomic and records a separate owner, not an assessor rewrite', async()=>{
   const db=fakePool();
