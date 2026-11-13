@@ -17,7 +17,10 @@ CREATE TABLE enkyron_crm_proposal_content_versions (
   snapshot_kind TEXT NOT NULL CHECK (
     snapshot_kind IN ('pre_edit_archive','reviewed_revision')
   ),
+  review_note TEXT NOT NULL DEFAULT '' CHECK (length(review_note)<=600),
   recorded_by TEXT NOT NULL,
+  CHECK ((snapshot_kind='pre_edit_archive' AND review_note='')
+      OR (snapshot_kind='reviewed_revision' AND length(btrim(review_note)) BETWEEN 30 AND 600)),
   recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(workspace_key,proposal_id,revision),
   CONSTRAINT enkyron_proposal_content_version_scoped_draft
