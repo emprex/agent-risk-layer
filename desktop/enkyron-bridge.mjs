@@ -133,7 +133,7 @@ async function ticketDetails(pool, id) {
      ORDER BY created_at DESC,id DESC LIMIT 100`, [ticketId]
   )).rows;
   const events = (await pool.query(
-    `SELECT event_type,detail,actor,created_at
+    `SELECT id,event_type,detail,actor,created_at
      FROM arl_workbench_ticket_events WHERE ticket_id=$1
      ORDER BY created_at DESC,id DESC LIMIT 100`, [ticketId]
   )).rows;
@@ -541,7 +541,7 @@ async function main() {
       command === 'evidence-register' ? await evidenceRegister(pool, payload) :
       command === 'evidence-integrity-read' ? await evidenceIntegrity(pool, payload) :
       command === 'create-ticket' ? await createDeskTicket(pool, payload, os.userInfo().username) :
-      command === 'ticket-status' ? await updateDeskTicketStatus(pool, payload) :
+      command === 'ticket-status' ? await updateDeskTicketStatus(pool, payload, os.userInfo().username) :
       command === 'ticket-assignment' ? await assignDeskTicket(pool, payload, os.userInfo().username) :
       command === 'ticket-archive' ? await archiveDeskTicket(pool, payload, os.userInfo().username) :
       command === 'ticket-triage-save' ? await recordTicketTriage(pool, payload, os.userInfo().username) :
@@ -554,7 +554,7 @@ async function main() {
 main().catch(error => {
   const message = String(error?.message || '');
   const expected =
-    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Control review|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|Technical scope review|Static evidence review|Batch source replay|Batch metadata evidence|Pilot lab handoff|CRM )/.test(message);
+    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Control review|Master |No recorded|Verified assessment|Status transition|Reviewed ticket|Ticket completion|Ticket changed|Assign this ticket|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|Technical scope review|Static evidence review|Batch source replay|Batch metadata evidence|Pilot lab handoff|CRM )/.test(message);
   const operation=process.argv[2];
   const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(operation);
   const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-folder-rename','mail-local-folder-delete','mail-local-list','mail-local-company','mail-local-company-link','mail-local-sync','mail-local-sync-bodies','mail-local-archive-sync','mail-archive-status','mail-local-full-text','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','mail-local-flag','mail-local-read','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
