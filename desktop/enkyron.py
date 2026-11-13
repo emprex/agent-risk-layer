@@ -798,6 +798,13 @@ class EnkyronWindow(QMainWindow):
         assignment.addWidget(self.archive_button)
         assignment.addStretch()
         overview_l.addLayout(assignment)
+        self.ticket_escalation_notice = QLabel(
+            "Assignment is limited to the local operator. L1–L5 escalation "
+            "is unavailable: multi-user role enforcement is not deployed."
+        )
+        self.ticket_escalation_notice.setObjectName("subtle")
+        self.ticket_escalation_notice.setWordWrap(True)
+        overview_l.addWidget(self.ticket_escalation_notice)
         triage_row = QHBoxLayout()
         self.ticket_triage_label = QLabel("Business triage: Not loaded")
         self.ticket_triage_label.setWordWrap(True)

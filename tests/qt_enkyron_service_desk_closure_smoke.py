@@ -68,6 +68,11 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
             self.w.change_ticket_status()
         self.assertEqual(self.calls,[])
 
+    def test_missing_enterprise_escalation_is_explicit_not_simulated(self):
+        self.assertIn("L1–L5 escalation", self.w.ticket_escalation_notice.text())
+        self.assertIn("unavailable",self.w.ticket_escalation_notice.text())
+        self.assertIn("local operator",self.w.ticket_escalation_notice.text())
+
     def test_only_local_assignee_can_resolve_and_button_explains_why(self):
         self.w.current_ticket["assigned_to"]=None
         self.w.refresh_status_action()
