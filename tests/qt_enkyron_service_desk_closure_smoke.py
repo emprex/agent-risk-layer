@@ -142,5 +142,38 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
         self.assertIn("No tickets assigned to you",self.w.list_notice.text())
         self.assertFalse(any(c[0].endswith("-save") or c[0]=="ticket-status" for c in self.calls))
 
+    def test_new_ticket_from_company_prefills_exact_identity_but_never_auto_links(self):
+        company_id="33333333-4444-4555-8666-777777777777"
+        self.w.crm_company_id=company_id
+        self.w.crm_company_items=[{"id":company_id,"name":"Example Synthetic Co"}]
+        self.w.crm_link_ticket_button.setEnabled(True)
+        self.w.open_new_company_ticket()
+        self.assertTrue(self.w.new_ticket_dialog.isVisible())
+        self.assertEqual(self.w.intake_client.text(),"Example Synthetic Co")
+        self.assertTrue(self.w.intake_client.isReadOnly())
+        self.w.intake_title.setText("Synthetic support request")
+        self.w.intake_description.setPlainText("Synthetic question for an operator")
+        with patch.object(self.w,"open_ticket_link_dialog") as show_review:
+            self.w.create_ticket()
+            self.assertEqual(self.calls[-1][0],"create-ticket")
+            self.assertEqual(self.calls[-1][2]["client_name"],"Example Synthetic Co")
+            self.calls[-1][3]({
+                "id":TICKET,"ticket_number":"ARL-2026-000999","source":"manual"
+            },None)
+            self.assertTrue(show_review.called)
+            self.assertEqual(self.w.crm_ticket_link_prefill,"ARL-2026-000999")
+        self.assertFalse(any(c[0]=="crm-link-ticket" for c in self.calls))
+        self.assertIn("no automatic link",self.w.status.text())
+
+    def test_cancel_new_company_ticket_dispatches_no_write(self):
+        self.w.crm_company_id="33333333-4444-4555-8666-777777777777"
+        self.w.crm_company_items=[{
+            "id":self.w.crm_company_id,"name":"Example Synthetic Co"
+        }]
+        self.w.open_new_company_ticket()
+        self.w.new_ticket_dialog.reject()
+        self.assertIsNone(self.w.new_ticket_company_context)
+        self.assertEqual(self.calls,[])
+
 if __name__=="__main__":
     unittest.main()

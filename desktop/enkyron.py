@@ -731,6 +731,8 @@ class EnkyronWindow(QMainWindow):
         index_l.addLayout(filters)
 
         self.new_ticket_dialog = None
+        self.new_ticket_company_context = None
+        self.crm_ticket_link_prefill = None
         self.ticket_list = QListWidget()
         self.ticket_list.setObjectName("ticketList")
         self.ticket_list.setAlternatingRowColors(True)
@@ -1355,6 +1357,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_link_ticket_button.setEnabled(False)
         self.crm_link_ticket_button.clicked.connect(self.open_ticket_link_dialog)
         ticket_heading.addWidget(self.crm_link_ticket_button)
+        self.crm_new_company_ticket_button = QPushButton("+ New ticket for company")
+        self.crm_new_company_ticket_button.setObjectName("newCompanyTicket")
+        self.crm_new_company_ticket_button.setEnabled(False)
+        self.crm_new_company_ticket_button.clicked.connect(
+            self.open_new_company_ticket
+        )
+        ticket_heading.addWidget(self.crm_new_company_ticket_button)
         self.crm_ticket_opportunity_button = QPushButton("+ Opportunity from ticket")
         self.crm_ticket_opportunity_button.setEnabled(False)
         self.crm_ticket_opportunity_button.clicked.connect(
@@ -4275,6 +4284,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_ticket_items = []
             self.crm_company_tickets_table.setRowCount(0)
             self.crm_link_ticket_button.setEnabled(False)
+            self.crm_new_company_ticket_button.setEnabled(False)
             self.crm_ticket_opportunity_button.setEnabled(False)
             self.crm_open_company_ticket_button.setEnabled(False)
             if error:
@@ -4347,6 +4357,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_ticket_seq += 1
             self.crm_company_tickets_table.setRowCount(0)
             self.crm_link_ticket_button.setEnabled(False)
+            self.crm_new_company_ticket_button.setEnabled(False)
             self.crm_ticket_opportunity_button.setEnabled(False)
             self.crm_open_company_ticket_button.setEnabled(False)
             return
@@ -4371,6 +4382,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_retention_button.setEnabled(False)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
+        self.crm_new_company_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
         self.refresh_selected_company_contacts(company_id)
 
@@ -9538,6 +9550,11 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(buttons)
         self.crm_link_dialog = dialog
         self.crm_link_dialog_company_id = company_id
+        # Prefill exact ticket number, never pre-approve or automatically link.
+        prefill = self.crm_ticket_link_prefill
+        self.crm_ticket_link_prefill = None
+        if isinstance(prefill, str) and prefill:
+            self.crm_link_ticket_search.setText(prefill)
         dialog.open()
         self.load_ticket_link_options()
 
@@ -16899,6 +16916,29 @@ class EnkyronWindow(QMainWindow):
     def show_error(self, message):
         self.status.setText("Operation blocked: " + message)
 
+    def open_new_company_ticket(self):
+        """Start intake from exact CRM company; linking remains human-reviewed."""
+        if self.new_ticket_dialog and self.new_ticket_dialog.isVisible():
+            self.new_ticket_dialog.raise_()
+            self.new_ticket_dialog.activateWindow()
+            return
+        company_id = self.crm_company_id
+        company = next(
+            (row for row in self.crm_company_items
+             if row.get("id") == company_id), None
+        )
+        name = company.get("name") if company else None
+        if not company_id or not isinstance(name, str) or not name.strip():
+            QMessageBox.warning(
+                self, "Select a company",
+                "Choose a registered CRM company before creating a ticket."
+            )
+            return
+        self.new_ticket_company_context = {
+            "id": company_id, "name": name.strip()
+        }
+        self.open_new_ticket()
+
     def open_new_ticket(self):
         """Front-door intake; no assessment, Git target or test is created."""
         if self.new_ticket_dialog and self.new_ticket_dialog.isVisible():
@@ -16916,6 +16956,14 @@ class EnkyronWindow(QMainWindow):
             "associate the ticket with a CRM company or launch an assessment. "
             "Review the association later in CRM → Companies → Tickets."
         )
+        company_context = self.new_ticket_company_context
+        if company_context:
+            hint.setText(
+                "Selected CRM company: {}. The name is prefilled from its "
+                "canonical record. Creating a ticket will NOT link it "
+                "automatically. You will review the exact association next."
+                .format(company_context["name"])
+            )
         hint.setWordWrap(True)
         layout.addWidget(hint)
         form = QFormLayout()
@@ -16927,6 +16975,9 @@ class EnkyronWindow(QMainWindow):
         self.intake_client.setMaxLength(160)
         self.intake_client.setPlaceholderText("Organisation or client name, not contact person")
         form.addRow("Organisation / client *", self.intake_client)
+        if company_context:
+            self.intake_client.setText(company_context["name"])
+            self.intake_client.setReadOnly(True)
         self.intake_contact = QLineEdit()
         self.intake_contact.setMaxLength(160)
         self.intake_contact.setPlaceholderText("Person who contacted us (optional)")
@@ -16959,6 +17010,9 @@ class EnkyronWindow(QMainWindow):
         buttons.addWidget(self.intake_submit)
         layout.addLayout(buttons)
         self.new_ticket_dialog = dialog
+        dialog.finished.connect(
+            lambda _result: setattr(self, "new_ticket_company_context", None)
+        )
         dialog.open()
 
     def create_ticket(self):
@@ -16988,18 +17042,37 @@ class EnkyronWindow(QMainWindow):
                 )
                 self.intake_submit.setEnabled(True)
                 return
+            company_context = self.new_ticket_company_context
             dialog.accept()
             self.search.clear()
             self.current_id = None
             self.current_ticket = None
-            self.status.setText(
-                "Ticket {} created in PostgreSQL from {}. No assessment created."
-                .format(result["ticket_number"], result["source"])
-            )
             new_id = result["id"]
             # Select the newly opened ticket after asynchronous list refresh.
             self.pending_ticket_id = new_id
             self.load_tickets()
+            if company_context:
+                if (company_context["id"] == self.crm_company_id
+                        and self.crm_link_ticket_button.isEnabled()):
+                    self.crm_ticket_link_prefill = result["ticket_number"]
+                    self.status.setText(
+                        "Ticket {} created. Review the exact CRM association "
+                        "in the next dialog; no automatic link was made."
+                        .format(result["ticket_number"])
+                    )
+                    self.open_ticket_link_dialog()
+                else:
+                    self.status.setText(
+                        "Ticket {} created but CRM selection changed. "
+                        "No company link was attempted; review it later "
+                        "using Company → Tickets."
+                        .format(result["ticket_number"])
+                    )
+            else:
+                self.status.setText(
+                    "Ticket {} created in PostgreSQL from {}. No assessment created."
+                    .format(result["ticket_number"], result["source"])
+                )
 
         self.bridge.call("create-ticket", payload=data, callback=completed)
 
