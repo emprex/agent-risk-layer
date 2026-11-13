@@ -274,12 +274,12 @@ test('ENK-04 migration 115 validates pre-existing archives and rejects historica
       fixtures.push({draft,event,title,scope});
     }
     const [a,b]=fixtures;
-    const insert=(client,eventId)=>client.query(
+    const insert=(client,eventId,revision=1)=>client.query(
       'INSERT INTO enkyron_crm_proposal_content_versions '
       +'(id,workspace_key,proposal_id,revision,title,scope_text,currency,'
       +'amount_minor,content_sha256,source_event_id,snapshot_kind,recorded_by) '
-      +"VALUES($1,$2,$3,1,$4,$5,'GBP',100,$6,$7,'pre_edit_archive',$8)",
-      [randomUUID(),workspace,a.draft.id,a.title,a.scope,
+      +"VALUES($1,$2,$3,$4,$5,$6,'GBP',100,$7,$8,'pre_edit_archive',$9)",
+      [randomUUID(),workspace,a.draft.id,revision,a.title,a.scope,
        a.event.content_sha256,eventId,actor]
     );
     await insert(pool,a.event.id);
@@ -312,7 +312,7 @@ test('ENK-04 migration 115 validates pre-existing archives and rejects historica
         +'DROP CONSTRAINT enkyron_proposal_archive_event_exact_fk'
       );
       await client.query('DROP INDEX enkyron_proposal_event_archive_link_key');
-      await insert(client,b.event.id); // same workspace, different proposal
+      await insert(client,b.event.id,2); // unoccupied R2; wrong proposal AND revision
       await assert.rejects(
         client.query(migration),
         e=>e?.code==='23503' &&
