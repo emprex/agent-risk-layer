@@ -388,6 +388,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
         self.crm_scope_correction_dialog = None
+        self.crm_proposal_history_dialog = None
         self.crm_scope_revision_uncertain = False
         self.crm_issue_preflight_dialog = None
         self.crm_quote_evidence_dialog = None
@@ -6943,6 +6944,9 @@ class EnkyronWindow(QMainWindow):
                     page_layout.insertWidget(0, guidance)
                     commercial_buttons = QHBoxLayout()
                     open_source = QPushButton("Open source proposal…")
+                    view_revisions = QPushButton("View draft revisions…")
+                    view_revisions.setObjectName("crmDossierViewRevisions")
+                    view_revisions.setToolTip("Read-only full-text revision archive and human review reasons. Nothing is edited or issued.")
                     correct_scope = QPushButton("Correct draft scope (new revision)…")
                     correct_scope.setObjectName("crmDossierCorrectScope")
                     correct_scope.setToolTip(
@@ -6952,6 +6956,7 @@ class EnkyronWindow(QMainWindow):
                     open_invoice = QPushButton("Open invoice draft…")
                     review_invoice = QPushButton("Review invoice blockers…")
                     commercial_buttons.addWidget(open_source)
+                    commercial_buttons.addWidget(view_revisions)
                     commercial_buttons.addWidget(correct_scope)
                     commercial_buttons.addWidget(open_invoice)
                     commercial_buttons.addWidget(review_invoice)
@@ -6968,11 +6973,23 @@ class EnkyronWindow(QMainWindow):
                             "unissued_invoice_draft" and document.get("document_id")
                         )
                         open_source.setEnabled(bool(document and document.get("proposal_id")))
-                        correct_scope.setEnabled(bool(
+                        is_proposal = bool(
                             document and document.get("document_kind") == "proposal_draft"
                             and document.get("proposal_id")
+                        )
+                        view_revisions.setEnabled(is_proposal)
+                        # The reviewed editor is deliberately R1 -> R2 only.
+                        # Do not offer a misleading edit action on an existing R2.
+                        correct_scope.setEnabled(bool(
+                            is_proposal and document.get("revision") == 1
                             and not self.crm_scope_revision_uncertain
                         ))
+                        if is_proposal and document.get("revision") != 1:
+                            correct_scope.setToolTip(
+                                "Revision 2 is already recorded. Review its full "
+                                "history here; another edit requires a new "
+                                "human-reviewed workflow."
+                            )
                         open_invoice.setEnabled(is_invoice)
                         review_invoice.setEnabled(is_invoice)
 
@@ -6980,6 +6997,14 @@ class EnkyronWindow(QMainWindow):
                         document = selected_document()
                         if document and document.get("proposal_id"):
                             self.open_dossier_source_proposal(document["proposal_id"])
+
+                    def view_source_revisions():
+                        document = selected_document()
+                        if (document and document.get("document_kind") == "proposal_draft"
+                                and document.get("proposal_id")):
+                            self.open_dossier_proposal_history(
+                                document["proposal_id"], company_id
+                            )
 
                     def correct_source_document():
                         document = selected_document()
@@ -6998,6 +7023,7 @@ class EnkyronWindow(QMainWindow):
 
                     table.itemSelectionChanged.connect(update_document_actions)
                     open_source.clicked.connect(open_source_document)
+                    view_revisions.clicked.connect(view_source_revisions)
                     correct_scope.clicked.connect(correct_source_document)
                     open_invoice.clicked.connect(lambda: open_invoice_document(False))
                     review_invoice.clicked.connect(lambda: open_invoice_document(True))
@@ -7908,6 +7934,142 @@ class EnkyronWindow(QMainWindow):
             self.show_proposal_dialog(proposal)
 
         self.bridge.call("crm-proposal", proposal_id, callback=received)
+
+    def open_dossier_proposal_history(self, proposal_id, company_id):
+        """Read full immutable proposal revisions without any business write."""
+        dossier = self.crm_dossier_dialog
+        if (not dossier or not dossier.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or not proposal_id):
+            return
+        existing = self.crm_proposal_history_dialog
+        if existing and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        def received(history, error):
+            if (dossier is not self.crm_dossier_dialog
+                    or not dossier.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            if (error or not isinstance(history, dict)
+                    or history.get("available") is not True
+                    or history.get("company_id") != company_id
+                    or history.get("proposal_id") != proposal_id
+                    or not isinstance(history.get("current_revision"), int)
+                    or history["current_revision"] < 1
+                    or not isinstance(history.get("versions"), list)):
+                QMessageBox.warning(
+                    dossier, "Draft revision history unavailable",
+                    "The exact company, proposal and immutable history "
+                    "could not be verified. No data was changed."
+                )
+                return
+            current_revision = history["current_revision"]
+            versions = history["versions"]
+            # Historical full text only exists from the first controlled edit.
+            # A revised draft must not masquerade as having a complete archive.
+            numbers = [v.get("revision") if isinstance(v, dict) else None
+                       for v in versions]
+            if ((current_revision > 1 and
+                 numbers != list(range(1, current_revision + 1)))
+                    or (current_revision == 1 and bool(versions))):
+                QMessageBox.warning(
+                    dossier, "Incomplete revision history",
+                    "The complete version sequence is not available. "
+                    "No versions have been invented and nothing was changed."
+                )
+                return
+            for version in versions:
+                revision = version["revision"]
+                sha = version.get("content_sha256")
+                if (not isinstance(version.get("title"), str)
+                        or not isinstance(version.get("scope_text"), str)
+                        or not isinstance(version.get("currency"), str)
+                        or not isinstance(version.get("amount_minor"), (int, str))
+                        or not isinstance(version.get("source_event_id"), str)
+                        or not isinstance(version.get("recorded_by"), str)
+                        or not isinstance(sha, str)
+                        or re.fullmatch(r"[a-f0-9]{64}", sha) is None
+                        or version.get("snapshot_kind") != (
+                            "pre_edit_archive" if revision == 1 else "reviewed_revision"
+                        )):
+                    QMessageBox.warning(
+                        dossier, "Invalid revision archive",
+                        "A stored version is incomplete or inconsistent. "
+                        "No content will be displayed as verified."
+                    )
+                    return
+
+            window = QDialog(dossier)
+            window.setWindowTitle("ENKYRON · Full draft revision history (read only)")
+            window.setMinimumSize(760, 590)
+            layout = QVBoxLayout(window)
+            notice = QLabel(
+                "Stored full-text versions for the selected company draft. "
+                "This is an internal, unsent proposal. Stored SHA-256 values "
+                "are audit references, not digital signatures. No editing, "
+                "sending or contractual approval is available here."
+            )
+            notice.setWordWrap(True)
+            layout.addWidget(notice)
+            summary = QLabel(
+                "Current revision: {} · Full-text archives: {}\n"
+                "Proposal ID: {}".format(
+                    current_revision, len(versions), proposal_id
+                )
+            )
+            summary.setObjectName("crmProposalRevisionHistorySummary")
+            summary.setWordWrap(True)
+            layout.addWidget(summary)
+            parts = []
+            if not versions:
+                parts.append(
+                    "Revision 1 is the current unsent draft. No previous "
+                    "full-text archive exists yet. Use Open source proposal "
+                    "to view the current document."
+                )
+            for version in versions:
+                revision = version["revision"]
+                reason = version.get("review_note") or (
+                    "Original text archived before the first human-reviewed edit."
+                    if revision == 1 else "Not recorded"
+                )
+                parts.append(
+                    "REVISION {} — {}\n"
+                    "Title: {}\nPrice (locked at correction): {} {} minor units\n"
+                    "Archive recorded: {}\nRecorded by: {}\n"
+                    "Source event ID: {}\nStored SHA-256: {}\n"
+                    "Review reason: {}\n\nFULL TEXT\n{}"
+                    .format(revision, version["snapshot_kind"],
+                            version["title"], version["currency"],
+                            version["amount_minor"], version.get("recorded_at", ""),
+                            version["recorded_by"], version["source_event_id"],
+                            version["content_sha256"], reason,
+                            version["scope_text"])
+                )
+            full_text = QPlainTextEdit()
+            full_text.setObjectName("crmProposalRevisionHistoryText")
+            full_text.setReadOnly(True)
+            full_text.setPlainText(
+                "\n\n" + ("\n\n" + "=" * 60 + "\n\n").join(parts)
+            )
+            layout.addWidget(full_text, 1)
+            close = QPushButton("Close history")
+            close.clicked.connect(window.reject)
+            layout.addWidget(close)
+            self.crm_proposal_history_dialog = window
+            window.finished.connect(
+                lambda _result: setattr(self, "crm_proposal_history_dialog", None)
+            )
+            window.open()
+
+        self.bridge.call(
+            "crm-company-proposal-versions",
+            company_id + ":" + proposal_id,
+            callback=received
+        )
 
     def open_dossier_scope_correction(self, proposal_id, company_id):
         """Open a scope-only, full-content version-preserving correction."""
