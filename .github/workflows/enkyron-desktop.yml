@@ -29,6 +29,10 @@ jobs:
           cache: npm
       - name: Node dependencies
         run: npm ci --ignore-scripts
+      - name: ENK-03 isolated PostgreSQL routing and bootstrap guard (synthetic offline)
+        run: |
+          node --check scripts/enkyron-enk03-uat-bootstrap.mjs
+          node --test tests/enkyron-uat-database.test.js
       - name: Desktop bridge and contract tests
         run: |
           node --check desktop/enkyron-contract.mjs
@@ -60,8 +64,12 @@ jobs:
           node --check desktop/enkyron-crm-link.mjs
           node --check desktop/enkyron-crm-tickets.mjs
           node --check desktop/enkyron-crm-company-dossier.mjs
+          node --check desktop/enkyron-crm-company-history.mjs
           node --check desktop/enkyron-crm-qualification.mjs
           node --check desktop/enkyron-crm-proposals.mjs
+          node --check desktop/enkyron-crm-proposal-readiness.mjs
+          node --check desktop/enkyron-crm-company-proposal-create.mjs
+          node --check desktop/enkyron-crm-proposal-content-revisions.mjs
           node --check desktop/enkyron-crm-proposal-lines.mjs
           node --check desktop/enkyron-crm-service-catalog.mjs
           node --check scripts/enkyron-crm-service-catalog-schema.mjs
@@ -128,7 +136,7 @@ jobs:
           node --check scripts/enkyron-crm-privacy-schema.mjs
           node --check scripts/enkyron-crm-retention-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-ticket-actions.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-company-opportunities.test.js tests/enkyron-crm-direct-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-service-catalog.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-sow-sources.test.js tests/enkyron-crm-sow-drafts.test.js tests/enkyron-crm-contract-references.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-invoice-issuance.test.js tests/enkyron-crm-quote-preflight.test.js tests/enkyron-crm-quote-evidence-review.test.js tests/enkyron-crm-quote-external-report.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-ticket-actions.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-company-opportunities.test.js tests/enkyron-crm-direct-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-company-history.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposal-readiness.test.js tests/enkyron-crm-company-proposal-create.test.js tests/enkyron-crm-proposal-content-revisions.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-service-catalog.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-sow-sources.test.js tests/enkyron-crm-sow-drafts.test.js tests/enkyron-crm-contract-references.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-invoice-issuance.test.js tests/enkyron-crm-quote-preflight.test.js tests/enkyron-crm-quote-evidence-review.test.js tests/enkyron-crm-quote-external-report.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
           node --check desktop/enkyron-ticket-scope-review.mjs
           node --check scripts/enkyron-ticket-scope-review-schema.mjs
@@ -226,6 +234,70 @@ jobs:
           node --check scripts/enkyron-clean-test-companies.mjs
           node --test tests/enkyron-crm-test-archive.test.js
 
+      - name: ENK-01B Home labels and empty follow-ups (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_home_empty_followups_smoke.py'
+
+      - name: ENK-02 CRM company selection survives refresh (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_selection_refresh_smoke.py'
+
+      - name: ENK-03 Company 360 opportunity creation (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_dossier_opportunity_smoke.py'
+
+      - name: ENK-04 reviewed company opportunity pipeline update (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_pipeline_company_update_smoke.py'
+      - name: ENK-04 company manual activity exact-readback (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_activity_uat_smoke.py'
+      - name: ENK-04 company qualification exact-readback (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_qualification_uat_smoke.py'
+      - name: ENK-04 company proposal preparation read-only smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_proposal_readiness_smoke.py'
+      - name: ENK-04 company internal proposal exact-readback synthetic Qt
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_draft_smoke.py'
+      - name: ENK-04 immutable draft scope correction (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_proposal_revision_smoke.py'
+
+      - name: ENK-03 CRM contact auto-refresh after dossier save (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_contact_autorefresh_smoke.py'
+
+      - name: ENK-03 unified chronological Company History (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_history_smoke.py'
+
+
+
+
       - name: ENKYRON local Mail + Calendar integration and DST (offline)
         env:
           QT_QPA_PLATFORM: offscreen
@@ -279,6 +351,12 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_manual_sends_smoke.py'
+
+      - name: ENK-01A company dossier follow-up card (synthetic offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_dossier_next_action_smoke.py'
 
       - name: Dossier close after qualification — native Qt regression
         env:
@@ -993,7 +1071,14 @@ jobs:
                        "resource_id": company_id, "actor_local": "ci-local",
                        "created_at": "2026-11-07T05:00:00Z"
                    }]},
-                   "audit_changes": {"total": 0, "more": False, "items": []}
+                   "audit_changes": {"total": 0, "more": False, "items": []},
+                   "company_history": {"total": 1, "more": False, "items": [{
+                       "event_id": "historical-company-event",
+                       "resource_kind": "company", "resource_id": company_id,
+                       "action": "created", "summary": "Company record",
+                       "actor_local": "ci-local",
+                       "recorded_at": "2026-11-07T05:00:00Z"
+                   }]}
               }
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
@@ -1360,35 +1445,53 @@ jobs:
           }, None)
           assert calls[-1][0] == "crm-company-dossier"
           assert calls[-1][1] == company_id
-          assert window.crm_dossier_activity_flash.startswith("Activity saved")
+          # ENK-04: an acknowledgement is not canonical proof. Exact-ID
+          # company dossier readback must confirm the append before UI success.
+          assert window.crm_dossier_activity_flash == ""
+          assert window.crm_dossier_activity_saving
+          calls[-1][3]({
+              "available": True,
+              "company": {"id": company_id},
+              "sections": {"activities": {"items": [{
+                  "id": "77777777-8888-4999-aaaa-bbbbbbbbbbbb",
+                  "company_id": company_id,
+                  "opportunity_id": None,
+                  "activity_type": "note",
+                  "detail": "LinkedIn message recorded manually, no delivery confirmed."
+              }]}}
+          }, None)
+          assert window.crm_dossier_activity_flash.startswith("Activity verified")
+          assert not window.crm_dossier_activity_saving
+          assert calls[-1][0] == "crm-company-dossier"  # refresh after verification
           assert window.crm_dossier_activity_detail.toPlainText() == ""
           assert not window.crm_dossier_activity_confirm.isChecked()
           # Read-only snapshot refresh is requested; no auto-sent message.
           assert window.crm_dossier_tabs.currentIndex() == 5
-          assert "Latest recorded follow-up:" in window.crm_dossier_next_action.text() or (
-              "No next action recorded" in window.crm_dossier_next_action.text()
+          assert "Opportunity next action:" in window.crm_dossier_next_action.text() or (
+              "No opportunity next action recorded." in window.crm_dossier_next_action.text()
           )
           # One control manages the extended sections. No competing
           # "View commercial documents" button or second reveal mechanism.
           assert window.crm_dossier_show_all.text() == "Show all sections"
           assert not hasattr(window, "crm_dossier_commercial_button")
           assert not window.crm_dossier_show_all.isChecked()
-          assert window.crm_dossier_nav.isRowHidden(10)
+          assert window.crm_dossier_nav.isRowHidden(6)
           assert not window.crm_dossier_nav.isRowHidden(4)
+          assert not window.crm_dossier_nav.isRowHidden(8)
           window.crm_dossier_show_all.click()
-          assert not window.crm_dossier_nav.isRowHidden(10)
-          window.crm_dossier_nav.setCurrentRow(10)
-          assert window.crm_dossier_tabs.currentIndex() == 10
+          assert not window.crm_dossier_nav.isRowHidden(6)
+          window.crm_dossier_nav.setCurrentRow(6)
+          assert window.crm_dossier_tabs.currentIndex() == 6
           window.crm_dossier_show_all.click()
-          assert window.crm_dossier_nav.isRowHidden(10)
+          assert window.crm_dossier_nav.isRowHidden(6)
           assert window.crm_dossier_nav.currentRow() == 0
           assert window.crm_dossier_tabs.currentIndex() == 0
-          assert window.crm_dossier_tabs.count() == 11
-          assert window.crm_dossier_nav.count() == 11
+          assert window.crm_dossier_tabs.count() == 9
+          assert window.crm_dossier_nav.count() == 9
           assert not window.crm_dossier_tabs.tabBar().isVisible()
           assert window.crm_dossier_nav.currentRow() == 0
           assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (4)"
-          assert window.crm_dossier_nav.item(8).text() == "Ticket history (1)"
+          assert window.crm_dossier_nav.item(8).text() == "Company History (1)"
           window.crm_dossier_nav.setCurrentRow(8)
           assert window.crm_dossier_tabs.currentIndex() == 8
           window.crm_dossier_tabs.setCurrentIndex(4)
@@ -1423,9 +1526,16 @@ jobs:
           assert calls[-1][1] == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
           assert any("not customer acceptance" in child.text()
                      for child in commercial_page.findChildren(QLabel))
-          assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
-          assert window.crm_dossier_tabs.tabText(9) == "CRM audit (1)"
-          assert window.crm_dossier_tabs.tabText(10) == "Field changes (0)"
+          assert window.crm_dossier_tabs.tabText(8) == "Company History (1)"
+          history_page = window.crm_dossier_tabs.widget(8)
+          history_order = history_page.findChild(QComboBox, "crmCompanyHistoryOrder")
+          assert history_order.currentData() == "oldest"
+          history_cards = history_page.findChildren(QPushButton, "crmCompanyHistoryExpand")
+          assert len(history_cards) == 1
+          assert history_cards[0].text().startswith("1. Company · Created")
+          history_details = history_page.findChildren(QLabel, "crmCompanyHistoryDetail")
+          assert len(history_details) == 1
+          assert "Company record" in history_details[0].text()
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (1)"
@@ -1463,6 +1573,29 @@ jobs:
           assert calls[-1][2]["contact_id"] is None
           assert calls[-1][2]["fit_status"] == "potential_fit"
           assert calls[-1][2]["confirmed"] is True
+          # The append ack alone is not verified; require an exact company
+          # and qualification ID from the canonical read-only dossier.
+          calls[-1][3]({
+              "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "company_id": company_id,
+              "contact_id": None,
+              "fit_status": "potential_fit",
+              "priority": "normal"
+          }, None)
+          assert calls[-1][0] == "crm-company-dossier"
+          calls[-1][3]({
+              "available": True,
+              "company": {"id": company_id},
+              "sections": {"qualifications": {"items": [{
+                  "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "contact_id": None, "fit_status": "potential_fit",
+                  "priority": "normal",
+                  "rationale": "Research suggests commercial relevance but client identity is unverified.",
+                  "next_action": "Review technical scope manually",
+                  "source_reference": None
+              }]}}
+          }, None)
+          assert calls[-1][0] == "crm-company-dossier"
           # Refresh must preserve an unsaved activity, not discard a human draft.
           window.crm_dossier_nav.setCurrentRow(5)
           window.crm_dossier_activity_record.click()
