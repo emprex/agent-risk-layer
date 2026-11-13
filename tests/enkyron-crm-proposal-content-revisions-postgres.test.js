@@ -145,3 +145,91 @@ test('ENK-04 real PostgreSQL: preserve complete revision 1 and append reviewed r
       'revision must not silently create a ticket, mail send or invoice');
   }finally{await pool.end();}
 });
+
+
+test('ENK-04 real PostgreSQL: archive event must match exact proposal, revision and hash',{
+  skip:!url&&'Strictly isolated CI PostgreSQL only',timeout:60_000
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciOnly(),max:3});
+  const actor='ci-archive-binding-'+randomUUID().slice(0,8);
+  const workspace='local:'+actor;
+  const fixtures=[];
+  try{
+    const constraint=(await pool.query(
+      "SELECT convalidated FROM pg_constraint WHERE conname=$1 AND conrelid=$2::regclass",
+      ['enkyron_proposal_archive_event_exact_fk',
+       'enkyron_crm_proposal_content_versions']
+    )).rows;
+    assert.equal(constraint.length,1,'exact archive/event FK is required');
+    assert.equal(constraint[0].convalidated,true,'existing archives must be validated');
+
+    for(const suffix of ['A','B']){
+      const company=await createCompany(pool,{
+        name:'ENK04 archive binding synthetic '+suffix+' '+randomUUID().slice(0,8)
+      },actor);
+      const opportunity=await createDirectCompanyOpportunity(pool,{
+        company_id:company.id,company_name_at_review:company.name,
+        next_action:'Review internal synthetic event provenance only',
+        due_date:null,confirmed:true
+      },actor);
+      const title='ENK04 archive event binding '+suffix;
+      const scope='Synthetic '+suffix+' draft for isolated event linkage controls. No real customer.';
+      const draft=await createProposalDraft(pool,{
+        opportunity_id:opportunity.id,title,scope_text:scope,
+        currency:'GBP',amount_minor:100
+      },actor);
+      const events=(await pool.query(
+        'SELECT id,revision,content_sha256 FROM enkyron_crm_proposal_draft_events '
+        +'WHERE workspace_key=$1 AND proposal_id=$2',
+        [workspace,draft.id]
+      )).rows;
+      assert.equal(events.length,1);
+      assert.equal(events[0].revision,1);
+      fixtures.push({draft,title,scope,event:events[0]});
+    }
+
+    const [first,second]=fixtures;
+    assert.notEqual(first.event.content_sha256,second.event.content_sha256);
+    const insertArchive=(revision,sourceEventId,hash)=>pool.query(
+      'INSERT INTO enkyron_crm_proposal_content_versions '
+      +'(id,workspace_key,proposal_id,revision,title,scope_text,currency,'
+      +'amount_minor,content_sha256,source_event_id,snapshot_kind,recorded_by) '
+      +"VALUES($1,$2,$3,$4,$5,$6,'GBP',100,$7,$8,'pre_edit_archive',$9)",
+      [randomUUID(),workspace,first.draft.id,revision,first.title,first.scope,
+       hash,sourceEventId,actor]
+    );
+
+    const invalid=[
+      ['cross-proposal event',1,second.event.id,first.event.content_sha256],
+      ['wrong revision for same proposal',2,first.event.id,first.event.content_sha256],
+      ['incorrect content fingerprint',1,first.event.id,second.event.content_sha256]
+    ];
+    for(const [label,revision,eventId,hash] of invalid){
+      await assert.rejects(
+        insertArchive(revision,eventId,hash),
+        error=>error?.code==='23503' &&
+          error?.constraint==='enkyron_proposal_archive_event_exact_fk',
+        label+' must fail against PostgreSQL FK, not just the application'
+      );
+    }
+
+    const absent=(await pool.query(
+      'SELECT count(*)::integer AS n FROM enkyron_crm_proposal_content_versions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      [workspace,first.draft.id]
+    )).rows[0].n;
+    assert.equal(absent,0,'rejected references must not create an archive');
+
+    await insertArchive(1,first.event.id,first.event.content_sha256);
+    const valid=(await pool.query(
+      'SELECT revision,source_event_id,content_sha256 '
+      +'FROM enkyron_crm_proposal_content_versions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      [workspace,first.draft.id]
+    )).rows;
+    assert.equal(valid.length,1);
+    assert.equal(valid[0].revision,1);
+    assert.equal(valid[0].source_event_id,first.event.id);
+    assert.equal(valid[0].content_sha256,first.event.content_sha256);
+  }finally{await pool.end();}
+});
