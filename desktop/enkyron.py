@@ -586,13 +586,17 @@ class EnkyronWindow(QMainWindow):
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
         self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
-        if self.ux_preview_read_only:
-            # Mail/Calendar are outside this synthetic commercial review and
-            # would only lead to an unavailable service/error. Keep CRM visible.
+        if self.ux_preview_read_only or self.enk05_uat_ui:
+            # Never lead a UAT operator into blocked mail/calendar screens.
+            # CRM and Tickets stay available for the synthetic Service Desk.
             for index in (3, 4):
                 item = self.navigation.item(index)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
-                item.setToolTip("Unavailable in synthetic read-only preview")
+                item.setToolTip(
+                    "Unavailable in synthetic read-only preview"
+                    if self.ux_preview_read_only
+                    else "Outside UAT-04 Service Desk scope"
+                )
         self.navigation.setMaximumHeight(255)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
@@ -640,6 +644,16 @@ class EnkyronWindow(QMainWindow):
         go_calendar.setMinimumHeight(44)
         go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
         quick_actions_bottom.addWidget(go_calendar, 1)
+        if self.ux_preview_read_only or self.enk05_uat_ui:
+            go_mail.setEnabled(False)
+            go_calendar.setEnabled(False)
+            scope_reason = (
+                "Read-only synthetic preview"
+                if self.ux_preview_read_only
+                else "Outside UAT-04 Service Desk scope"
+            )
+            go_mail.setToolTip(scope_reason)
+            go_calendar.setToolTip(scope_reason)
         home_l.addLayout(quick_actions_bottom)
 
         overview_header = QHBoxLayout()
