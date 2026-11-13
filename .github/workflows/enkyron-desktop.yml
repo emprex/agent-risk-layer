@@ -161,6 +161,13 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_pilot_lab_smoke.py' -v
 
+      - name: Business lab-case selection and verified artefact integrity (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'test_enkyron_lab_case_choice.py' -v
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'test_enkyron_pilot_lab_bridge.py' -v
+
       - name: Native KB-001 source evidence handoff UX smoke (offline)
         env:
           QT_QPA_PLATFORM: offscreen
