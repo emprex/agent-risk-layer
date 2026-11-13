@@ -17074,7 +17074,8 @@ class EnkyronWindow(QMainWindow):
             if not matches:
                 outcome_uncertain(read_error or "Exact ticket/event readback failed")
                 return
-            if dialog.isVisible():
+            dialog_was_open = dialog.isVisible()
+            if dialog_was_open:
                 dialog.accept()
             self.search.clear()
             self.current_id = None
@@ -17089,7 +17090,8 @@ class EnkyronWindow(QMainWindow):
             self.pending_ticket_id = result["id"]
             self.load_tickets()
             if company_context:
-                if (company_context["id"] == self.crm_company_id
+                if (dialog_was_open
+                        and company_context["id"] == self.crm_company_id
                         and self.crm_link_ticket_button.isEnabled()):
                     self.crm_ticket_link_prefill = result["ticket_number"]
                     self.status.setText(
@@ -17097,12 +17099,12 @@ class EnkyronWindow(QMainWindow):
                         "CRM association next; no automatic link was made."
                         .format(result["ticket_number"])
                     )
-                    if dialog.isVisible() is False:
-                        self.open_ticket_link_dialog()
+                    self.open_ticket_link_dialog()
                 else:
                     self.status.setText(
-                        "Ticket {} verified. CRM selection changed; no company "
-                        "link was attempted. Review via Company → Tickets."
+                        "Ticket {} verified. The intake form was closed, CRM "
+                        "selection changed or link review is unavailable. "
+                        "No company link was attempted; review via Company → Tickets."
                         .format(result["ticket_number"])
                     )
             else:
