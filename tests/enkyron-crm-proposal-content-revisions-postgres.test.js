@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
 import {createDirectCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
@@ -231,5 +232,111 @@ test('ENK-04 real PostgreSQL: archive event must match exact proposal, revision 
     assert.equal(valid[0].revision,1);
     assert.equal(valid[0].source_event_id,first.event.id);
     assert.equal(valid[0].content_sha256,first.event.content_sha256);
+  }finally{await pool.end();}
+});
+
+
+test('ENK-04 migration 115 validates pre-existing archives and rejects historical mismatches',{
+  skip:!url&&'Strictly isolated CI PostgreSQL only',timeout:60_000
+},async()=>{
+  // This intentionally drops/reapplies the new constraint ONLY inside a
+  // disposable CI database transaction. Every DDL change is rolled back.
+  const pool=new pg.Pool({connectionString:ciOnly(),max:3});
+  const actor='ci-archive-upgrade-'+randomUUID().slice(0,8);
+  const workspace='local:'+actor;
+  const migration=await readFile(
+    new URL('../migrations/115_enkyron_crm_proposal_archive_event_binding.sql',import.meta.url),
+    'utf8'
+  );
+  const fixtures=[];
+  try{
+    for(const suffix of ['A','B']){
+      const company=await createCompany(pool,{
+        name:'ENK04 archive migration synthetic '+suffix+' '+randomUUID().slice(0,8)
+      },actor);
+      const opportunity=await createDirectCompanyOpportunity(pool,{
+        company_id:company.id,company_name_at_review:company.name,
+        next_action:'Inspect synthetic migration archive binding',
+        due_date:null,confirmed:true
+      },actor);
+      const title='ENK04 migration archive '+suffix;
+      const scope='Synthetic historical archive '+suffix+' for migration validation only.';
+      const draft=await createProposalDraft(pool,{
+        opportunity_id:opportunity.id,title,scope_text:scope,
+        currency:'GBP',amount_minor:100
+      },actor);
+      const event=(await pool.query(
+        'SELECT id,content_sha256 FROM enkyron_crm_proposal_draft_events '
+        +'WHERE workspace_key=$1 AND proposal_id=$2 AND revision=1',
+        [workspace,draft.id]
+      )).rows[0];
+      assert.ok(event?.id);
+      fixtures.push({draft,event,title,scope});
+    }
+    const [a,b]=fixtures;
+    const insert=(client,eventId)=>client.query(
+      'INSERT INTO enkyron_crm_proposal_content_versions '
+      +'(id,workspace_key,proposal_id,revision,title,scope_text,currency,'
+      +'amount_minor,content_sha256,source_event_id,snapshot_kind,recorded_by) '
+      +"VALUES($1,$2,$3,1,$4,$5,'GBP',100,$6,$7,'pre_edit_archive',$8)",
+      [randomUUID(),workspace,a.draft.id,a.title,a.scope,
+       a.event.content_sha256,eventId,actor]
+    );
+    await insert(pool,a.event.id);
+    const client=await pool.connect();
+    let inTx=false;
+    try{
+      // Re-run the exact additive migration with a valid R1 archive already stored.
+      await client.query('BEGIN');
+      inTx=true;
+      await client.query(
+        'ALTER TABLE enkyron_crm_proposal_content_versions '
+        +'DROP CONSTRAINT enkyron_proposal_archive_event_exact_fk'
+      );
+      await client.query('DROP INDEX enkyron_proposal_event_archive_link_key');
+      await client.query(migration);
+      const validated=(await client.query(
+        "SELECT convalidated FROM pg_constraint WHERE conname='enkyron_proposal_archive_event_exact_fk'"
+      )).rows;
+      assert.equal(validated.length,1);
+      assert.equal(validated[0].convalidated,true);
+      await client.query('ROLLBACK');
+      inTx=false;
+
+      // Simulate a pre-upgrade historical mismatch in an uncommitted transaction.
+      // The exact migration must refuse to validate the old bad association.
+      await client.query('BEGIN');
+      inTx=true;
+      await client.query(
+        'ALTER TABLE enkyron_crm_proposal_content_versions '
+        +'DROP CONSTRAINT enkyron_proposal_archive_event_exact_fk'
+      );
+      await client.query('DROP INDEX enkyron_proposal_event_archive_link_key');
+      await insert(client,b.event.id); // same workspace, different proposal
+      await assert.rejects(
+        client.query(migration),
+        e=>e?.code==='23503' &&
+          e?.constraint==='enkyron_proposal_archive_event_exact_fk',
+        'historical cross-proposal links must abort validation'
+      );
+      await client.query('ROLLBACK');
+      inTx=false;
+    }finally{
+      if(inTx)await client.query('ROLLBACK').catch(()=>{});
+      client.release();
+    }
+
+    const archives=(await pool.query(
+      'SELECT source_event_id FROM enkyron_crm_proposal_content_versions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      [workspace,a.draft.id]
+    )).rows;
+    assert.equal(archives.length,1,'failed upgrade must not persist a bad archive');
+    assert.equal(archives[0].source_event_id,a.event.id);
+    const stillValidated=(await pool.query(
+      "SELECT convalidated FROM pg_constraint WHERE conname='enkyron_proposal_archive_event_exact_fk'"
+    )).rows;
+    assert.equal(stillValidated.length,1);
+    assert.equal(stillValidated[0].convalidated,true,'rollback must preserve original FK');
   }finally{await pool.end();}
 });
