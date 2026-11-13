@@ -33,6 +33,10 @@ jobs:
         run: |
           node --check scripts/enkyron-enk03-uat-bootstrap.mjs
           node --test tests/enkyron-uat-database.test.js
+      - name: ENK-05 Service Desk isolated UAT-04 gate (no DB writes)
+        run: |
+          node --check scripts/enkyron-enk05-uat-bootstrap.mjs
+          node --test tests/enkyron-enk05-uat-database.test.js
       - name: Desktop bridge and contract tests
         run: |
           node --check desktop/enkyron-contract.mjs
