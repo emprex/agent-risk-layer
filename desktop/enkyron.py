@@ -17012,7 +17012,8 @@ class EnkyronWindow(QMainWindow):
             and self.ticket_status.currentData() is not None
         )
         reviewed = self.ticket_status.currentData() in ("resolved", "closed")
-        if reviewed and ticket and ticket.get("assigned_to") != self.ticket_local_operator:
+        if reviewed and ticket and (not self.ticket_local_operator or
+                                   ticket.get("assigned_to") != self.ticket_local_operator):
             can_change = False
             self.update_status_button.setToolTip(
                 "Assign this ticket to yourself before resolution or closure."
@@ -17356,7 +17357,7 @@ class EnkyronWindow(QMainWindow):
         reviewed = next_status in ("resolved", "closed")
         payload = {"ticket_id": ticket_id, "status": next_status}
         if reviewed:
-            if ticket.get("assigned_to") != self.ticket_local_operator:
+            if not self.ticket_local_operator or ticket.get("assigned_to") != self.ticket_local_operator:
                 QMessageBox.warning(
                     self, "Assign ticket first",
                     "Only the local operator assigned to this ticket "
