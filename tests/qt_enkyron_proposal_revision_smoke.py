@@ -7,7 +7,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import (
-    QApplication,QCheckBox,QDialog,QMessageBox,QPlainTextEdit,QPushButton
+    QApplication,QCheckBox,QDialog,QLabel,QMessageBox,QPlainTextEdit,QPushButton,QTabWidget
 )
 from desktop.enkyron import DesktopBridge,EnkyronWindow
 
@@ -241,11 +241,27 @@ class DraftRevisionSmoke(unittest.TestCase):
             history=w.crm_proposal_history_dialog
             self.assertIsNotNone(history)
             self.assertTrue(history.isVisible())
-            text=history.findChild(QPlainTextEdit,"crmProposalRevisionHistoryText")
-            self.assertTrue(text.isReadOnly())
-            body=text.toPlainText()
-            for piece in [OLD,NEW,NOTE,HASH1,HASH2,"REVISION 1","REVISION 2"]:
-                self.assertIn(piece,body)
+            tabs=history.findChild(QTabWidget,"crmProposalRevisionTabs")
+            self.assertIsNotNone(tabs)
+            self.assertEqual(tabs.count(),2)
+            self.assertEqual(tabs.currentIndex(),1,"Open on reviewed R2 by default")
+            self.assertIn("Original archive",tabs.tabText(0))
+            self.assertIn("Reviewed revision",tabs.tabText(1))
+            original=history.findChild(QPlainTextEdit,"crmProposalRevisionTextR1")
+            reviewed=history.findChild(QPlainTextEdit,"crmProposalRevisionTextR2")
+            self.assertTrue(original.isReadOnly())
+            self.assertTrue(reviewed.isReadOnly())
+            self.assertEqual(original.toPlainText(),OLD,
+                "R1 bytes including copied artefact must remain intact")
+            self.assertEqual(reviewed.toPlainText(),NEW,
+                "R2 full text must not be normalized in the viewer")
+            reason=history.findChild(QLabel,"crmProposalRevisionReasonR2")
+            metadata=history.findChild(QLabel,"crmProposalRevisionMetadataR2")
+            self.assertIn(NOTE,reason.text())
+            self.assertIn("£1.00",metadata.text())
+            self.assertIn("100 minor units",metadata.text())
+            self.assertIn(HASH2,metadata.text())
+            self.assertNotIn("Copier le texte",reviewed.toPlainText())
             self.assertFalse(any(c[0] in {
                 "crm-company-proposal-revise","crm-proposal-update",
                 "mail-send-draft","crm-invoice-issue"
@@ -288,7 +304,9 @@ class DraftRevisionSmoke(unittest.TestCase):
             self.app.processEvents()
             window=w.crm_proposal_history_dialog
             self.assertTrue(window.isVisible())
-            text=window.findChild(QPlainTextEdit,"crmProposalRevisionHistoryText")
+            tabs=window.findChild(QTabWidget,"crmProposalRevisionTabs")
+            self.assertEqual(tabs.count(),1)
+            text=window.findChild(QPlainTextEdit,"crmProposalRevisionTextR1")
             self.assertTrue(text.isReadOnly())
             self.assertIn("No previous full-text archive",text.toPlainText())
             self.assertFalse(any(c[0]=="crm-company-proposal-revise" for c in calls))
