@@ -8279,39 +8279,96 @@ class EnkyronWindow(QMainWindow):
             summary.setObjectName("crmProposalRevisionHistorySummary")
             summary.setWordWrap(True)
             layout.addWidget(summary)
-            parts = []
+            # Each stored revision is shown in its own read-only pane.
+            # Never concatenate or normalize historical scope_text: the
+            # original R1 artefacts must remain inspectable exactly as saved.
+            tabs = QTabWidget()
+            tabs.setObjectName("crmProposalRevisionTabs")
             if not versions:
-                parts.append(
+                empty = QPlainTextEdit()
+                empty.setObjectName("crmProposalRevisionTextR1")
+                empty.setReadOnly(True)
+                empty.setPlainText(
                     "Revision 1 is the current unsent draft. No previous "
                     "full-text archive exists yet. Use Open source proposal "
                     "to view the current document."
                 )
+                tabs.addTab(empty, "R1 · No archive yet")
             for version in versions:
                 revision = version["revision"]
                 reason = version.get("review_note") or (
                     "Original text archived before the first human-reviewed edit."
                     if revision == 1 else "Not recorded"
                 )
-                parts.append(
-                    "REVISION {} — {}\n"
-                    "Title: {}\nPrice (locked at correction): {} {} minor units\n"
-                    "Archive recorded: {}\nRecorded by: {}\n"
-                    "Source event ID: {}\nStored SHA-256: {}\n"
-                    "Review reason: {}\n\nFULL TEXT\n{}"
-                    .format(revision, version["snapshot_kind"],
-                            version["title"], version["currency"],
-                            version["amount_minor"], version.get("recorded_at", ""),
-                            version["recorded_by"], version["source_event_id"],
-                            version["content_sha256"], reason,
-                            version["scope_text"])
+                minor_units = str(version["amount_minor"])
+                if (not re.fullmatch(r"[0-9]{1,18}", minor_units)
+                        or (version["currency"] == "GBP"
+                            and int(minor_units) < 1)):
+                    QMessageBox.warning(
+                        dossier, "Invalid revision price",
+                        "A stored archive price is not a valid amount. "
+                        "No history was changed."
+                    )
+                    return
+                if version["currency"] == "GBP":
+                    price = "£{:,.2f}".format(
+                        Decimal(minor_units) / Decimal(100)
+                    )
+                else:
+                    # Keep original minor-unit representation for any other
+                    # currency: minor-unit scales vary by ISO currency.
+                    price = "{} {} minor units".format(
+                        version["currency"], minor_units
+                    )
+                pane = QWidget()
+                pane_layout = QVBoxLayout(pane)
+                rationale = QLabel(
+                    ("Original archive" if revision == 1 else
+                     "HUMAN REVIEW REASON") + "\n" + reason
                 )
-            full_text = QPlainTextEdit()
-            full_text.setObjectName("crmProposalRevisionHistoryText")
-            full_text.setReadOnly(True)
-            full_text.setPlainText(
-                "\n\n" + ("\n\n" + "=" * 60 + "\n\n").join(parts)
-            )
-            layout.addWidget(full_text, 1)
+                rationale.setObjectName(
+                    "crmProposalRevisionReasonR{}".format(revision)
+                )
+                rationale.setWordWrap(True)
+                rationale.setTextInteractionFlags(
+                    Qt.TextInteractionFlag.TextSelectableByMouse
+                )
+                pane_layout.addWidget(rationale)
+                metadata = QLabel(
+                    "Title: {}\nLocked price: {} · {} minor units\n"
+                    "Recorded: {} · Operator: {}\n"
+                    "Source event ID: {}\nStored SHA-256: {}"
+                    .format(version["title"], price, minor_units,
+                            version.get("recorded_at", ""),
+                            version["recorded_by"],
+                            version["source_event_id"],
+                            version["content_sha256"])
+                )
+                metadata.setObjectName(
+                    "crmProposalRevisionMetadataR{}".format(revision)
+                )
+                metadata.setWordWrap(True)
+                metadata.setTextInteractionFlags(
+                    Qt.TextInteractionFlag.TextSelectableByMouse
+                )
+                pane_layout.addWidget(metadata)
+                full_text = QPlainTextEdit()
+                full_text.setObjectName(
+                    "crmProposalRevisionTextR{}".format(revision)
+                )
+                full_text.setReadOnly(True)
+                full_text.setPlainText(version["scope_text"])
+                pane_layout.addWidget(full_text, 1)
+                tabs.addTab(
+                    pane,
+                    "R{} · {}".format(
+                        revision, "Original archive" if revision == 1
+                        else "Reviewed revision"
+                    )
+                )
+            if versions:
+                tabs.setCurrentIndex(len(versions) - 1)
+            layout.addWidget(tabs, 1)
             close = QPushButton("Close history")
             close.clicked.connect(window.reject)
             layout.addWidget(close)
