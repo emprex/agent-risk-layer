@@ -359,6 +359,7 @@ class EnkyronWindow(QMainWindow):
         self.bridge = DesktopBridge(self)
         self.current_id = None
         self.current_ticket = None
+        self.ticket_local_operator = None
         # UI-only selected control per ticket; no canonical state change.
         self.active_control_by_ticket = {}
         self.assessment_link_dialog = None
@@ -17010,6 +17011,17 @@ class EnkyronWindow(QMainWindow):
             and self.ticket_status.isEnabled()
             and self.ticket_status.currentData() is not None
         )
+        reviewed = self.ticket_status.currentData() in ("resolved", "closed")
+        if reviewed and ticket and ticket.get("assigned_to") != self.ticket_local_operator:
+            can_change = False
+            self.update_status_button.setToolTip(
+                "Assign this ticket to yourself before resolution or closure."
+            )
+        else:
+            self.update_status_button.setToolTip(
+                "Resolution and closure require a recorded human review."
+                if reviewed else "Save the selected ticket status."
+            )
         self.update_status_button.setEnabled(can_change)
 
     def _set_ticket_actions_height(self, item_count=0, unavailable=False):
@@ -17332,20 +17344,120 @@ class EnkyronWindow(QMainWindow):
         dialog.open()
 
     def change_ticket_status(self):
-        if not self.current_ticket or not self.current_id:
+        """Resolve and close only after human review and exact event readback."""
+        ticket = self.current_ticket
+        if not ticket or not self.current_id:
             return
         next_status = self.ticket_status.currentData()
         if not next_status:
             return
         ticket_id = self.current_id
+        current_status = ticket.get("status")
+        reviewed = next_status in ("resolved", "closed")
+        payload = {"ticket_id": ticket_id, "status": next_status}
+        if reviewed:
+            if ticket.get("assigned_to") != self.ticket_local_operator:
+                QMessageBox.warning(
+                    self, "Assign ticket first",
+                    "Only the local operator assigned to this ticket "
+                    "can confirm resolution or closure."
+                )
+                return
+            review_note, accepted = QInputDialog.getMultiLineText(
+                self,
+                "Human resolution review" if next_status == "resolved"
+                else "Human closure review",
+                "Explain what was completed and why this ticket can be "
+                "{} (30–500 characters):".format(next_status),
+                ""
+            )
+            if not accepted:
+                return
+            review_note = review_note.strip()
+            if not 30 <= len(review_note) <= 500:
+                QMessageBox.warning(
+                    self, "Review required",
+                    "Provide a 30–500 character human rationale. "
+                    "Nothing has been saved."
+                )
+                return
+            answer = QMessageBox.question(
+                self, "Confirm ticket " + next_status,
+                "Move ticket {} from {} to {} and record your rationale "
+                "as an immutable history event? No customer message or "
+                "security assessment will be launched."
+                .format(ticket.get("ticket_number", ticket_id),
+                        current_status, next_status),
+                QMessageBox.StandardButton.Yes |
+                QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            payload.update({
+                "expected_status": current_status,
+                "review_note": review_note,
+                "confirmed": True,
+            })
         self.update_status_button.setEnabled(False)
+
+        def completion_verified(data, error, event_id, reason):
+            if ticket_id != self.current_id:
+                return
+            stored = data.get("ticket") if isinstance(data, dict) else None
+            events = data.get("events") if isinstance(data, dict) else None
+            matched = (
+                isinstance(events, list) and
+                any(isinstance(event, dict) and
+                    event.get("id") == event_id and
+                    event.get("event_type") == "status_changed" and
+                    reason in str(event.get("detail") or "")
+                    for event in events)
+            )
+            if (error or not isinstance(stored, dict) or
+                    stored.get("id") != ticket_id or
+                    stored.get("status") != next_status or not matched):
+                self.show_error(
+                    "Completion result not verified. Refresh and inspect "
+                    "the ticket history before any new attempt."
+                )
+                return
+            self.status.setText(
+                "Ticket {} verified: {} → {}. Human review in history."
+                .format(stored.get("ticket_number", ticket_id),
+                        current_status, next_status)
+            )
+            self.load_tickets()
+            item = self.ticket_list.currentItem()
+            if item:
+                self.ticket_changed(item, None)
 
         def completed(result, error):
             if ticket_id != self.current_id:
                 return
-            if error:
-                self.show_error(error)
-                self.update_status_button.setEnabled(True)
+            if (error or not isinstance(result, dict) or
+                    result.get("ticket_id") != ticket_id or
+                    result.get("status") != next_status or
+                    result.get("from") != current_status):
+                self.show_error(
+                    "Status not verified. Refresh and inspect the ticket "
+                    "before another attempt. " + str(error or "")
+                )
+                return
+            if reviewed:
+                event_id = result.get("event_id")
+                if not isinstance(event_id, str) or not event_id:
+                    self.show_error(
+                        "Completion event not verified; refresh ticket history "
+                        "before another attempt."
+                    )
+                    return
+                self.bridge.call(
+                    "ticket", ticket_id,
+                    callback=lambda data, error: completion_verified(
+                        data, error, event_id, payload["review_note"]
+                    )
+                )
                 return
             self.status.setText(
                 "Ticket status: {} → {}. Event saved in PostgreSQL."
@@ -17357,9 +17469,7 @@ class EnkyronWindow(QMainWindow):
                 self.ticket_changed(item, None)
 
         self.bridge.call(
-            "ticket-status",
-            payload={"ticket_id": ticket_id, "status": next_status},
-            callback=completed,
+            "ticket-status", payload=payload, callback=completed
         )
 
     def ticket_operator_display(self, account):
@@ -17766,6 +17876,7 @@ class EnkyronWindow(QMainWindow):
                 return
             ticket = data["ticket"]
             self.current_ticket = ticket
+            self.ticket_local_operator = data.get("local_operator")
             self.title.setText("{}   |   {}".format(ticket["ticket_number"], ticket["title"]))
             self._refresh_ticket_identity_labels()
             self.scope.setPlainText(
