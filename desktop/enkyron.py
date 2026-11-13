@@ -713,6 +713,11 @@ class EnkyronWindow(QMainWindow):
         self.search.setPlaceholderText("Search ticket, client, target…")
         self.search.setMaxLength(100)
         filters.addWidget(self.search, 1)
+        self.my_tickets = QPushButton("☐ My tickets")
+        self.my_tickets.setObjectName("myTicketsToggle")
+        self.my_tickets.setCheckable(True)
+        self.my_tickets.toggled.connect(self.my_tickets_toggled)
+        filters.addWidget(self.my_tickets)
         # Preserve the existing visible state for archived-ticket inclusion.
         self.show_archived = QPushButton("☐ Include archived tickets")
         self.show_archived.setObjectName("archivedToggle")
@@ -16998,6 +17003,12 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("create-ticket", payload=data, callback=completed)
 
+    def my_tickets_toggled(self, checked):
+        self.my_tickets.setText(
+            "☑ My tickets" if checked else "☐ My tickets"
+        )
+        self.load_tickets()
+
     def archived_filter_toggled(self, checked):
         self.show_archived.setText(
             "☑ Archived tickets included" if checked else "☐ Include archived tickets"
@@ -17749,10 +17760,19 @@ class EnkyronWindow(QMainWindow):
             self.ticket_list.clear()
             matching = None
             for item in data.get("items", []):
-                label = "{}   ·   {}\n{}   ·   {}{}".format(
+                priority = str(item.get("priority") or "Not triaged").replace("_", " ").upper()
+                assignee = self.ticket_operator_display(item.get("assigned_to"))
+                due = item.get("next_due_on")
+                due_text = (
+                    "   ·   Next due {}: {}".format(
+                        str(due)[:10], item.get("next_action_title") or "Action"
+                    ) if due else ""
+                )
+                label = "{}   ·   {}\nReported client: {}   ·   {}{}\nPriority: {}   ·   Assigned: {}{}".format(
                     item["ticket_number"], item["title"], item["client_name"],
                     item["status"].replace("_", " ").upper(),
-                    "   ·   ARCHIVED" if item.get("archived_at") else ""
+                    "   ·   ARCHIVED" if item.get("archived_at") else "",
+                    priority, assignee, due_text
                 )
                 widget = QListWidgetItem(label)
                 widget.setData(Qt.ItemDataRole.UserRole, item["id"])
@@ -17775,11 +17795,31 @@ class EnkyronWindow(QMainWindow):
                     self.show_ticket_index()
             total = len(data.get("items", []))
             suffix = " (first 100; refine search)" if data.get("more") else ""
-            self.list_notice.setText(f"{total} ticket(s) shown{suffix}")
-        self.bridge.call(
-            "tickets-archived" if self.show_archived.isChecked() else "tickets",
-            self.search.text(), callback=received,
+            if total == 0:
+                if self.search.text().strip():
+                    notice = "No matching tickets. Clear search or change the queue filter."
+                elif self.my_tickets.isChecked():
+                    notice = (
+                        "No tickets assigned to you. Switch off My tickets, "
+                        "open a ticket and choose Assign to me."
+                    )
+                else:
+                    notice = "No tickets yet. Use New ticket to record a request."
+                self.list_notice.setText(notice)
+            else:
+                notice = f"{total} ticket(s) shown{suffix}"
+                if not data.get("priority_available", True):
+                    notice += " · Priority history unavailable."
+                if not data.get("actions_available", True):
+                    notice += " · Action deadlines unavailable."
+                self.list_notice.setText(notice)
+        command = (
+            "tickets-mine-archived" if self.my_tickets.isChecked()
+                and self.show_archived.isChecked() else
+            "tickets-mine" if self.my_tickets.isChecked() else
+            "tickets-archived" if self.show_archived.isChecked() else "tickets"
         )
+        self.bridge.call(command, self.search.text(), callback=received)
 
     def ticket_changed(self, item, _previous):
         if not item:

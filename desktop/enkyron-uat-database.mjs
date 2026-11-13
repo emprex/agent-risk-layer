@@ -5,7 +5,7 @@ export const ENKYRON_UAT_MARKER = 'ENK03_SYNTHETIC_ONLY';
 
 const DATABASE_PREFIX = /^enkyron_uat_[a-z0-9_]{1,40}$/;
 const UAT_COMMANDS = new Set([
-  'tickets', 'crm-sales-overview', 'crm-sales-pipeline',
+  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline',
   'crm-companies', 'crm-contacts',
   'crm-company-duplicates', 'crm-contact-duplicates',
   'crm-create-company', 'crm-create-contact',
@@ -26,7 +26,7 @@ const UAT_COMMANDS = new Set([
 // It is active ONLY when paired with the exact synthetic DB and marker.
 // An allowlist (not a negative list) prevents unknown operations from slipping in.
 const UX_PREVIEW_READ_COMMANDS = new Set([
-  'tickets', 'crm-sales-overview', 'crm-sales-pipeline',
+  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline',
   'crm-companies', 'crm-contacts', 'crm-company-dossier',
   'crm-company-history', 'crm-opportunities', 'crm-activity-timeline',
   'crm-company-followups', 'crm-company-followups-upcoming',

@@ -118,5 +118,29 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
         self.assertFalse(self.w.update_status_button.isEnabled())
         self.assertEqual(len([c for c in self.calls if c[0]=="ticket-status"]),1)
 
+    def test_my_tickets_readonly_queue_filter_priority_due_and_empty_state(self):
+        self.w.my_tickets.setChecked(True)
+        self.assertEqual(self.calls[-1][0], "tickets-mine")
+        self.assertEqual(self.calls[-1][2], None)
+        receive = self.calls[-1][3]
+        receive({"items":[{
+            "id":TICKET,"ticket_number":"ARL-2026-000999",
+            "title":"Synthetic support","client_name":"Example Co",
+            "status":"in_progress","archived_at":None,
+            "assigned_to":"emprex","priority":"high",
+            "next_due_on":"2026-11-16","next_action_title":"Call customer"
+        }],"more":False,"priority_available":True,
+        "actions_available":True},None)
+        self.assertEqual(self.w.ticket_list.count(),1)
+        label=self.w.ticket_list.item(0).text()
+        self.assertIn("HIGH",label)
+        self.assertIn("Next due 2026-11-16: Call customer",label)
+        self.assertIn("Reported client: Example Co",label)
+        self.w.show_archived.setChecked(True)
+        self.assertEqual(self.calls[-1][0],"tickets-mine-archived")
+        self.calls[-1][3]({"items":[],"more":False},None)
+        self.assertIn("No tickets assigned to you",self.w.list_notice.text())
+        self.assertFalse(any(c[0].endswith("-save") or c[0]=="ticket-status" for c in self.calls))
+
 if __name__=="__main__":
     unittest.main()

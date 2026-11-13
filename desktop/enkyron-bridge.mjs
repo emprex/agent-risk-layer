@@ -81,6 +81,7 @@ import {recordTicketTriage,readTicketTriage,validateTicketTriage}
   from './enkyron-ticket-triage.mjs';
 import {
   createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange,
+  listDeskTickets,
   assignDeskTicket, archiveDeskTicket, validateAssignment, validateArchive,
   TICKET_TRANSITIONS
 } from './enkyron-ticket-intake.mjs';
@@ -103,24 +104,6 @@ async function stdinJson(maxBytes=16000) {
   }
   try { return JSON.parse(raw); }
   catch { throw new Error('Malformed note request'); }
-}
-
-async function ticketList(pool, query, includeArchived=false) {
-  const q = boundedSearch(query);
-  const rows = (await pool.query(
-    `SELECT id,ticket_number,title,client_name,status,archived_at,updated_at
-     FROM arl_workbench_tickets
-     WHERE ($3::boolean OR archived_at IS NULL)
-       AND ($3::boolean OR NOT EXISTS (
-         SELECT 1 FROM enkyron_crm_opportunity_origin_corrections c
-         WHERE c.old_source_ticket_id = arl_workbench_tickets.id
-       ))
-       AND ($1='' OR ticket_number ILIKE $2 OR title ILIKE $2
-       OR client_name ILIKE $2 OR target_reference ILIKE $2)
-     ORDER BY updated_at DESC,id LIMIT 101`,
-    [q, '%' + q + '%', includeArchived]
-  )).rows;
-  return { items: rows.slice(0, 100), more: rows.length > 100 };
 }
 
 async function ticketDetails(pool, id) {
@@ -250,11 +233,11 @@ async function evidenceIntegrity(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'master-init-preview', 'master-init-record', 'note', 'evidence-register', 'evidence-integrity-read', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-actions', 'ticket-action-save', 'ticket-scope-review', 'ticket-scope-save', 'assessment-preflight', 'assessment-link', 'assessment-context', 'control-queue', 'control-detail', 'control-applicability-save', 'source-review', 'control-preparation', 'static-candidate-collect', 'batch-source-replay', 'static-batch-preview', 'static-batch-commit', 'pilot-lab-handoff', 'static-candidate-record', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'mail-unsent-drafts', 'crm-mail-recipients', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-status', 'mail-threads', 'mail-messages', 'mail-sent', 'mail-send-draft', 'mail-reply-draft', 'mail-link-sent', 'mail-provider-status', 'mail-local-folders', 'mail-local-folder-create', 'mail-local-list', 'mail-local-company', 'mail-local-company-link', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-archive-sync', 'mail-archive-status', 'mail-local-full-text', 'mail-local-messages', 'mail-local-fetch', 'mail-local-move', 'mail-local-labels', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-list', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-followups', 'crm-company-followups-upcoming', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-sow-sources', 'crm-sow-draft', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'operator-profile', 'operator-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record', 'crm-invoice-issue-preflight', 'crm-invoice-issue', 'crm-invoices-issued', 'crm-invoice-issued', 'crm-invoice-payment-record', 'crm-quote-issue-preflight', 'crm-quote-evidence-review', 'crm-quote-evidence-record', 'crm-quote-external-report', 'crm-quote-external-record', 'crm-service-catalog-list', 'crm-service-catalog-read', 'crm-service-catalog-create', 'crm-service-catalog-update', 'crm-company-history', 'crm-company-proposal-readiness', 'crm-company-proposal-create', 'crm-company-proposal-versions', 'crm-company-proposal-revise'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'tickets-mine', 'tickets-mine-archived', 'ticket', 'master', 'master-init-preview', 'master-init-record', 'note', 'evidence-register', 'evidence-integrity-read', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-actions', 'ticket-action-save', 'ticket-scope-review', 'ticket-scope-save', 'assessment-preflight', 'assessment-link', 'assessment-context', 'control-queue', 'control-detail', 'control-applicability-save', 'source-review', 'control-preparation', 'static-candidate-collect', 'batch-source-replay', 'static-batch-preview', 'static-batch-commit', 'pilot-lab-handoff', 'static-candidate-record', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'mail-unsent-drafts', 'crm-mail-recipients', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-status', 'mail-threads', 'mail-messages', 'mail-sent', 'mail-send-draft', 'mail-reply-draft', 'mail-link-sent', 'mail-provider-status', 'mail-local-folders', 'mail-local-folder-create', 'mail-local-list', 'mail-local-company', 'mail-local-company-link', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-archive-sync', 'mail-archive-status', 'mail-local-full-text', 'mail-local-messages', 'mail-local-fetch', 'mail-local-move', 'mail-local-labels', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-list', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-followups', 'crm-company-followups-upcoming', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-sow-sources', 'crm-sow-draft', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'operator-profile', 'operator-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record', 'crm-invoice-issue-preflight', 'crm-invoice-issue', 'crm-invoices-issued', 'crm-invoice-issued', 'crm-invoice-payment-record', 'crm-quote-issue-preflight', 'crm-quote-evidence-review', 'crm-quote-evidence-record', 'crm-quote-external-report', 'crm-quote-external-record', 'crm-service-catalog-list', 'crm-service-catalog-read', 'crm-service-catalog-create', 'crm-service-catalog-update', 'crm-company-history', 'crm-company-proposal-readiness', 'crm-company-proposal-create', 'crm-company-proposal-versions', 'crm-company-proposal-revise'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
-  if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options', 'crm-opportunities', 'crm-mail-drafts','mail-unsent-drafts','crm-service-catalog-list'].includes(command)) boundedSearch(arg);
+  if (['tickets', 'tickets-archived', 'tickets-mine', 'tickets-mine-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options', 'crm-opportunities', 'crm-mail-drafts','mail-unsent-drafts','crm-service-catalog-list'].includes(command)) boundedSearch(arg);
   if (command === 'crm-mail-recipients') recipientSearchTerm(arg);
    if (command === 'mail-provider-status' && !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(arg)) throw new Error('Invalid submitted draft ID');
    if (command === 'crm-company-tickets') requireCompanyId(arg);
@@ -361,8 +344,10 @@ async function main() {
   try {
     await verifyEnkyronUatDatabase(pool, dbTarget);
     const result =
-      command === 'tickets' ? await ticketList(pool, arg) :
-      command === 'tickets-archived' ? await ticketList(pool, arg, true) :
+      command === 'tickets' ? await listDeskTickets(pool, arg, os.userInfo().username) :
+      command === 'tickets-archived' ? await listDeskTickets(pool, arg, os.userInfo().username, {includeArchived:true}) :
+      command === 'tickets-mine' ? await listDeskTickets(pool, arg, os.userInfo().username, {mineOnly:true}) :
+      command === 'tickets-mine-archived' ? await listDeskTickets(pool, arg, os.userInfo().username, {mineOnly:true,includeArchived:true}) :
       command === 'crm-prospects' ? await listSalesProspects(pool, arg) :
       command === 'crm-prospects-page' ? await listSalesProspectsPage(pool, payload) :
       command === 'crm-companies' ? await listCompanies(pool, arg, os.userInfo().username) :

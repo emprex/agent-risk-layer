@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import {
-  createDeskTicket, assignDeskTicket, updateDeskTicketStatus,
+  createDeskTicket, assignDeskTicket, listDeskTickets, updateDeskTicketStatus,
   archiveDeskTicket
 } from '../desktop/enkyron-ticket-intake.mjs';
 
@@ -40,6 +40,12 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     assert.match(created.scope_text,/Telephone: 0000 0000/);
     await assignDeskTicket(pool,{ticket_id:intake.id,action:'self'},'ci-operator');
     assert.equal((await fetch()).assigned_to,'ci-operator');
+    // Server-side My Tickets filter may only use the actual OS principal
+    // supplied by the bridge, never an assignee injected by the UI.
+    const own=await listDeskTickets(pool,intake.ticket_number,'ci-operator',{mineOnly:true});
+    assert.ok(own.items.some(row=>row.id===intake.id && row.assigned_to==='ci-operator'));
+    const other=await listDeskTickets(pool,intake.ticket_number,'different-operator',{mineOnly:true});
+    assert.ok(!other.items.some(row=>row.id===intake.id));
 
     const transitions=['scoping','in_progress','pending_review','resolved','closed'];
     let previous='new';

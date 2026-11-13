@@ -1,6 +1,7 @@
 // ENKYRON Client Desk — local intake and ticket lifecycle.
 // The existing ARL ticket schema is authoritative. Intake never launches an assessment.
 import { randomUUID } from 'node:crypto';
+import { boundedSearch } from './enkyron-contract.mjs';
 
 export const TICKET_TRANSITIONS = Object.freeze({
   new: ['scoping', 'waiting'],
@@ -78,6 +79,75 @@ export function validateStatusChange(data) {
   }
   return {ticketId:data.ticket_id, status:data.status,
     expectedStatus:data.expected_status, reviewNote};
+}
+
+// Read-only, bounded Service Desk queue; a local assignment filter is an
+// operator convenience, not multi-user RBAC or a substitute for backend checks.
+export async function listDeskTickets(pool, search, actor, options={}) {
+  const query=boundedSearch(search);
+  const operator=field(actor,'local operator',120,true);
+  const includeArchived=options.includeArchived===true;
+  const mineOnly=options.mineOnly===true;
+  const tickets=(await pool.query(
+    `SELECT t.id,t.ticket_number,t.title,t.client_name,t.status,
+            t.archived_at,t.updated_at,t.assigned_to
+     FROM arl_workbench_tickets t
+     WHERE ($3::boolean OR t.archived_at IS NULL)
+       AND ($3::boolean OR NOT EXISTS (
+         SELECT 1 FROM enkyron_crm_opportunity_origin_corrections c
+         WHERE c.old_source_ticket_id=t.id
+       ))
+       AND (NOT $4::boolean OR t.assigned_to=$5)
+       AND ($1='' OR t.ticket_number ILIKE $2 OR t.title ILIKE $2
+            OR t.client_name ILIKE $2 OR t.target_reference ILIKE $2)
+     ORDER BY t.updated_at DESC,t.id LIMIT 101`,
+    [query,'%'+query+'%',includeArchived,mineOnly,operator]
+  )).rows;
+  const items=tickets.slice(0,100).map(row=>({
+    ...row,priority:null,next_due_on:null,next_action_title:null
+  }));
+  const ids=items.map(item=>item.id);
+  let priorityAvailable=true, actionsAvailable=true;
+  if(ids.length) {
+    try {
+      const priorities=(await pool.query(
+        `SELECT DISTINCT ON (ticket_id) ticket_id,priority
+         FROM enkyron_ticket_triage_reviews
+         WHERE ticket_id=ANY($1::uuid[])
+         ORDER BY ticket_id,recorded_at DESC,id DESC`,[ids]
+      )).rows;
+      const lookup=new Map(priorities.map(row=>[row.ticket_id,row.priority]));
+      for(const item of items)item.priority=lookup.get(item.id)??null;
+    }catch(error) {
+      if(error?.code!=='42P01')throw error;
+      priorityAvailable=false;
+    }
+    try {
+      const due=(await pool.query(
+        `SELECT DISTINCT ON (ticket_id) ticket_id,title,due_on
+         FROM (
+           SELECT DISTINCT ON (ticket_id,action_id)
+             ticket_id,action_id,title,due_on,state
+           FROM enkyron_ticket_action_versions
+           WHERE ticket_id=ANY($1::uuid[])
+           ORDER BY ticket_id,action_id,revision DESC
+         ) latest
+         WHERE state IN ('todo','blocked') AND due_on IS NOT NULL
+         ORDER BY ticket_id,due_on ASC,title`,[ids]
+      )).rows;
+      const lookup=new Map(due.map(row=>[row.ticket_id,row]));
+      for(const item of items) {
+        const next=lookup.get(item.id);
+        item.next_due_on=next?.due_on??null;
+        item.next_action_title=next?.title??null;
+      }
+    }catch(error) {
+      if(error?.code!=='42P01')throw error;
+      actionsAvailable=false;
+    }
+  }
+  return {items,more:tickets.length>100,priority_available:priorityAvailable,
+    actions_available:actionsAvailable,mine_only:mineOnly};
 }
 
 async function transaction(pool, work) {

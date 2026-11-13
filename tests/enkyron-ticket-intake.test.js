@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateIntake, validateStatusChange, createDeskTicket,
-  updateDeskTicketStatus, TICKET_TRANSITIONS,
+  updateDeskTicketStatus, TICKET_TRANSITIONS, listDeskTickets,
   validateAssignment, assignDeskTicket, validateArchive, archiveDeskTicket
 } from '../desktop/enkyron-ticket-intake.mjs';
 
@@ -264,4 +264,47 @@ test('open/already archived tickets cannot be archived or modified',async()=>{
     ()=>assignDeskTicket(a,{ticket_id:ticketId,action:'self'},'localoperator'),
     /Archived or closed ticket/
   );
+});
+
+
+test('My tickets queue uses local assignment and latest recorded priority/due action, read-only',async()=>{
+  const queries=[];
+  const pool={query:async(sql,args)=>{
+    queries.push({sql,args});
+    if(sql.includes('FROM arl_workbench_tickets t'))return {rows:[{
+      id:ticketId,ticket_number:'ARL-2026-000999',title:'Synthetic support',
+      client_name:'Example Co',status:'in_progress',assigned_to:'localoperator',
+      archived_at:null,updated_at:'2026-11-13'
+    }]};
+    if(sql.includes('FROM enkyron_ticket_triage_reviews'))
+      return {rows:[{ticket_id:ticketId,priority:'high'}]};
+    if(sql.includes('FROM enkyron_ticket_action_versions'))
+      return {rows:[{ticket_id:ticketId,title:'Call customer',due_on:'2026-11-16'}]};
+    throw Error('Unexpected query');
+  }};
+  const result=await listDeskTickets(pool,'ARL-2026','localoperator',{mineOnly:true});
+  assert.equal(result.mine_only,true);
+  assert.equal(result.items.length,1);
+  assert.equal(result.items[0].priority,'high');
+  assert.equal(result.items[0].next_action_title,'Call customer');
+  assert.equal(result.items[0].next_due_on,'2026-11-16');
+  assert.match(queries[0].sql,/t.assigned_to=\$5/);
+  assert.equal(queries[0].args[4],'localoperator');
+  assert.ok(queries.every(x=>/^\s*SELECT/.test(x.sql)));
+});
+
+test('queue explicitly reports absent optional triage/action history schema without inventing priority',async()=>{
+  const pool={query:async(sql)=>{
+    if(sql.includes('FROM arl_workbench_tickets t'))return {rows:[{
+      id:ticketId,ticket_number:'ARL-2026-000999',title:'Support',
+      client_name:'Example Co',status:'new',assigned_to:null
+    }]};
+    const err=new Error('undefined_table');err.code='42P01';throw err;
+  }};
+  const result=await listDeskTickets(pool,'','localoperator');
+  assert.equal(result.priority_available,false);
+  assert.equal(result.actions_available,false);
+  assert.equal(result.items[0].priority,null);
+  assert.equal(result.items[0].next_due_on,null);
+  await assert.rejects(()=>listDeskTickets(pool,'',''),/local operator is required/);
 });
