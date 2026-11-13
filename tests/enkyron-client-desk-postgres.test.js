@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import {createCompany} from '../desktop/enkyron-crm.mjs';
+import {linkTicketToCompany,ticketLinkedCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {recordTicketTriage} from '../desktop/enkyron-ticket-triage.mjs';
+import {recordTicketAction} from '../desktop/enkyron-ticket-actions.mjs';
 import {
   createDeskTicket, assignDeskTicket, listDeskTickets, updateDeskTicketStatus,
   archiveDeskTicket
@@ -47,7 +51,43 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     const other=await listDeskTickets(pool,intake.ticket_number,'different-operator',{mineOnly:true});
     assert.ok(!other.items.some(row=>row.id===intake.id));
 
-    const transitions=['scoping','in_progress','pending_review','resolved','closed'];
+
+    // ENK-05 integrated disposable-CI journey: real canonical company link,
+    // human triage and scheduled work in the same exact ticket.
+    const company=await createCompany(pool,{name:'CI Sample Company'},'ci-operator');
+    const association=await linkTicketToCompany(pool,{
+      company_id:company.id,ticket_id:intake.id,
+      ticket_client_name_at_review:'CI Sample Company',
+      review_note:'Operator checked the canonical company and exact source ticket ID before linking.',
+      reviewed:true
+    },'ci-operator');
+    assert.equal(association.ticket_id,intake.id);
+    assert.equal((await ticketLinkedCompany(pool,intake.id,'ci-operator')).link.company_id,company.id);
+    assert.equal((await ticketLinkedCompany(pool,intake.id,'not-the-operator')).link,null);
+    const triage=await recordTicketTriage(pool,{
+      ticket_id:intake.id,request_type:'support_request',
+      impact:'medium',urgency:'high',priority:'high',
+      expected_latest_id:null,confirmed:true,
+      review_note:'Human operator examined the synthetic request and assigned high priority.'
+    },'ci-operator');
+    assert.equal(triage.priority,'high');
+    const action=await recordTicketAction(pool,{
+      ticket_id:intake.id,action_id:null,expected_revision:null,
+      title:'Call customer to confirm outcome',
+      details:'Synthetic planning only, no external contact is performed.',
+      due_on:'2026-11-16',state:'todo',
+      rationale:'Schedule a human follow-up after the internal review.',
+      confirmed:true
+    },'ci-operator');
+    assert.equal(action.ticket_id,intake.id);
+    const prioritised=await listDeskTickets(pool,intake.ticket_number,'ci-operator',{mineOnly:true});
+    const queueRecord=prioritised.items.find(row=>row.id===intake.id);
+    assert.ok(queueRecord);
+    assert.equal(queueRecord.priority,'high');
+    assert.equal(queueRecord.next_action_title,'Call customer to confirm outcome');
+    assert.equal(new Date(queueRecord.next_due_on).toISOString().slice(0,10),'2026-11-16');
+
+    const transitions=['scoping','waiting','in_progress','pending_review','resolved','closed'];
     let previous='new';
     for(const status of transitions) {
       const humanCompletion=['resolved','closed'].includes(status);
@@ -82,7 +122,7 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     )).rows;
     assert.equal(history.filter(x=>x.event_type==='created').length,1);
     assert.equal(history.filter(x=>x.event_type==='assigned').length,1);
-    assert.equal(history.filter(x=>x.event_type==='status_changed').length,5);
+    assert.equal(history.filter(x=>x.event_type==='status_changed').length,6);
     assert.equal(history.filter(x=>x.event_type==='archived').length,1);
     assert.ok(history.every(x=>x.actor==='ci-operator'));
     await assert.rejects(
@@ -93,6 +133,6 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
       'SELECT COUNT(*)::int AS n FROM arl_workbench_ticket_events WHERE ticket_id=$1',
       [intake.id]
     )).rows[0].n;
-    assert.equal(retained,8);
+    assert.equal(retained,9);
   }finally{await pool.end();}
 });
