@@ -7909,6 +7909,294 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-proposal", proposal_id, callback=received)
 
+    def open_dossier_scope_correction(self, proposal_id, company_id):
+        """Open a scope-only, full-content version-preserving correction."""
+        dossier = self.crm_dossier_dialog
+        if (not dossier or not dossier.isVisible()
+                or company_id != self.crm_dossier_company_id
+                or self.crm_scope_revision_uncertain):
+            return
+        existing = self.crm_scope_correction_dialog
+        if existing and existing.isVisible():
+            existing.raise_()
+            return
+
+        def original_received(data, error):
+            if (dossier is not self.crm_dossier_dialog
+                    or not dossier.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            proposal = (data or {}).get("proposal") if isinstance(data, dict) else None
+            if (error or not isinstance(proposal, dict)
+                    or data.get("available") is not True
+                    or proposal.get("id") != proposal_id
+                    or proposal.get("company_id") != company_id
+                    or not isinstance(proposal.get("opportunity_id"), str)
+                    or not isinstance(proposal.get("revision"), int)
+                    or proposal["revision"] < 1
+                    or not isinstance(proposal.get("scope_text"), str)
+                    or not isinstance(proposal.get("title"), str)
+                    or not isinstance(proposal.get("currency"), str)):
+                QMessageBox.warning(
+                    dossier, "Draft correction unavailable",
+                    "The exact company draft could not be verified. "
+                    "No revision was created."
+                )
+                return
+
+            def history_received(history, history_error):
+                if (dossier is not self.crm_dossier_dialog
+                        or not dossier.isVisible()
+                        or company_id != self.crm_dossier_company_id):
+                    return
+                if (history_error or not isinstance(history, dict)
+                        or history.get("available") is not True
+                        or history.get("company_id") != company_id
+                        or history.get("proposal_id") != proposal_id
+                        or history.get("current_revision") != proposal["revision"]
+                        or not isinstance(history.get("versions"), list)):
+                    QMessageBox.warning(
+                        dossier, "Immutable history unavailable",
+                        "The new immutable revision archive could not be "
+                        "verified. Check migration 114 on the synthetic UAT "
+                        "database. No document was changed."
+                    )
+                    return
+                # This UAT exercise must be the *first* correction of R1.
+                if proposal["revision"] != 1 or history["versions"]:
+                    QMessageBox.warning(
+                        dossier, "Correction requires fresh review",
+                        "This exercise supports exactly the first reviewed "
+                        "revision 1 → 2. No document was changed."
+                    )
+                    return
+
+                editor = QDialog(dossier)
+                editor.setWindowTitle("ENKYRON · Correct draft scope (revision 2)")
+                editor.setMinimumSize(760, 680)
+                layout = QVBoxLayout(editor)
+                context = QLabel(
+                    "Company: " + str(company_id) + "\n"
+                    "Draft: " + str(proposal_id) + "\n"
+                    "Current revision: 1 · Next revision: 2\n"
+                    "Price: " + str(proposal["currency"]) + " " +
+                    "{:.2f}".format(int(proposal["amount_minor"]) / 100) +
+                    " (LOCKED — not editable)\n"
+                    "No quote, contract, external message or test is authorised."
+                )
+                context.setWordWrap(True)
+                layout.addWidget(context)
+                layout.addWidget(section_title(
+                    "ORIGINAL SCOPE · REVISION 1 (READ ONLY)"
+                ))
+                original = QPlainTextEdit()
+                original.setObjectName("crmScopeRevisionOriginal")
+                original.setReadOnly(True)
+                original.setPlainText(proposal["scope_text"])
+                original.setMaximumHeight(140)
+                layout.addWidget(original)
+                layout.addWidget(section_title(
+                    "CORRECTED SCOPE · REVISION 2 (HUMAN REVIEW)"
+                ))
+                revised = QPlainTextEdit()
+                revised.setObjectName("crmScopeRevisionNewText")
+                revised.setPlainText(proposal["scope_text"])
+                revised.setPlaceholderText(
+                    "Keep the internal UAT notice. Separate paragraphs and "
+                    "remove pasted interface text such as Copier le texte."
+                )
+                layout.addWidget(revised, 1)
+                note = QPlainTextEdit()
+                note.setObjectName("crmScopeRevisionReason")
+                note.setPlaceholderText(
+                    "Explain what you changed and why (30–600 characters)."
+                )
+                note.setMaximumHeight(78)
+                layout.addWidget(note)
+                confirmed = QCheckBox(
+                    "I reviewed both versions. This only corrects the scope "
+                    "of an unsent internal draft; the price stays unchanged."
+                )
+                confirmed.setObjectName("crmScopeRevisionHumanConfirmed")
+                layout.addWidget(confirmed)
+                footer = QHBoxLayout()
+                close = QPushButton("Close without saving")
+                close.clicked.connect(editor.reject)
+                save = QPushButton("Save reviewed revision 2")
+                save.setObjectName("crmScopeRevisionSave")
+                save.setObjectName("primary")
+                footer.addWidget(close)
+                footer.addStretch()
+                footer.addWidget(save)
+                layout.addLayout(footer)
+                state = {"pending": False}
+                self.crm_scope_correction_dialog = editor
+                editor.finished.connect(
+                    lambda _result: setattr(self, "crm_scope_correction_dialog", None)
+                )
+
+                def unverified(label):
+                    state["pending"] = False
+                    self.crm_scope_revision_uncertain = True
+                    save.setEnabled(False)
+                    QMessageBox.warning(
+                        editor, label,
+                        "The saved outcome may already exist. Inspect the "
+                        "exact proposal revision and immutable history in "
+                        "PostgreSQL before trying again. No retry was sent."
+                    )
+
+                def save_reviewed():
+                    if (not editor.isVisible() or state["pending"]
+                            or self.crm_scope_revision_uncertain
+                            or company_id != self.crm_dossier_company_id):
+                        return
+                    new_scope = revised.toPlainText().strip()
+                    reason = note.toPlainText().strip()
+                    if (not 20 <= len(new_scope) <= 5000
+                            or new_scope == proposal["scope_text"]
+                            or "copier le texte" in new_scope.lower()
+                            or "\n\n" not in new_scope
+                            or not 30 <= len(reason) <= 600
+                            or not confirmed.isChecked()):
+                        QMessageBox.warning(
+                            editor, "Correction not ready",
+                            "Separate paragraphs with blank lines, remove "
+                            "Copier le texte, explain the change in 30–600 "
+                            "characters, and confirm your human review."
+                        )
+                        return
+                    human = QMessageBox.question(
+                        editor, "Confirm scope correction only",
+                        "Save reviewed scope revision 2 for this exact company?\n"
+                        "The original full text remains immutable as revision 1.\n"
+                        "The fee stays " + proposal["currency"] + " " +
+                        "{:.2f}".format(int(proposal["amount_minor"]) / 100) +
+                        ".\nNo proposal will be issued or sent.",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    if human != QMessageBox.StandardButton.Yes:
+                        return
+                    payload = {
+                        "proposal_id": proposal_id,
+                        "company_id": company_id,
+                        "opportunity_id": proposal["opportunity_id"],
+                        "expected_revision": 1,
+                        "scope_text": new_scope,
+                        "review_note": reason,
+                        "confirmed": True
+                    }
+                    state["pending"] = True
+                    save.setEnabled(False)
+
+                    def saved(ack, write_error):
+                        if not editor.isVisible() or company_id != self.crm_dossier_company_id:
+                            return
+                        correct_ack = (
+                            not write_error and isinstance(ack, dict)
+                            and ack.get("id") == proposal_id
+                            and ack.get("company_id") == company_id
+                            and ack.get("opportunity_id") == proposal["opportunity_id"]
+                            and ack.get("previous_revision") == 1
+                            and ack.get("revision") == 2
+                            and ack.get("currency") == proposal["currency"]
+                            and str(ack.get("amount_minor")) ==
+                                str(proposal["amount_minor"])
+                            and isinstance(ack.get("previous_snapshot_id"), str)
+                            and isinstance(ack.get("new_snapshot_id"), str)
+                        )
+                        if not correct_ack:
+                            unverified("Scope revision save not verified")
+                            return
+
+                        def current_received(current, current_error):
+                            if not editor.isVisible() or company_id != self.crm_dossier_company_id:
+                                return
+                            draft = (current or {}).get("proposal") if isinstance(current, dict) else None
+                            correct_draft = (
+                                not current_error and isinstance(draft, dict)
+                                and current.get("available") is True
+                                and draft.get("id") == proposal_id
+                                and draft.get("company_id") == company_id
+                                and draft.get("opportunity_id") == proposal["opportunity_id"]
+                                and draft.get("revision") == 2
+                                and draft.get("title") == proposal["title"]
+                                and draft.get("currency") == proposal["currency"]
+                                and str(draft.get("amount_minor")) ==
+                                    str(proposal["amount_minor"])
+                                and draft.get("scope_text") == new_scope
+                            )
+                            if not correct_draft:
+                                unverified("Corrected draft readback not verified")
+                                return
+
+                            def versions_received(versions, versions_error):
+                                if not editor.isVisible() or company_id != self.crm_dossier_company_id:
+                                    return
+                                items = (versions or {}).get("versions") if isinstance(versions, dict) else None
+                                correct_versions = (
+                                    not versions_error and isinstance(versions, dict)
+                                    and versions.get("available") is True
+                                    and versions.get("company_id") == company_id
+                                    and versions.get("proposal_id") == proposal_id
+                                    and versions.get("current_revision") == 2
+                                    and isinstance(items, list) and len(items) == 2
+                                    and items[0].get("revision") == 1
+                                    and items[0].get("id") == ack["previous_snapshot_id"]
+                                    and items[0].get("scope_text") == proposal["scope_text"]
+                                    and items[0].get("content_sha256") ==
+                                        ack.get("previous_content_sha256")
+                                    and items[1].get("revision") == 2
+                                    and items[1].get("id") == ack["new_snapshot_id"]
+                                    and items[1].get("scope_text") == new_scope
+                                    and items[1].get("content_sha256") ==
+                                        ack.get("content_sha256")
+                                    and items[1].get("review_note") == reason
+                                    and all(x.get("title") == proposal["title"]
+                                            and x.get("currency") == proposal["currency"]
+                                            and str(x.get("amount_minor")) ==
+                                                str(proposal["amount_minor"])
+                                            for x in items)
+                                )
+                                if not correct_versions:
+                                    unverified("Immutable history readback not verified")
+                                    return
+                                state["pending"] = False
+                                editor.accept()
+                                self.refresh_company_dossier()
+                                self.load_proposals()
+                                QMessageBox.information(
+                                    self, "Scope revision 2 verified",
+                                    "Both full-text revisions and their exact "
+                                    "hashes were verified in the same company. "
+                                    "The fee is unchanged; nothing was issued."
+                                )
+
+                            self.bridge.call(
+                                "crm-company-proposal-versions",
+                                company_id + ":" + proposal_id,
+                                callback=versions_received
+                            )
+
+                        self.bridge.call(
+                            "crm-proposal", proposal_id, callback=current_received
+                        )
+
+                    self.bridge.call(
+                        "crm-company-proposal-revise", payload=payload, callback=saved
+                    )
+
+                save.clicked.connect(save_reviewed)
+                editor.open()
+
+            self.bridge.call(
+                "crm-company-proposal-versions", company_id + ":" + proposal_id,
+                callback=history_received
+            )
+
+        self.bridge.call("crm-proposal", proposal_id, callback=original_received)
+
     def open_dossier_invoice(self, draft_id, review=False):
         if not draft_id:
             return
