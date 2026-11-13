@@ -17147,7 +17147,11 @@ class EnkyronWindow(QMainWindow):
             and self.ticket_status.isEnabled()
             and self.ticket_status.currentData() is not None
         )
-        reviewed = self.ticket_status.currentData() in ("resolved", "closed")
+        reviewed = (
+            self.ticket_status.currentData() in ("resolved", "closed")
+            or (ticket and ticket.get("status") == "closed"
+                and self.ticket_status.currentData() == "in_progress")
+        )
         if reviewed and ticket and (not self.ticket_local_operator or
                                    ticket.get("assigned_to") != self.ticket_local_operator):
             can_change = False
@@ -17490,7 +17494,8 @@ class EnkyronWindow(QMainWindow):
             return
         ticket_id = self.current_id
         current_status = ticket.get("status")
-        reviewed = next_status in ("resolved", "closed")
+        reopening = current_status == "closed" and next_status == "in_progress"
+        reviewed = next_status in ("resolved", "closed") or reopening
         payload = {"ticket_id": ticket_id, "status": next_status}
         if reviewed:
             if not self.ticket_local_operator or ticket.get("assigned_to") != self.ticket_local_operator:
@@ -17502,8 +17507,12 @@ class EnkyronWindow(QMainWindow):
                 return
             review_note, accepted = QInputDialog.getMultiLineText(
                 self,
-                "Human resolution review" if next_status == "resolved"
-                else "Human closure review",
+                "Human reopening review" if reopening else (
+                    "Human resolution review" if next_status == "resolved"
+                    else "Human closure review"
+                ),
+                "Explain why this closed ticket must be reopened "
+                "(30–500 characters):" if reopening else
                 "Explain what was completed and why this ticket can be "
                 "{} (30–500 characters):".format(next_status),
                 ""

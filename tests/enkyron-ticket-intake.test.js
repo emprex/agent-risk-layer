@@ -195,6 +195,34 @@ test('ENK-05 stale, unassigned, wrong-owner or already-resolved completion never
   assert.equal(malformed.calls.length,0,'Missing confirmation must fail before any DB connection');
 });
 
+test('ENK-05 reopening a closed ticket requires current state, assignee and human review',async()=>{
+  const reviewed={
+    ticket_id:ticketId,status:'in_progress',expected_status:'closed',
+    review_note:'The human operator reviewed the original closure and confirmed additional work is necessary.',
+    confirmed:true
+  };
+  const validated=validateStatusChange(reviewed);
+  assert.equal(validated.expectedStatus,'closed');
+  const rejected=[
+    {payload:{ticket_id:ticketId,status:'in_progress'},actor:'localoperator',assignee:'localoperator'},
+    {payload:{...reviewed,confirmed:false},actor:'localoperator',assignee:'localoperator'},
+    {payload:{...reviewed,review_note:'short'},actor:'localoperator',assignee:'localoperator'},
+    {payload:reviewed,actor:'anotheroperator',assignee:'localoperator'},
+    {payload:reviewed,actor:'localoperator',assignee:null},
+  ];
+  for(const entry of rejected){
+    const db=fakePool({previous:'closed',assignee:entry.assignee});
+    await assert.rejects(()=>updateDeskTicketStatus(db,entry.payload,entry.actor));
+    assert.ok(!db.calls.some(c=>/UPDATE arl_workbench_tickets/.test(c.sql)));
+  }
+  const db=fakePool({previous:'closed',assignee:'localoperator'});
+  const eventId='00000000-0000-4000-8000-000000000090';
+  const result=await updateDeskTicketStatus(db,reviewed,'localoperator',{uuid:()=>eventId});
+  assert.deepEqual(result,{ticket_id:ticketId,from:'closed',status:'in_progress',event_id:eventId});
+  assert.match(db.calls[3].params[2],/Human reopen review/);
+  assert.equal(db.calls[3].params[3],'localoperator');
+});
+
 test('self-assignment is atomic and records a separate owner, not an assessor rewrite', async()=>{
   const db=fakePool();
   const result=await assignDeskTicket(db,{ticket_id:ticketId,action:'self'},'localoperator',

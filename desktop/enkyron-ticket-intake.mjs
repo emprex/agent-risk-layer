@@ -62,7 +62,12 @@ export function validateStatusChange(data) {
       || !Object.hasOwn(TICKET_TRANSITIONS, data.status)) {
     throw new Error('Invalid ticket status request');
   }
-  if (!REVIEWED_COMPLETION.has(data.status)) {
+  // A closed ticket may only return to work through the same human gate.
+  // Bare in_progress changes from other source states remain compatible;
+  // the transaction independently blocks unreviewed closed -> in_progress.
+  const proposedReopen=data.status==='in_progress' &&
+    data.expected_status==='closed';
+  if (!REVIEWED_COMPLETION.has(data.status) && !proposedReopen) {
     return {ticketId:data.ticket_id, status:data.status};
   }
   // Resolution and closure are consequential human decisions. Do not accept
@@ -199,8 +204,11 @@ export async function createDeskTicket(pool, data, actor, options={}) {
 export async function updateDeskTicketStatus(pool, data, actor=null, options={}) {
   const {ticketId,status,expectedStatus,reviewNote}=validateStatusChange(data);
   const completion=REVIEWED_COMPLETION.has(status);
-  const operator=completion?field(actor,'local operator',120,true):null;
-  if (completion && !/^[A-Za-z0-9_.-]{1,120}$/.test(operator)) {
+  const proposedReopen=status==='in_progress' && expectedStatus==='closed';
+  const principal=(completion || proposedReopen)?
+    field(actor,'local operator',120,true):null;
+  if ((completion || proposedReopen) &&
+      !/^[A-Za-z0-9_.-]{1,120}$/.test(principal)) {
     throw new Error('Invalid local ticket operator');
   }
   return transaction(pool, async client => {
@@ -214,15 +222,21 @@ export async function updateDeskTicketStatus(pool, data, actor=null, options={})
         !TICKET_TRANSITIONS[current.status].includes(status)) {
       throw new Error('Status transition not allowed');
     }
-    if (completion && expectedStatus!==current.status) {
+    const reopening=current.status==='closed' && status==='in_progress';
+    if (reopening && (!proposedReopen || data.confirmed!==true || !reviewNote)) {
+      throw new Error('Reviewed ticket reopening requires expected closed status and human confirmation');
+    }
+    const reviewed=completion || reopening;
+    if (reviewed && expectedStatus!==current.status) {
       throw new Error('Ticket changed; reopen and review before completing');
     }
-    if (completion && current.assigned_to!==operator) {
+    const operator=reviewed?(principal || field(actor,'local operator',120,true)):null;
+    if (reviewed && current.assigned_to!==operator) {
       throw new Error('Assign this ticket to your local operator before completion');
     }
     const eventId=(options.uuid||randomUUID)();
     const detail=current.status+' -> '+status+
-      (completion?'\\nHuman completion review: '+reviewNote:'');
+      (reviewed?'\\nHuman '+(reopening?'reopen':'completion')+' review: '+reviewNote:'');
     await client.query(
       'UPDATE arl_workbench_tickets SET status=$1,updated_at=NOW() WHERE id=$2',
       [status,ticketId]
@@ -230,10 +244,10 @@ export async function updateDeskTicketStatus(pool, data, actor=null, options={})
     await client.query(
       'INSERT INTO arl_workbench_ticket_events ' +
       "(id,ticket_id,event_type,detail,actor) VALUES ($1,$2,'status_changed',$3,$4)",
-      [eventId,ticketId,detail,completion?operator:current.assessor_name]
+      [eventId,ticketId,detail,reviewed?operator:current.assessor_name]
     );
     return {ticket_id:ticketId, from:current.status, status,
-      ...(completion?{event_id:eventId}: {})};
+      ...(reviewed?{event_id:eventId}: {})};
   });
 }
 

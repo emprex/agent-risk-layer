@@ -118,6 +118,34 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
         self.assertFalse(self.w.update_status_button.isEnabled())
         self.assertEqual(len([c for c in self.calls if c[0]=="ticket-status"]),1)
 
+    def test_closed_ticket_reopen_requires_review_and_event_readback(self):
+        self.w.current_ticket["status"]="closed"
+        self.w.ticket_status.clear()
+        self.w.ticket_status.addItem("In Progress","in_progress")
+        self.w.ticket_status.setEnabled(True)
+        self.w.ticket_status.setCurrentIndex(0)
+        self.w.refresh_status_action()
+        with patch.object(QInputDialog,"getMultiLineText",return_value=(NOTE,True)),patch.object(
+                QMessageBox,"question",return_value=QMessageBox.StandardButton.Yes):
+            self.w.change_ticket_status()
+        self.assertEqual(self.calls[-1][0],"ticket-status")
+        payload=self.calls[-1][2]
+        self.assertEqual(payload["expected_status"],"closed")
+        self.assertEqual(payload["status"],"in_progress")
+        self.assertTrue(payload["confirmed"])
+        self.assertEqual(payload["review_note"],NOTE)
+        self.calls[-1][3]({
+            "ticket_id":TICKET,"from":"closed",
+            "status":"in_progress","event_id":EVENT
+        },None)
+        self.assertEqual(self.calls[-1][0],"ticket")
+        with patch.object(self.w,"load_tickets"):
+            self.calls[-1][3]({
+                "ticket":{"id":TICKET,"ticket_number":"ARL-2026-000999","status":"in_progress"},
+                "events":[{"id":EVENT,"event_type":"status_changed","detail":"Human reopen review: "+NOTE}]
+            },None)
+        self.assertIn("verified",self.w.status.text())
+
     def test_my_tickets_readonly_queue_filter_priority_due_and_empty_state(self):
         self.w.my_tickets.setChecked(True)
         self.assertEqual(self.calls[-1][0], "tickets-mine")

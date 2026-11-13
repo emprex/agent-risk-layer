@@ -108,6 +108,31 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     const closed=await fetch();
     assert.equal(closed.status,'closed');
     assert.equal(closed.archived_at,null);
+    // Reopening is a separate consequential human decision: bare status
+    // transition is denied under the same row lock and no event is added.
+    await assert.rejects(
+      ()=>updateDeskTicketStatus(pool,{
+        ticket_id:intake.id,status:'in_progress'
+      },'ci-operator'),/Reviewed ticket reopening/
+    );
+    const reopening=await updateDeskTicketStatus(pool,{
+      ticket_id:intake.id,status:'in_progress',expected_status:'closed',
+      confirmed:true,
+      review_note:'The operator verified a newly reported synthetic request and reopened this ticket for follow-up.'
+    },'ci-operator');
+    assert.equal(reopening.from,'closed');
+    assert.match(reopening.event_id,/^[0-9a-f-]{36}$/);
+    await updateDeskTicketStatus(pool,{ticket_id:intake.id,status:'pending_review'});
+    await updateDeskTicketStatus(pool,{
+      ticket_id:intake.id,status:'resolved',expected_status:'pending_review',
+      confirmed:true,
+      review_note:'Operator confirmed that the reopened synthetic follow-up was handled and the outcome checked.'
+    },'ci-operator');
+    await updateDeskTicketStatus(pool,{
+      ticket_id:intake.id,status:'closed',expected_status:'resolved',
+      confirmed:true,
+      review_note:'Reopened customer request is complete, independently checked and ready for closure.'
+    },'ci-operator');
     const archived=await archiveDeskTicket(pool,{
       ticket_id:intake.id,reason:'Synthetic closed ticket retained for the audit history'
     },'ci-operator');
@@ -122,7 +147,7 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     )).rows;
     assert.equal(history.filter(x=>x.event_type==='created').length,1);
     assert.equal(history.filter(x=>x.event_type==='assigned').length,1);
-    assert.equal(history.filter(x=>x.event_type==='status_changed').length,6);
+    assert.equal(history.filter(x=>x.event_type==='status_changed').length,10);
     assert.equal(history.filter(x=>x.event_type==='archived').length,1);
     assert.ok(history.every(x=>x.actor==='ci-operator'));
     await assert.rejects(
@@ -133,6 +158,6 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
       'SELECT COUNT(*)::int AS n FROM arl_workbench_ticket_events WHERE ticket_id=$1',
       [intake.id]
     )).rows[0].n;
-    assert.equal(retained,9);
+    assert.equal(retained,13);
   }finally{await pool.end();}
 });
