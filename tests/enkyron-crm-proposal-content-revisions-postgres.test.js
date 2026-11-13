@@ -115,11 +115,33 @@ test('ENK-04 real PostgreSQL: preserve complete revision 1 and append reviewed r
     assert.equal(history.versions[1].source_event_id,afterEvents[1].id);
     assert.ok(history.versions.every(x=>x.currency==='GBP'&&
       Number(x.amount_minor)===100));
-    assert.equal((await readCompanyProposalContentVersions(pool,{
+    await assert.rejects(()=>readCompanyProposalContentVersions(pool,{
       proposal_id:draft.id,company_id:company.id
-    },'ci-other')).versions.length,0); // other workspace must not discover draft
-  }catch(error){
-    // A wrong-workspace read must throw; handled in separate assertion below.
-    throw error;
+    },'ci-other'),/not linked to this local company/);
+    await assert.rejects(()=>reviseCompanyProposalScope(pool,request,actor),
+      /re-open the latest revision/);
+    const archiveCount=(await pool.query(
+      'SELECT count(*)::integer AS n FROM enkyron_crm_proposal_content_versions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      ['local:'+actor,draft.id]
+    )).rows[0].n;
+    assert.equal(archiveCount,2,'stale retry must not append duplicate snapshots');
+    await assert.rejects(()=>pool.query(
+      'UPDATE enkyron_crm_proposal_content_versions '
+      +'SET scope_text=$1 WHERE workspace_key=$2 AND proposal_id=$3 AND revision=1',
+      ['tampered','local:'+actor,draft.id]
+    ),/cannot be changed|immutable/);
+    await assert.rejects(()=>pool.query(
+      'DELETE FROM enkyron_crm_proposal_content_versions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      ['local:'+actor,draft.id]
+    ),/cannot be changed|immutable/);
+    const countsAfter=(await Promise.all([
+      pool.query('SELECT count(*)::integer AS n FROM arl_workbench_tickets'),
+      pool.query('SELECT count(*)::integer AS n FROM enkyron_crm_mail_manual_sends'),
+      pool.query('SELECT count(*)::integer AS n FROM enkyron_crm_issued_invoices')
+    ])).map(x=>x.rows[0].n);
+    assert.deepEqual(countsAfter,countsBefore,
+      'revision must not silently create a ticket, mail send or invoice');
   }finally{await pool.end();}
 });
