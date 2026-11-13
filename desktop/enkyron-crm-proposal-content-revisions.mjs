@@ -174,6 +174,17 @@ export async function reviseCompanyProposalScope(pool,input,actor,options={}){
     throw error;
   }finally{client.release();}
 }
+export function parseCompanyProposalVersionsRequest(arg){
+  if(typeof arg!=='string')throw new Error('CRM invalid proposal history request');
+  const bits=arg.split(':');
+  if(bits.length!==2)
+    throw new Error('CRM invalid proposal history request');
+  return {
+    company_id:requireCompanyId(bits[0]),
+    proposal_id:requireId(bits[1],'proposal')
+  };
+}
+
 export async function readCompanyProposalContentVersions(pool,request,actor){
   if(!request||typeof request!=='object'||Array.isArray(request))
     throw new Error('CRM invalid revision history request');

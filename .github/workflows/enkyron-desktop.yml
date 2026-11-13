@@ -246,6 +246,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_draft_smoke.py'
+      - name: ENK-04 immutable draft scope correction (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_proposal_revision_smoke.py'
 
       - name: ENK-03 CRM contact auto-refresh after dossier save (synthetic offline)
         env:

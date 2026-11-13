@@ -15,6 +15,7 @@ const UAT_COMMANDS = new Set([
   'crm-record-activity', 'crm-record-qualification',
   'crm-company-proposal-readiness',
   'crm-company-proposal-create', 'crm-proposal', 'crm-proposals',
+  'crm-company-proposal-versions', 'crm-company-proposal-revise',
   'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',
@@ -81,6 +82,21 @@ export function requireEnkyronUatPayload(target, command, payload) {
        !Number.isSafeInteger(payload?.amount_minor) ||
        payload.amount_minor < 1)) {
     throw new Error('ENKYRON UAT internal draft requires reviewed company, qualification and explicit price');
+  }
+  // The one-off ENK-04 revision-2 UAT write can ONLY change scope of the
+  // already recorded synthetic unsent GBP 1.00 company draft. All general
+  // legacy draft update commands remain forbidden by the UAT allowlist.
+  if (target.uat && command === 'crm-company-proposal-revise' &&
+      (payload?.confirmed !== true ||
+       payload?.company_id !== '0e5993e3-be9a-4837-9350-989079c2cc2f' ||
+       payload?.opportunity_id !== '17d0d77c-3052-40e3-a38d-33fd4867e5d4' ||
+       payload?.proposal_id !== 'd35d86b8-b16f-41c8-940d-f8e7c1dc1db8' ||
+       payload?.expected_revision !== 1 ||
+       typeof payload?.scope_text !== 'string' ||
+       /copier le texte/i.test(payload.scope_text) ||
+       typeof payload?.review_note !== 'string' ||
+       payload.review_note.trim().length < 30)) {
+    throw new Error('ENKYRON UAT revision is limited to exact reviewed synthetic draft R1 to R2');
   }
 }
 
