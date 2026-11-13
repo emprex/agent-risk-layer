@@ -160,6 +160,16 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
             self.calls[-1][3]({
                 "id":TICKET,"ticket_number":"ARL-2026-000999","source":"manual"
             },None)
+            self.assertEqual(self.calls[-1][0],"ticket")
+            self.calls[-1][3]({
+                "ticket":{
+                    "id":TICKET,"ticket_number":"ARL-2026-000999",
+                    "title":"Synthetic support request",
+                    "client_name":"Example Synthetic Co",
+                    "target_reference":"intake:phone","status":"new"
+                },
+                "events":[{"id":EVENT,"event_type":"created"}]
+            },None)
             self.assertTrue(show_review.called)
             self.assertEqual(self.w.crm_ticket_link_prefill,"ARL-2026-000999")
         self.assertFalse(any(c[0]=="crm-link-ticket" for c in self.calls))
@@ -174,6 +184,44 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
         self.w.new_ticket_dialog.reject()
         self.assertIsNone(self.w.new_ticket_company_context)
         self.assertEqual(self.calls,[])
+
+
+    def test_create_ticket_ambiguous_write_is_not_retried(self):
+        self.w.open_new_ticket()
+        self.w.intake_client.setText("Example Co")
+        self.w.intake_title.setText("Synthetic support request")
+        self.w.intake_description.setPlainText("Synthetic request to be reviewed")
+        self.w.create_ticket()
+        self.assertEqual(self.calls[-1][0],"create-ticket")
+        with patch.object(QMessageBox,"warning") as warning:
+            self.calls[-1][3](None,"Bridge timeout after possible commit")
+        self.assertTrue(warning.called)
+        self.assertFalse(self.w.intake_submit.isEnabled())
+        self.w.create_ticket()
+        self.assertEqual(len([c for c in self.calls if c[0]=="create-ticket"]),1)
+        self.assertIn("NOT VERIFIED",self.w.status.text())
+
+    def test_create_ticket_requires_exact_canonical_readback(self):
+        self.w.open_new_ticket()
+        self.w.intake_client.setText("Example Co")
+        self.w.intake_title.setText("Synthetic support request")
+        self.w.intake_description.setPlainText("Synthetic request to be reviewed")
+        self.w.create_ticket()
+        self.calls[-1][3]({
+            "id":TICKET,"ticket_number":"ARL-2026-000999","source":"manual"
+        },None)
+        self.assertEqual([c[0] for c in self.calls[-2:]],["create-ticket","ticket"])
+        with patch.object(QMessageBox,"warning") as warning:
+            self.calls[-1][3]({
+                "ticket":{"id":TICKET,"ticket_number":"ARL-2026-000999",
+                          "title":"Synthetic support request","client_name":"Example Co",
+                          "target_reference":"intake:phone","status":"new"},
+                "events":[]
+            },None)
+        self.assertTrue(warning.called)
+        self.assertFalse(self.w.intake_submit.isEnabled())
+        self.assertIn("NOT VERIFIED",self.w.status.text())
+        self.assertEqual(len([c for c in self.calls if c[0]=="create-ticket"]),1)
 
 if __name__=="__main__":
     unittest.main()

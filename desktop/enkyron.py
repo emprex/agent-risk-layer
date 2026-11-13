@@ -17032,47 +17032,97 @@ class EnkyronWindow(QMainWindow):
             QMessageBox.warning(dialog, "Required fields",
                 "Organisation/client, subject and request are required.")
             return
+        # A network/IPC failure after commit is ambiguous. Disable resubmit
+        # until a human has independently checked the canonical ticket list.
+        if not self.intake_submit.isEnabled():
+            return
         self.intake_submit.setEnabled(False)
+        company_context = self.new_ticket_company_context
 
-        def completed(result, error):
-            if error or not isinstance(result, dict) or not result.get("id"):
-                QMessageBox.warning(
-                    dialog, "Ticket not created",
-                    error or "Local ticket creation failed."
+        def outcome_uncertain(reason):
+            self.status.setText(
+                "Ticket creation NOT VERIFIED. Search existing tickets before "
+                "starting a new request; do not submit this form again."
+            )
+            QMessageBox.warning(
+                dialog, "Ticket outcome not verified",
+                "The ticket may already exist. Do not submit the same request "
+                "again. Close this form and search the ticket list/history first. "
+                "Diagnostic: " + str(reason or "No confirmed response")[:220]
+            )
+            # Leave submit disabled; no blind retry after an ambiguous write.
+
+        def verified_readback(received, read_error, result):
+            ticket = received.get("ticket") if isinstance(received, dict) else None
+            events = received.get("events") if isinstance(received, dict) else None
+            matches = (
+                not read_error and isinstance(ticket, dict)
+                and ticket.get("id") == result["id"]
+                and ticket.get("ticket_number") == result["ticket_number"]
+                and ticket.get("title") == data["title"].strip()
+                and ticket.get("client_name") == data["client_name"].strip()
+                and ticket.get("target_reference") == "intake:" + data["source"]
+                and ticket.get("status") == "new"
+                and isinstance(events, list)
+                and any(
+                    isinstance(event, dict)
+                    and event.get("event_type") == "created"
+                    and event.get("id")
+                    for event in events
                 )
-                self.intake_submit.setEnabled(True)
+            )
+            if not matches:
+                outcome_uncertain(read_error or "Exact ticket/event readback failed")
                 return
-            company_context = self.new_ticket_company_context
-            dialog.accept()
+            if dialog.isVisible():
+                dialog.accept()
             self.search.clear()
             self.current_id = None
             self.current_ticket = None
-            new_id = result["id"]
-            # Select the newly opened ticket after asynchronous list refresh.
-            self.pending_ticket_id = new_id
+            # New tickets are unassigned. The My Tickets filter must not
+            # silently hide a just-created record.
+            if self.my_tickets.isChecked():
+                self.my_tickets.blockSignals(True)
+                self.my_tickets.setChecked(False)
+                self.my_tickets.blockSignals(False)
+                self.my_tickets.setText("☐ My tickets")
+            self.pending_ticket_id = result["id"]
             self.load_tickets()
             if company_context:
                 if (company_context["id"] == self.crm_company_id
                         and self.crm_link_ticket_button.isEnabled()):
                     self.crm_ticket_link_prefill = result["ticket_number"]
                     self.status.setText(
-                        "Ticket {} created. Review the exact CRM association "
-                        "in the next dialog; no automatic link was made."
+                        "Ticket {} verified in PostgreSQL. Review the exact "
+                        "CRM association next; no automatic link was made."
                         .format(result["ticket_number"])
                     )
-                    self.open_ticket_link_dialog()
+                    if dialog.isVisible() is False:
+                        self.open_ticket_link_dialog()
                 else:
                     self.status.setText(
-                        "Ticket {} created but CRM selection changed. "
-                        "No company link was attempted; review it later "
-                        "using Company → Tickets."
+                        "Ticket {} verified. CRM selection changed; no company "
+                        "link was attempted. Review via Company → Tickets."
                         .format(result["ticket_number"])
                     )
             else:
                 self.status.setText(
-                    "Ticket {} created in PostgreSQL from {}. No assessment created."
+                    "Ticket {} verified in PostgreSQL from {}. "
+                    "No assessment created."
                     .format(result["ticket_number"], result["source"])
                 )
+
+        def completed(result, error):
+            if error or not isinstance(result, dict) or not isinstance(result.get("id"), str) or not isinstance(result.get("ticket_number"), str):
+                outcome_uncertain(error or "No exact ticket identifier returned")
+                return
+            # The write response alone is never business verification.
+            self.bridge.call(
+                "ticket", result["id"],
+                callback=lambda saved, read_error: verified_readback(
+                    saved, read_error, result
+                )
+            )
 
         self.bridge.call("create-ticket", payload=data, callback=completed)
 
