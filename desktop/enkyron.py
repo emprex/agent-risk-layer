@@ -387,6 +387,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_items = []
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
+        self.crm_scope_correction_dialog = None
+        self.crm_scope_revision_uncertain = False
         self.crm_issue_preflight_dialog = None
         self.crm_quote_evidence_dialog = None
         self.crm_quote_evidence_context = None
@@ -6941,9 +6943,16 @@ class EnkyronWindow(QMainWindow):
                     page_layout.insertWidget(0, guidance)
                     commercial_buttons = QHBoxLayout()
                     open_source = QPushButton("Open source proposal…")
+                    correct_scope = QPushButton("Correct draft scope (new revision)…")
+                    correct_scope.setObjectName("crmDossierCorrectScope")
+                    correct_scope.setToolTip(
+                        "Archives the full original draft before a manually "
+                        "reviewed scope-only edit. Does not change the fee or issue anything."
+                    )
                     open_invoice = QPushButton("Open invoice draft…")
                     review_invoice = QPushButton("Review invoice blockers…")
                     commercial_buttons.addWidget(open_source)
+                    commercial_buttons.addWidget(correct_scope)
                     commercial_buttons.addWidget(open_invoice)
                     commercial_buttons.addWidget(review_invoice)
                     commercial_buttons.addStretch()
@@ -6959,6 +6968,11 @@ class EnkyronWindow(QMainWindow):
                             "unissued_invoice_draft" and document.get("document_id")
                         )
                         open_source.setEnabled(bool(document and document.get("proposal_id")))
+                        correct_scope.setEnabled(bool(
+                            document and document.get("document_kind") == "proposal_draft"
+                            and document.get("proposal_id")
+                            and not self.crm_scope_revision_uncertain
+                        ))
                         open_invoice.setEnabled(is_invoice)
                         review_invoice.setEnabled(is_invoice)
 
@@ -6966,6 +6980,15 @@ class EnkyronWindow(QMainWindow):
                         document = selected_document()
                         if document and document.get("proposal_id"):
                             self.open_dossier_source_proposal(document["proposal_id"])
+
+                    def correct_source_document():
+                        document = selected_document()
+                        if (document and document.get("document_kind") == "proposal_draft"
+                                and document.get("proposal_id")
+                                and not self.crm_scope_revision_uncertain):
+                            self.open_dossier_scope_correction(
+                                document["proposal_id"], company_id
+                            )
 
                     def open_invoice_document(review=False):
                         document = selected_document()
@@ -6975,6 +6998,7 @@ class EnkyronWindow(QMainWindow):
 
                     table.itemSelectionChanged.connect(update_document_actions)
                     open_source.clicked.connect(open_source_document)
+                    correct_scope.clicked.connect(correct_source_document)
                     open_invoice.clicked.connect(lambda: open_invoice_document(False))
                     review_invoice.clicked.connect(lambda: open_invoice_document(True))
                     page_layout.addLayout(commercial_buttons)
