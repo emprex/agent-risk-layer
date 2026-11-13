@@ -223,5 +223,33 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
         self.assertIn("NOT VERIFIED",self.w.status.text())
         self.assertEqual(len([c for c in self.calls if c[0]=="create-ticket"]),1)
 
+    def test_closed_intake_during_bridge_result_never_opens_link_review(self):
+        company_id="33333333-4444-4555-8666-777777777777"
+        self.w.crm_company_id=company_id
+        self.w.crm_company_items=[{"id":company_id,"name":"Example Synthetic Co"}]
+        self.w.crm_link_ticket_button.setEnabled(True)
+        self.w.open_new_company_ticket()
+        self.w.intake_title.setText("Synthetic support request")
+        self.w.intake_description.setPlainText("Synthetic support request to be reviewed")
+        self.w.create_ticket()
+        create_cb=self.calls[-1][3]
+        self.w.new_ticket_dialog.reject()
+        self.assertIsNone(self.w.new_ticket_company_context)
+        create_cb({"id":TICKET,"ticket_number":"ARL-2026-000999"},None)
+        read_cb=self.calls[-1][3]
+        with patch.object(self.w,"open_ticket_link_dialog") as review:
+            read_cb({
+                "ticket":{
+                    "id":TICKET,"ticket_number":"ARL-2026-000999",
+                    "title":"Synthetic support request",
+                    "client_name":"Example Synthetic Co",
+                    "target_reference":"intake:phone","status":"new"
+                },
+                "events":[{"id":EVENT,"event_type":"created"}]
+            },None)
+            self.assertFalse(review.called)
+        self.assertIn("No company link was attempted",self.w.status.text())
+        self.assertFalse(any(c[0]=="crm-link-ticket" for c in self.calls))
+
 if __name__=="__main__":
     unittest.main()
