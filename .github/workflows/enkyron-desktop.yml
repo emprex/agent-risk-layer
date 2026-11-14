@@ -133,6 +133,8 @@ jobs:
           node --check desktop/enkyron-crm-pipeline.mjs
           node --check desktop/enkyron-mail-ticket-links.mjs
           node --test tests/enkyron-mail-ticket-links.test.js
+          node --check scripts/enkyron-mail-ticket-links-schema.mjs
+          node --test tests/enkyron-mail-ticket-links-schema.test.js
           node --check scripts/enkyron-crm-mail-schema.mjs
           node --check scripts/enkyron-crm-activity-schema.mjs
           node --check scripts/enkyron-crm-opportunities-schema.mjs
