@@ -7,7 +7,9 @@ const ticket_id='22222222-3333-4444-8555-666666666666';
 const good={mailbox,thread_id,ticket_id,ticket_number_at_review:'ARL-2026-000003',
   client_name_at_review:'Reviewed client',review_note:'Human verified this specific conversation and existing ticket.',confirmed:true};
 test('manual Mail-ticket association requires exact identities and approval',()=>{
-  assert.deepEqual(validateMailTicketLink(good),good);
+  const {confirmed, ...approved}=good;
+  assert.equal(confirmed,true);
+  assert.deepEqual(validateMailTicketLink(good),approved);
   for(const bad of [
     {...good,confirmed:false},{...good,mailbox:'all'},
     {...good,thread_id:'invalid'},{...good,ticket_id:'invalid'},
