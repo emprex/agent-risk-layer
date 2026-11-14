@@ -439,10 +439,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_context = None
         self.crm_pipeline_seq = 0
         self.crm_pipeline_loaded = False
-        self.crm_pipeline_cards = {}
+        self.crm_pipeline_items = []
         self.crm_pipeline_selected = None
-        self.crm_pipeline_lists = {}
-        self.crm_pipeline_labels = {}
+        self.crm_pipeline_page = 1
+        self.crm_pipeline_lane = "all"
+        self.crm_pipeline_sort = "updated"
+        self.crm_pipeline_stage_buttons = {}
         self.crm_activity_dialog = None
         self.crm_activity_opportunity_id = None
         self.crm_activity_seq = 0
@@ -1834,51 +1836,121 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_pipeline_notice.setWordWrap(True)
         pipeline_l.addWidget(self.crm_pipeline_notice)
-        pipeline_columns = QHBoxLayout()
-        pipeline_columns.setSpacing(8)
-        for code, title in [
+        # Stage counts stay visible without squeezing hundreds of cards into lanes.
+        summary = QHBoxLayout()
+        summary.setSpacing(6)
+        for code, name in (
+            ("all", "All"),
             ("prospecting", "Prospecting"),
             ("engagement", "Engagement"),
             ("proposal", "Proposals"),
             ("won", "Won"),
-            ("lost", "Lost")
-        ]:
-            pane = QFrame()
-            pane.setObjectName("pipelineLane")
-            pane.setStyleSheet(
-                "QFrame#pipelineLane { background: #f8fafc; "
-                "border: 1px solid #d6e2eb; border-radius: 5px; }"
+            ("lost", "Lost"),
+        ):
+            button = QPushButton(name + " · 0")
+            button.setCheckable(True)
+            button.setChecked(code == "all")
+            button.setMinimumHeight(47)
+            button.setStyleSheet(
+                "QPushButton { font-weight: bold; background: #f7fafc; }"
+                "QPushButton:checked { background: #d7edf1; "
+                "border: 2px solid #168398; color: #17364c; }"
             )
-            pane_l = QVBoxLayout(pane)
-            pane_l.setContentsMargins(8, 10, 8, 8)
-            label = QLabel("{} · 0".format(title))
-            label.setStyleSheet("font-weight: bold;")
-            pane_l.addWidget(label)
-            cards = QListWidget()
-            cards.setObjectName("pipelineOpportunityList")
-            cards.setWordWrap(True)
-            cards.setSpacing(8)
-            cards.setHorizontalScrollBarPolicy(
-                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            button.clicked.connect(
+                lambda _checked=False, stage=code:
+                    self.select_pipeline_stage(stage)
             )
-            cards.setStyleSheet(
-                "QListWidget#pipelineOpportunityList { background: transparent; "
-                "border: 0; outline: none; }"
-                "QListWidget#pipelineOpportunityList::item { background: transparent; "
-                "border: 0; padding: 0; }"
-            )
-            cards.setSelectionMode(
-                QAbstractItemView.SelectionMode.SingleSelection
-            )
-            cards.currentRowChanged.connect(
-                lambda _row, lane=code: self.pipeline_selected(lane)
-            )
-            pane_l.addWidget(cards, 1)
-            self.crm_pipeline_lists[code] = cards
-            self.crm_pipeline_labels[code] = label
-            self.crm_pipeline_cards[code] = []
-            pipeline_columns.addWidget(pane, 1)
-        pipeline_l.addLayout(pipeline_columns, 1)
+            summary.addWidget(button, 1)
+            self.crm_pipeline_stage_buttons[code] = button
+        pipeline_l.addLayout(summary)
+
+        filters = QHBoxLayout()
+        self.crm_pipeline_search = QLineEdit()
+        self.crm_pipeline_search.setObjectName("crmPipelineSearch")
+        self.crm_pipeline_search.setMaxLength(100)
+        self.crm_pipeline_search.setPlaceholderText(
+            "Search company or next action across all records…"
+        )
+        self.crm_pipeline_search.returnPressed.connect(
+            self.search_pipeline
+        )
+        filters.addWidget(self.crm_pipeline_search, 1)
+        find = QPushButton("Search")
+        find.clicked.connect(self.search_pipeline)
+        filters.addWidget(find)
+        clear = QPushButton("Clear")
+        clear.clicked.connect(self.clear_pipeline_search)
+        filters.addWidget(clear)
+        filters.addWidget(QLabel("Sort:"))
+        self.crm_pipeline_sort_box = QComboBox()
+        for label, value in (
+            ("Recently updated", "updated"),
+            ("Due soon", "due"),
+            ("Company A–Z", "company")
+        ):
+            self.crm_pipeline_sort_box.addItem(label, value)
+        self.crm_pipeline_sort_box.currentIndexChanged.connect(
+            self.sort_pipeline
+        )
+        filters.addWidget(self.crm_pipeline_sort_box)
+        pipeline_l.addLayout(filters)
+
+        self.crm_pipeline_table = QTableWidget(0, 5)
+        self.crm_pipeline_table.setObjectName("crmPipelineTable")
+        self.crm_pipeline_table.setHorizontalHeaderLabels(
+            ["Company", "Stage", "Next action", "Due", "Updated"]
+        )
+        self.crm_pipeline_table.setWordWrap(True)
+        self.crm_pipeline_table.setShowGrid(False)
+        self.crm_pipeline_table.setAlternatingRowColors(True)
+        self.crm_pipeline_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_pipeline_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_pipeline_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_pipeline_table.verticalHeader().hide()
+        header = self.crm_pipeline_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.crm_pipeline_table.setColumnWidth(0, 195)
+        self.crm_pipeline_table.setStyleSheet(
+            "QTableWidget { background: white; alternate-background-color: #f4f8fa; "
+            "border: 1px solid #d6e2eb; }"
+            "QTableWidget::item { padding: 7px 9px; }"
+            "QTableWidget::item:selected { background: #d7edf1; color: #17364c; }"
+        )
+        self.crm_pipeline_table.itemSelectionChanged.connect(
+            self.pipeline_selected
+        )
+        self.crm_pipeline_table.cellDoubleClicked.connect(
+            lambda _row, _col: self.open_pipeline_opportunity()
+        )
+        pipeline_l.addWidget(self.crm_pipeline_table, 1)
+
+        paging = QHBoxLayout()
+        self.crm_pipeline_page_label = QLabel("Page 1 / 1")
+        paging.addWidget(self.crm_pipeline_page_label)
+        paging.addStretch()
+        self.crm_pipeline_previous = QPushButton("← Previous")
+        self.crm_pipeline_previous.setEnabled(False)
+        self.crm_pipeline_previous.clicked.connect(
+            lambda: self.move_pipeline_page(-1)
+        )
+        paging.addWidget(self.crm_pipeline_previous)
+        self.crm_pipeline_next = QPushButton("Next →")
+        self.crm_pipeline_next.setEnabled(False)
+        self.crm_pipeline_next.clicked.connect(
+            lambda: self.move_pipeline_page(1)
+        )
+        paging.addWidget(self.crm_pipeline_next)
+        pipeline_l.addLayout(paging)
         pipeline_footer = QHBoxLayout()
         pipeline_footer.addWidget(QLabel(
             "Add a new opportunity from Existing prospect research."
@@ -4122,190 +4194,160 @@ class EnkyronWindow(QMainWindow):
         if index == 6 and self.navigation.currentRow() == 2:
             self.load_invoice_drafts()
 
+    def select_pipeline_stage(self, stage):
+        if stage not in self.crm_pipeline_stage_buttons:
+            return
+        self.crm_pipeline_lane = stage
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def search_pipeline(self):
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def clear_pipeline_search(self):
+        self.crm_pipeline_search.clear()
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def sort_pipeline(self, _index):
+        self.crm_pipeline_sort = self.crm_pipeline_sort_box.currentData()
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def move_pipeline_page(self, delta):
+        self.crm_pipeline_page = max(1, self.crm_pipeline_page + delta)
+        self.load_pipeline()
+
     def load_pipeline(self):
         self.crm_pipeline_seq += 1
         sequence = self.crm_pipeline_seq
         self.crm_pipeline_loaded = False
         self.crm_pipeline_selected = None
+        self.crm_pipeline_items = []
         self.crm_pipeline_edit.setEnabled(False)
         self.crm_pipeline_proposal.setEnabled(False)
+        self.crm_pipeline_table.blockSignals(True)
+        self.crm_pipeline_table.setRowCount(0)
+        self.crm_pipeline_table.blockSignals(False)
+        self.crm_pipeline_previous.setEnabled(False)
+        self.crm_pipeline_next.setEnabled(False)
         self.crm_pipeline_notice.setText("Loading opportunities…")
-        for code, widget in self.crm_pipeline_lists.items():
-            widget.blockSignals(True)
-            widget.clear()
-            widget.blockSignals(False)
-            self.crm_pipeline_cards[code] = []
-            self.crm_pipeline_labels[code].setText(
-                self.crm_pipeline_labels[code].text().split(" · ")[0] + " · 0"
-            )
+        payload = {
+            "lane": self.crm_pipeline_lane,
+            "page": self.crm_pipeline_page,
+            "search": self.crm_pipeline_search.text().strip(),
+            "sort": self.crm_pipeline_sort
+        }
 
         def received(data, error):
             if sequence != self.crm_pipeline_seq:
                 return
-            if error or not data or not data.get("available", False):
+            if error or not isinstance(data, dict) or not data.get("available"):
                 self.crm_pipeline_notice.setText(
                     error or (data or {}).get(
                         "notice", "The sales pipeline is not available."
                     )
                 )
                 return
+            total = data.get("total")
+            pages = data.get("total_pages")
+            items = data.get("items")
+            lanes = data.get("lanes")
+            if (not isinstance(total, int) or total < 0
+                    or not isinstance(pages, int) or pages < 1
+                    or not isinstance(items, list) or len(items) > 25
+                    or not isinstance(lanes, list)
+                    or len(lanes) != 5):
+                self.crm_pipeline_notice.setText("Invalid pipeline page response.")
+                return
+            if self.crm_pipeline_page > pages:
+                self.crm_pipeline_page = pages
+                self.load_pipeline()
+                return
             self.crm_pipeline_loaded = True
-            any_truncated = False
-            for lane in data.get("lanes", []):
-                code = lane.get("id")
-                if code not in self.crm_pipeline_lists:
-                    continue
-                widget = self.crm_pipeline_lists[code]
-                entries = lane.get("items", [])
-                self.crm_pipeline_cards[code] = entries
-                self.crm_pipeline_labels[code].setText(
-                    "{} · {}".format(lane.get("title", code), lane.get("total", 0))
+            self.crm_pipeline_items = items
+            count_by_lane = {
+                lane["id"]: lane["total"] for lane in lanes
+                if isinstance(lane, dict) and
+                lane.get("id") in self.crm_pipeline_stage_buttons and
+                isinstance(lane.get("total"), int)
+            }
+            count_by_lane["all"] = data.get("overall_total", 0)
+            names = {
+                "all": "All", "prospecting": "Prospecting",
+                "engagement": "Engagement", "proposal": "Proposals",
+                "won": "Won", "lost": "Lost"
+            }
+            for code, button in self.crm_pipeline_stage_buttons.items():
+                button.setText("{} · {}".format(
+                    names[code], count_by_lane.get(code, 0)
+                ))
+                button.setChecked(code == self.crm_pipeline_lane)
+            self.crm_pipeline_table.blockSignals(True)
+            self.crm_pipeline_table.setRowCount(len(items))
+            for row, entry in enumerate(items):
+                company = str(entry.get("company_name_at_creation") or "Untitled")
+                stage = str(entry.get("stage") or "").replace("_", " ").title()
+                action = str(entry.get("next_action") or "No next action recorded")
+                due = format_followup_due(
+                    entry.get("due_date"), entry.get("stage")
                 )
-                widget.blockSignals(True)
-                for entry in entries:
-                    # Separate native cards, not four undifferentiated text lines.
-                    # Full values remain in crm_pipeline_cards for the edit dialog.
-                    card = self.make_pipeline_card(entry)
-                    item = QListWidgetItem()
-                    item.setSizeHint(QSize(0, 196))
-                    title = entry.get("company_name_at_creation") or "Untitled"
-                    action = entry.get("next_action") or "No next action recorded"
-                    item.setToolTip("{}\n{}".format(title, action))
-                    widget.addItem(item)
-                    widget.setItemWidget(item, card)
-                widget.blockSignals(False)
-                any_truncated = any_truncated or bool(lane.get("more"))
-            message = "{} opportunity/opportunities across five stages.".format(
-                data.get("total", 0)
+                updated = display_date(entry.get("updated_at"))[:10]
+                values = [
+                    company, stage,
+                    action if len(action) <= 180 else action[:177].rstrip() + "…",
+                    due, updated
+                ]
+                for col, value in enumerate(values):
+                    cell = QTableWidgetItem(value)
+                    cell.setToolTip(
+                        action if col == 2 else str(value)
+                    )
+                    if col == 0:
+                        font = cell.font()
+                        font.setBold(True)
+                        cell.setFont(font)
+                    self.crm_pipeline_table.setItem(row, col, cell)
+                self.crm_pipeline_table.setRowHeight(row, 60)
+            self.crm_pipeline_table.blockSignals(False)
+            first = (self.crm_pipeline_page - 1) * 25 + 1 if total else 0
+            last = min(self.crm_pipeline_page * 25, total)
+            self.crm_pipeline_notice.setText(
+                "Showing {}–{} of {} matching opportunities ({} total).".format(
+                    first, last, total, data.get("overall_total", total)
+                )
             )
-            if any_truncated:
-                message += (
-                    " Some columns display their first 30 items only. "
-                    "Use Follow-ups to search all records."
-                )
-            self.crm_pipeline_notice.setText(message)
-
-        self.bridge.call("crm-sales-pipeline", callback=received)
-
-    @staticmethod
-    def make_pipeline_card(entry):
-        """Visual-only commercial card; never changes backend opportunity data."""
-        title = str(entry.get("company_name_at_creation") or "Untitled")
-        stage = str(entry.get("stage") or "unclassified").replace("_", " ").title()
-        estimate = entry.get("probability_percent")
-        if estimate is not None:
-            stage += " · {}% estimated".format(estimate)
-        action = str(entry.get("next_action") or "").strip()
-        due = format_followup_due(entry.get("due_date"), entry.get("stage"))
-
-        card = QFrame()
-        card.setObjectName("pipelineOpportunityCard")
-        card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        card.setAccessibleName(
-            "{}. Stage: {}. Next action: {}. Due: {}".format(
-                title, stage, action or "Not recorded", due
+            self.crm_pipeline_page_label.setText(
+                "Page {} / {}".format(self.crm_pipeline_page, pages)
             )
+            self.crm_pipeline_previous.setEnabled(self.crm_pipeline_page > 1)
+            self.crm_pipeline_next.setEnabled(self.crm_pipeline_page < pages)
+
+        self.bridge.call(
+            "crm-sales-pipeline-page", payload=payload, callback=received
         )
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(11, 10, 11, 10)
-        layout.setSpacing(4)
 
-        company = QLabel(title)
-        company.setObjectName("pipelineCompany")
-        company.setTextFormat(Qt.TextFormat.PlainText)
-        company.setWordWrap(True)
-        company.setStyleSheet(
-            "font-weight: bold; font-size: 14px; color: #17364c;"
-        )
-        company.setToolTip(title)
-        layout.addWidget(company)
-
-        state = QLabel("Stage: " + stage)
-        state.setObjectName("pipelineStage")
-        state.setTextFormat(Qt.TextFormat.PlainText)
-        state.setWordWrap(True)
-        state.setStyleSheet("color: #526b7e; font-size: 12px;")
-        layout.addWidget(state)
-
-        next_label = QLabel("NEXT ACTION")
-        next_label.setStyleSheet(
-            "color: #526b7e; font-size: 11px; font-weight: bold;"
-        )
-        layout.addWidget(next_label)
-        # A readable preview keeps cards compact; tooltip/edit opens full text.
-        preview = action if len(action) <= 96 else action[:93].rstrip() + "…"
-        next_text = QLabel(preview or "No next action recorded")
-        next_text.setObjectName("pipelineNextAction")
-        next_text.setTextFormat(Qt.TextFormat.PlainText)
-        next_text.setWordWrap(True)
-        next_text.setToolTip(action or "No next action recorded")
-        next_text.setStyleSheet("color: #20354a;")
-        layout.addWidget(next_text)
-
-        due_label = QLabel("Due: " + due)
-        due_label.setObjectName("pipelineDue")
-        due_label.setTextFormat(Qt.TextFormat.PlainText)
-        due_label.setWordWrap(True)
-        due_label.setStyleSheet("color: #526b7e; font-size: 12px;")
-        layout.addWidget(due_label)
-        layout.addStretch()
-        card.setStyleSheet(
-            "QFrame#pipelineOpportunityCard { background: #ffffff; "
-            "border: 1px solid #d2dfe8; border-radius: 7px; }"
-        )
-        return card
-
-    def style_pipeline_selection(self):
-        """Visible selection follows the list's existing row/IPC mapping."""
-        for code, listing in self.crm_pipeline_lists.items():
-            for row in range(listing.count()):
-                panel = listing.itemWidget(listing.item(row))
-                if panel is None:
-                    continue
-                chosen = self.crm_pipeline_selected == (code, row)
-                bg = "#e2f4f6" if chosen else "#ffffff"
-                border = "#168398" if chosen else "#d2dfe8"
-                panel.setStyleSheet(
-                    "QFrame#pipelineOpportunityCard { background: " + bg +
-                    "; border: 2px solid " + border +
-                    "; border-radius: 7px; }"
-                )
-
-    def pipeline_selected(self, lane):
-        cards = self.crm_pipeline_lists[lane]
-        selected = cards.currentRow()
-        if selected < 0 or selected >= len(self.crm_pipeline_cards[lane]):
-            if self.crm_pipeline_selected and self.crm_pipeline_selected[0] == lane:
-                self.crm_pipeline_selected = None
-                self.crm_pipeline_edit.setEnabled(False)
-                self.crm_pipeline_proposal.setEnabled(False)
-                self.style_pipeline_selection()
-            return
-        for code, other in self.crm_pipeline_lists.items():
-            if code != lane:
-                other.blockSignals(True)
-                other.setCurrentRow(-1)
-                other.clearSelection()
-                other.blockSignals(False)
-        self.crm_pipeline_selected = (lane, selected)
-        self.crm_pipeline_edit.setEnabled(True)
-        self.crm_pipeline_proposal.setEnabled(True)
-        self.style_pipeline_selection()
+    def pipeline_selected(self):
+        row = self.crm_pipeline_table.currentRow()
+        if row < 0 or row >= len(self.crm_pipeline_items):
+            self.crm_pipeline_selected = None
+        else:
+            self.crm_pipeline_selected = row
+        selected = self.crm_pipeline_selected is not None
+        self.crm_pipeline_edit.setEnabled(selected)
+        self.crm_pipeline_proposal.setEnabled(selected)
 
     def open_pipeline_opportunity(self):
-        selection = self.crm_pipeline_selected
-        if not selection:
+        row = self.crm_pipeline_selected
+        if row is None or not 0 <= row < len(self.crm_pipeline_items):
             return
         if self.crm_followup_dialog and self.crm_followup_dialog.isVisible():
             self.crm_followup_dialog.raise_()
             return
-        lane, row = selection
-        entries = self.crm_pipeline_cards.get(lane, [])
-        if row < 0 or row >= len(entries):
-            return
-        existing = dict(entries[row])
+        existing = dict(self.crm_pipeline_items[row])
         self.build_followup_dialog({
-            "id": existing["prospect_id"],
+            "id": existing.get("prospect_id"),
             "company_name": existing.get("company_name_at_creation") or ""
         }, existing)
 
@@ -10429,17 +10471,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
-        selected = self.crm_pipeline_selected
-        if not selected:
+        row = self.crm_pipeline_selected
+        if row is None or not 0 <= row < len(self.crm_pipeline_items):
             return
         if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
             self.crm_proposal_dialog.raise_()
             return
-        lane, row = selected
-        cards = self.crm_pipeline_cards.get(lane, [])
-        if row < 0 or row >= len(cards):
-            return
-        opportunity = cards[row]
+        opportunity = self.crm_pipeline_items[row]
         self.show_proposal_dialog({
             "opportunity_id": opportunity["id"],
             "company_name_at_creation": opportunity.get(
