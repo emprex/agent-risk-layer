@@ -1756,6 +1756,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.forwardRequested.connect(self.prepare_mail_forward)
         self.mail_inbox.fullTextRequested.connect(self.open_archived_full_text)
         self.mail_inbox.localCompanyLinkRequested.connect(self.open_mail_company_link)
+        self.mail_inbox.localTicketLinkRequested.connect(self.open_mail_ticket_link)
         self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
         self.mail_inbox.sentFollowUpRequested.connect(self.prepare_sent_follow_up)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
@@ -2764,6 +2765,7 @@ class EnkyronWindow(QMainWindow):
             if self.mail_inbox.show_messages(
                     mailbox, thread_id, data.get("items") or []):
                 self.load_mail_company_link(mailbox, thread_id)
+                self.load_mail_ticket_links(mailbox, thread_id)
         def cached(data,error):
             if error or not isinstance(data,dict):
                 display(data,error)
@@ -2790,6 +2792,21 @@ class EnkyronWindow(QMainWindow):
             self.mail_inbox.show_company_link(mailbox, thread_id, data)
         self.bridge.call("mail-local-company",
             payload={"mailbox":mailbox,"thread_id":thread_id},
+            callback=received)
+
+    def load_mail_ticket_links(self, mailbox, thread_id):
+        """Read exact locally stored Mail-ticket links, never infer identity."""
+        def received(data, error):
+            if (mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            if error or not isinstance(data, dict):
+                self.mail_inbox.ticket_link_button.setEnabled(False)
+                self.mail_inbox.ticket_link_button.setText("Ticket links unavailable")
+                return
+            self.mail_inbox.show_ticket_links(mailbox, thread_id, data)
+        self.bridge.call("mail-local-ticket-links",
+            payload={"mailbox": mailbox, "thread_id": thread_id},
             callback=received)
 
     def open_mail_company_link(self, mailbox, thread_id):
