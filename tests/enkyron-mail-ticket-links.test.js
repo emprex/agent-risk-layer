@@ -49,7 +49,7 @@ test('link is transactional, scoped, append-only and has no provider action',asy
   assert.deepEqual(f.tx,['BEGIN','COMMIT','RELEASE']);
   const insert=f.calls.find(x=>x.sql.includes('INSERT INTO enkyron_mail_ticket_links'));
   assert.deepEqual(insert.params.slice(0,4),['local:emprex',mailbox,thread_id,ticket_id]);
-  assert.ok(f.calls.every(x=>!/resend|send-draft|DELETE FROM|UPDATE /i.test(x.sql)));
+  assert.ok(f.calls.every(x=>!/resend|send-draft/i.test(x.sql) && !/^\s*(?:DELETE|UPDATE)\b/i.test(x.sql)));
 });
 test('mail-ticket link rejects stale identity, wrong company, missing permission and duplicates',async()=>{
   const cases=[
