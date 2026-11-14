@@ -1136,6 +1136,9 @@ jobs:
               "body_text": "This message is only saved locally.",
               "mailbox_key": "direction"
           }
+          # Offline CI intentionally retains the unsatisfied save callback;
+          # permit teardown without disabling the real user's close guard.
+          window.crm_draft_dialog._close_approved = True
           window.crm_draft_dialog.reject()
           # UX-08: company correction reuses an existing audited/versioned
           # backend but never opens another window or shrinks the note timeline.
@@ -1955,6 +1958,9 @@ jobs:
           assert calls[-1][0] == "crm-mail-create"
           assert calls[-1][2]["recipient_email"] == ""
           assert calls[-1][2]["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          # Offline CI intentionally retains the unsatisfied save callback;
+          # permit teardown without disabling the real user's close guard.
+          window.crm_draft_dialog._close_approved = True
           window.crm_draft_dialog.reject()
 
           draft_call = next(x for x in calls if x[0] == "crm-mail-drafts")
@@ -1991,6 +1997,9 @@ jobs:
           window.save_mail_draft()
           assert calls[-1][0] == "crm-mail-update"
           assert calls[-1][2]["expected_revision"] == 1
+          # Offline CI intentionally retains the unsatisfied save callback;
+          # permit teardown without disabling the real user's close guard.
+          window.crm_draft_dialog._close_approved = True
           window.crm_draft_dialog.reject()
 
           window.open_followup_update()
