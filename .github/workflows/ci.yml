@@ -313,6 +313,11 @@ jobs:
           CI: 'true'
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-mail-workspace-postgres.test.js tests/enkyron-mail-filing-postgres.test.js tests/enkyron-local-mail-calendar-postgres.test.js
+      - name: ENKYRON E04-04B Mail-to-Ticket isolated PostgreSQL roundtrip
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-mail-ticket-links-postgres.test.js
 
       - name: ENKYRON CRM local unsent mail draft PostgreSQL integration
         env:
