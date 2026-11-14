@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PIPELINE_LANES,pipelineLane,getSalesPipeline}
+import {PIPELINE_LANES,pipelineLane,getSalesPipeline,getSalesPipelinePage,validatePipelinePageRequest}
   from '../desktop/enkyron-crm-pipeline.mjs';
 const id='11111111-2222-4333-8444-555555555555';
 test('nine existing commercial stages map to five readable pipeline lanes',()=>{
@@ -73,4 +73,56 @@ test('missing migration reports unavailable, not a fake empty pipeline',async()=
   }},'operator');
   assert.equal(value.available,false);
   assert.match(value.notice,/not available/);
+});
+
+test('server-side pagination exposes 300+ engagement records without 30-row preview truncation',async()=>{
+  const queries=[];
+  const rows=Array.from({length:25},(_,i)=>({
+    id:'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0'),
+    prospect_id:'ARL-P-'+String(i+1).padStart(6,'0'),
+    company_name_at_creation:'Company '+String(i+1),
+    stage:'contacted',lane:'engagement',next_action:'Contact prospect',
+    version:1,updated_at:'2026-11-14',due_date:null
+  }));
+  const pool={query:async(sql,params)=>{
+    queries.push({sql,params});
+    if(sql.includes('GROUP BY stage'))return {rows:[
+      {stage:'research',total:50},{stage:'contacted',total:300},
+      {stage:'proposal',total:250},{stage:'lost',total:25},
+      {stage:'won',total:400}
+    ]};
+    if(sql.includes('count(*)::integer AS total FROM scoped'))return {rows:[{total:300}]};
+    return {rows};
+  }};
+  const input={lane:'engagement',page:12,search:'Company',sort:'due'};
+  const data=await getSalesPipelinePage(pool,input,'emprex');
+  assert.equal(data.available,true);
+  assert.equal(data.overall_total,1025);
+  assert.equal(data.total,300);
+  assert.equal(data.total_pages,12);
+  assert.equal(data.page,12);
+  assert.equal(data.items.length,25);
+  assert.deepEqual(data.lanes.map(x=>x.total),[50,300,250,400,25]);
+  assert.deepEqual(queries[0].params,['local:emprex']);
+  assert.deepEqual(queries[1].params,['local:emprex','engagement','Company']);
+  assert.deepEqual(queries[2].params,['local:emprex','engagement','Company',25,275]);
+  assert.match(queries[2].sql,/ORDER BY due_date ASC NULLS LAST/);
+  assert.match(queries[2].sql,/LIMIT \$4 OFFSET \$5/);
+  assert.ok(queries.every(x=>! /\b(?:INSERT|UPDATE|DELETE|MERGE)\b/i.test(x.sql)));
+});
+test('pipeline paging validates filter sort size and rejects bad scopes',async()=>{
+  assert.deepEqual(validatePipelinePageRequest({}),{
+    lane:'all',page:1,search:'',sort:'updated'
+  });
+  for(const bad of [
+    null,[],{lane:'unknown'},{page:0},{page:10001},
+    {page:1.5},{search:'x'.repeat(101)},{search:'evil\nvalue'},
+    {sort:';DROP TABLE'},{extra:'unused'}
+  ])assert.throws(()=>validatePipelinePageRequest(bad),/CRM/);
+  await assert.rejects(()=>getSalesPipelinePage({query:async()=>({rows:[]})},
+    {},'bad operator name'),/CRM/);
+  const unavailable=await getSalesPipelinePage({query:async()=>{
+    const e=new Error('missing');e.code='42P01';throw e;
+  }},{lane:'all',page:1,search:'',sort:'updated'},'emprex');
+  assert.equal(unavailable.available,false);
 });

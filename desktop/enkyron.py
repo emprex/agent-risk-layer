@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QProcess, QTimer, Qt
+from PySide6.QtCore import QDate, QProcess, QTimer, Qt, QSize
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QFormLayout, QFrame, QHBoxLayout,
@@ -354,11 +354,20 @@ class EnkyronWindow(QMainWindow):
         )
         if self.ux_preview_read_only:
             self.setWindowTitle("ENKYRON · SYNTHETIC PREVIEW · READ ONLY")
+        # UX context only: the Node bridge independently verifies the database
+        # name, synthetic marker and operation allowlist before every request.
+        self.enk05_uat_ui = (
+            os.environ.get("ENKYRON_UAT_DATABASE") == "enkyron_uat_enk05"
+            and os.environ.get("ENKYRON_UAT_GUARD") == "ENK05_SYNTHETIC_ONLY"
+        )
+        if self.enk05_uat_ui and not self.ux_preview_read_only:
+            self.setWindowTitle("ENKYRON · SYNTHETIC UAT-04 · SERVICE DESK")
         self.resize(1360, 840)
         self.setMinimumSize(920, 620)
         self.bridge = DesktopBridge(self)
         self.current_id = None
         self.current_ticket = None
+        self.ticket_local_operator = None
         # UI-only selected control per ticket; no canonical state change.
         self.active_control_by_ticket = {}
         self.assessment_link_dialog = None
@@ -430,10 +439,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_context = None
         self.crm_pipeline_seq = 0
         self.crm_pipeline_loaded = False
-        self.crm_pipeline_cards = {}
+        self.crm_pipeline_items = []
         self.crm_pipeline_selected = None
-        self.crm_pipeline_lists = {}
-        self.crm_pipeline_labels = {}
+        self.crm_pipeline_page = 1
+        self.crm_pipeline_lane = "all"
+        self.crm_pipeline_sort = "updated"
+        self.crm_pipeline_stage_buttons = {}
         self.crm_activity_dialog = None
         self.crm_activity_opportunity_id = None
         self.crm_activity_seq = 0
@@ -547,6 +558,20 @@ class EnkyronWindow(QMainWindow):
             )
             outer.addWidget(preview_notice)
             self.account_profile_button.setEnabled(False)
+        elif self.enk05_uat_ui:
+            uat_notice = QLabel(
+                "SYNTHETIC UAT-04 · SERVICE DESK ONLY · "
+                "Test clients and tickets, not real company records. "
+                "Mail, Calendar, payments and security assessment actions are blocked. "
+                "Database identity is verified separately by the backend."
+            )
+            uat_notice.setObjectName("enkyronServiceDeskUatBanner")
+            uat_notice.setWordWrap(True)
+            uat_notice.setStyleSheet(
+                "background: #5a3815; color: #fff3db; "
+                "font-weight: 600; padding: 10px 18px;"
+            )
+            outer.addWidget(uat_notice)
 
         # Application-level navigation; the ticket list is no longer the main menu.
         workspace = QHBoxLayout()
@@ -563,13 +588,17 @@ class EnkyronWindow(QMainWindow):
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
         self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
-        if self.ux_preview_read_only:
-            # Mail/Calendar are outside this synthetic commercial review and
-            # would only lead to an unavailable service/error. Keep CRM visible.
+        if self.ux_preview_read_only or self.enk05_uat_ui:
+            # Never lead a UAT operator into blocked mail/calendar screens.
+            # CRM and Tickets stay available for the synthetic Service Desk.
             for index in (3, 4):
                 item = self.navigation.item(index)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
-                item.setToolTip("Unavailable in synthetic read-only preview")
+                item.setToolTip(
+                    "Unavailable in synthetic read-only preview"
+                    if self.ux_preview_read_only
+                    else "Outside UAT-04 Service Desk scope"
+                )
         self.navigation.setMaximumHeight(255)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
@@ -617,6 +646,16 @@ class EnkyronWindow(QMainWindow):
         go_calendar.setMinimumHeight(44)
         go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
         quick_actions_bottom.addWidget(go_calendar, 1)
+        if self.ux_preview_read_only or self.enk05_uat_ui:
+            go_mail.setEnabled(False)
+            go_calendar.setEnabled(False)
+            scope_reason = (
+                "Read-only synthetic preview"
+                if self.ux_preview_read_only
+                else "Outside UAT-04 Service Desk scope"
+            )
+            go_mail.setToolTip(scope_reason)
+            go_calendar.setToolTip(scope_reason)
         home_l.addLayout(quick_actions_bottom)
 
         overview_header = QHBoxLayout()
@@ -712,6 +751,11 @@ class EnkyronWindow(QMainWindow):
         self.search.setPlaceholderText("Search ticket, client, target…")
         self.search.setMaxLength(100)
         filters.addWidget(self.search, 1)
+        self.my_tickets = QPushButton("☐ My tickets")
+        self.my_tickets.setObjectName("myTicketsToggle")
+        self.my_tickets.setCheckable(True)
+        self.my_tickets.toggled.connect(self.my_tickets_toggled)
+        filters.addWidget(self.my_tickets)
         # Preserve the existing visible state for archived-ticket inclusion.
         self.show_archived = QPushButton("☐ Include archived tickets")
         self.show_archived.setObjectName("archivedToggle")
@@ -725,6 +769,8 @@ class EnkyronWindow(QMainWindow):
         index_l.addLayout(filters)
 
         self.new_ticket_dialog = None
+        self.new_ticket_company_context = None
+        self.crm_ticket_link_prefill = None
         self.ticket_list = QListWidget()
         self.ticket_list.setObjectName("ticketList")
         self.ticket_list.setAlternatingRowColors(True)
@@ -790,6 +836,13 @@ class EnkyronWindow(QMainWindow):
         assignment.addWidget(self.archive_button)
         assignment.addStretch()
         overview_l.addLayout(assignment)
+        self.ticket_escalation_notice = QLabel(
+            "Assignment is limited to the local operator. L1–L5 escalation "
+            "is unavailable: multi-user role enforcement is not deployed."
+        )
+        self.ticket_escalation_notice.setObjectName("subtle")
+        self.ticket_escalation_notice.setWordWrap(True)
+        overview_l.addWidget(self.ticket_escalation_notice)
         triage_row = QHBoxLayout()
         self.ticket_triage_label = QLabel("Business triage: Not loaded")
         self.ticket_triage_label.setWordWrap(True)
@@ -807,7 +860,8 @@ class EnkyronWindow(QMainWindow):
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
         assessment_row = QHBoxLayout()
-        assessment_row.addWidget(section_title("CANONICAL ARL ASSESSMENT"))
+        self.assessment_heading = section_title("ARL ASSESSMENT")
+        assessment_row.addWidget(self.assessment_heading)
         assessment_row.addStretch()
         self.assessment_link_button = QPushButton("Select Git target / Link assessment…")
         self.assessment_link_button.setObjectName("primary")
@@ -840,18 +894,26 @@ class EnkyronWindow(QMainWindow):
         master_l.addWidget(self.master_doc, 1)
         self.tabs.addTab(master, "Master Dossier")
 
-        notes = QWidget()
-        notes_l = QVBoxLayout(notes)
+        notes = QScrollArea()
+        notes.setObjectName("ticketWorkNotesScroll")
+        notes.setWidgetResizable(True)
+        notes.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        notes_content = QWidget()
+        notes_l = QVBoxLayout(notes_content)
+        notes_l.setSpacing(12)
+        notes_l.setContentsMargins(12, 12, 12, 12)
         notes_l.addWidget(section_title("RECORDED WORK NOTES"))
         self.notes_view = make_text_area()
         self.notes_view.setObjectName("ticketRecordedNotes")
-        self.notes_view.setMinimumHeight(170)
+        self.notes_view.setFixedHeight(230)
         self.notes_view.setPlaceholderText("No recorded work notes yet.")
-        notes_l.addWidget(self.notes_view, 3)
+        notes_l.addWidget(self.notes_view)
         notes_l.addWidget(section_title("INTERNAL ACTIONS · NOT TEST APPROVAL"))
         self.ticket_actions_view = make_text_area()
         self.ticket_actions_view.setObjectName("ticketActionSummary")
-        self.ticket_actions_view.setFixedHeight(48)
+        self.ticket_actions_view.setFixedHeight(90)
         self.ticket_actions_view.setPlainText("Select a ticket to view planned actions.")
         notes_l.addWidget(self.ticket_actions_view)
         self.ticket_actions_button = QPushButton("Plan / update ticket action…")
@@ -871,6 +933,8 @@ class EnkyronWindow(QMainWindow):
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save_note)
         notes_l.addWidget(self.save_button, alignment=Qt.AlignmentFlag.AlignRight)
+        notes_l.addStretch(1)
+        notes.setWidget(notes_content)
         self.tabs.addTab(notes, "Work Notes")
 
         history = QWidget()
@@ -1349,6 +1413,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_link_ticket_button.setEnabled(False)
         self.crm_link_ticket_button.clicked.connect(self.open_ticket_link_dialog)
         ticket_heading.addWidget(self.crm_link_ticket_button)
+        self.crm_new_company_ticket_button = QPushButton("+ New ticket for company")
+        self.crm_new_company_ticket_button.setObjectName("newCompanyTicket")
+        self.crm_new_company_ticket_button.setEnabled(False)
+        self.crm_new_company_ticket_button.clicked.connect(
+            self.open_new_company_ticket
+        )
+        ticket_heading.addWidget(self.crm_new_company_ticket_button)
         self.crm_ticket_opportunity_button = QPushButton("+ Opportunity from ticket")
         self.crm_ticket_opportunity_button.setEnabled(False)
         self.crm_ticket_opportunity_button.clicked.connect(
@@ -1362,6 +1433,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_tickets_notice.setWordWrap(True)
         company_tickets_l.addWidget(self.crm_company_tickets_notice)
         self.crm_company_tickets_table = QTableWidget(0, 4)
+        # ENK-05: keep linked ticket rows visible on the CRM page.
+        self.crm_company_tickets_table.setMinimumHeight(130)
         self.crm_company_tickets_table.setHorizontalHeaderLabels(
             ["Ticket", "Title", "Recorded client (as entered)", "Status"]
         )
@@ -1763,40 +1836,121 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_pipeline_notice.setWordWrap(True)
         pipeline_l.addWidget(self.crm_pipeline_notice)
-        pipeline_columns = QHBoxLayout()
-        pipeline_columns.setSpacing(8)
-        for code, title in [
+        # Stage counts stay visible without squeezing hundreds of cards into lanes.
+        summary = QHBoxLayout()
+        summary.setSpacing(6)
+        for code, name in (
+            ("all", "All"),
             ("prospecting", "Prospecting"),
             ("engagement", "Engagement"),
             ("proposal", "Proposals"),
             ("won", "Won"),
-            ("lost", "Lost")
-        ]:
-            pane = QFrame()
-            pane.setObjectName("pipelineLane")
-            pane.setStyleSheet(
-                "QFrame#pipelineLane { background: #f8fafc; "
-                "border: 1px solid #d6e2eb; border-radius: 5px; }"
+            ("lost", "Lost"),
+        ):
+            button = QPushButton(name + " · 0")
+            button.setCheckable(True)
+            button.setChecked(code == "all")
+            button.setMinimumHeight(47)
+            button.setStyleSheet(
+                "QPushButton { font-weight: bold; background: #f7fafc; }"
+                "QPushButton:checked { background: #d7edf1; "
+                "border: 2px solid #168398; color: #17364c; }"
             )
-            pane_l = QVBoxLayout(pane)
-            pane_l.setContentsMargins(8, 10, 8, 8)
-            label = QLabel("{} · 0".format(title))
-            label.setStyleSheet("font-weight: bold;")
-            pane_l.addWidget(label)
-            cards = QListWidget()
-            cards.setWordWrap(True)
-            cards.setSelectionMode(
-                QAbstractItemView.SelectionMode.SingleSelection
+            button.clicked.connect(
+                lambda _checked=False, stage=code:
+                    self.select_pipeline_stage(stage)
             )
-            cards.currentRowChanged.connect(
-                lambda _row, lane=code: self.pipeline_selected(lane)
-            )
-            pane_l.addWidget(cards, 1)
-            self.crm_pipeline_lists[code] = cards
-            self.crm_pipeline_labels[code] = label
-            self.crm_pipeline_cards[code] = []
-            pipeline_columns.addWidget(pane, 1)
-        pipeline_l.addLayout(pipeline_columns, 1)
+            summary.addWidget(button, 1)
+            self.crm_pipeline_stage_buttons[code] = button
+        pipeline_l.addLayout(summary)
+
+        filters = QHBoxLayout()
+        self.crm_pipeline_search = QLineEdit()
+        self.crm_pipeline_search.setObjectName("crmPipelineSearch")
+        self.crm_pipeline_search.setMaxLength(100)
+        self.crm_pipeline_search.setPlaceholderText(
+            "Search company or next action across all records…"
+        )
+        self.crm_pipeline_search.returnPressed.connect(
+            self.search_pipeline
+        )
+        filters.addWidget(self.crm_pipeline_search, 1)
+        find = QPushButton("Search")
+        find.clicked.connect(self.search_pipeline)
+        filters.addWidget(find)
+        clear = QPushButton("Clear")
+        clear.clicked.connect(self.clear_pipeline_search)
+        filters.addWidget(clear)
+        filters.addWidget(QLabel("Sort:"))
+        self.crm_pipeline_sort_box = QComboBox()
+        for label, value in (
+            ("Recently updated", "updated"),
+            ("Due soon", "due"),
+            ("Company A–Z", "company")
+        ):
+            self.crm_pipeline_sort_box.addItem(label, value)
+        self.crm_pipeline_sort_box.currentIndexChanged.connect(
+            self.sort_pipeline
+        )
+        filters.addWidget(self.crm_pipeline_sort_box)
+        pipeline_l.addLayout(filters)
+
+        self.crm_pipeline_table = QTableWidget(0, 5)
+        self.crm_pipeline_table.setObjectName("crmPipelineTable")
+        self.crm_pipeline_table.setHorizontalHeaderLabels(
+            ["Company", "Stage", "Next action", "Due", "Updated"]
+        )
+        self.crm_pipeline_table.setWordWrap(True)
+        self.crm_pipeline_table.setShowGrid(False)
+        self.crm_pipeline_table.setAlternatingRowColors(True)
+        self.crm_pipeline_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_pipeline_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_pipeline_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_pipeline_table.verticalHeader().hide()
+        header = self.crm_pipeline_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.crm_pipeline_table.setColumnWidth(0, 195)
+        self.crm_pipeline_table.setStyleSheet(
+            "QTableWidget { background: white; alternate-background-color: #f4f8fa; "
+            "border: 1px solid #d6e2eb; }"
+            "QTableWidget::item { padding: 7px 9px; }"
+            "QTableWidget::item:selected { background: #d7edf1; color: #17364c; }"
+        )
+        self.crm_pipeline_table.itemSelectionChanged.connect(
+            self.pipeline_selected
+        )
+        self.crm_pipeline_table.cellDoubleClicked.connect(
+            lambda _row, _col: self.open_pipeline_opportunity()
+        )
+        pipeline_l.addWidget(self.crm_pipeline_table, 1)
+
+        paging = QHBoxLayout()
+        self.crm_pipeline_page_label = QLabel("Page 1 / 1")
+        paging.addWidget(self.crm_pipeline_page_label)
+        paging.addStretch()
+        self.crm_pipeline_previous = QPushButton("← Previous")
+        self.crm_pipeline_previous.setEnabled(False)
+        self.crm_pipeline_previous.clicked.connect(
+            lambda: self.move_pipeline_page(-1)
+        )
+        paging.addWidget(self.crm_pipeline_previous)
+        self.crm_pipeline_next = QPushButton("Next →")
+        self.crm_pipeline_next.setEnabled(False)
+        self.crm_pipeline_next.clicked.connect(
+            lambda: self.move_pipeline_page(1)
+        )
+        paging.addWidget(self.crm_pipeline_next)
+        pipeline_l.addLayout(paging)
         pipeline_footer = QHBoxLayout()
         pipeline_footer.addWidget(QLabel(
             "Add a new opportunity from Existing prospect research."
@@ -4040,109 +4194,160 @@ class EnkyronWindow(QMainWindow):
         if index == 6 and self.navigation.currentRow() == 2:
             self.load_invoice_drafts()
 
+    def select_pipeline_stage(self, stage):
+        if stage not in self.crm_pipeline_stage_buttons:
+            return
+        self.crm_pipeline_lane = stage
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def search_pipeline(self):
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def clear_pipeline_search(self):
+        self.crm_pipeline_search.clear()
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def sort_pipeline(self, _index):
+        self.crm_pipeline_sort = self.crm_pipeline_sort_box.currentData()
+        self.crm_pipeline_page = 1
+        self.load_pipeline()
+
+    def move_pipeline_page(self, delta):
+        self.crm_pipeline_page = max(1, self.crm_pipeline_page + delta)
+        self.load_pipeline()
+
     def load_pipeline(self):
         self.crm_pipeline_seq += 1
         sequence = self.crm_pipeline_seq
         self.crm_pipeline_loaded = False
         self.crm_pipeline_selected = None
+        self.crm_pipeline_items = []
         self.crm_pipeline_edit.setEnabled(False)
         self.crm_pipeline_proposal.setEnabled(False)
+        self.crm_pipeline_table.blockSignals(True)
+        self.crm_pipeline_table.setRowCount(0)
+        self.crm_pipeline_table.blockSignals(False)
+        self.crm_pipeline_previous.setEnabled(False)
+        self.crm_pipeline_next.setEnabled(False)
         self.crm_pipeline_notice.setText("Loading opportunities…")
-        for code, widget in self.crm_pipeline_lists.items():
-            widget.blockSignals(True)
-            widget.clear()
-            widget.blockSignals(False)
-            self.crm_pipeline_cards[code] = []
-            self.crm_pipeline_labels[code].setText(
-                self.crm_pipeline_labels[code].text().split(" · ")[0] + " · 0"
-            )
+        payload = {
+            "lane": self.crm_pipeline_lane,
+            "page": self.crm_pipeline_page,
+            "search": self.crm_pipeline_search.text().strip(),
+            "sort": self.crm_pipeline_sort
+        }
 
         def received(data, error):
             if sequence != self.crm_pipeline_seq:
                 return
-            if error or not data or not data.get("available", False):
+            if error or not isinstance(data, dict) or not data.get("available"):
                 self.crm_pipeline_notice.setText(
                     error or (data or {}).get(
                         "notice", "The sales pipeline is not available."
                     )
                 )
                 return
+            total = data.get("total")
+            pages = data.get("total_pages")
+            items = data.get("items")
+            lanes = data.get("lanes")
+            if (not isinstance(total, int) or total < 0
+                    or not isinstance(pages, int) or pages < 1
+                    or not isinstance(items, list) or len(items) > 25
+                    or not isinstance(lanes, list)
+                    or len(lanes) != 5):
+                self.crm_pipeline_notice.setText("Invalid pipeline page response.")
+                return
+            if self.crm_pipeline_page > pages:
+                self.crm_pipeline_page = pages
+                self.load_pipeline()
+                return
             self.crm_pipeline_loaded = True
-            any_truncated = False
-            for lane in data.get("lanes", []):
-                code = lane.get("id")
-                if code not in self.crm_pipeline_lists:
-                    continue
-                widget = self.crm_pipeline_lists[code]
-                entries = lane.get("items", [])
-                self.crm_pipeline_cards[code] = entries
-                self.crm_pipeline_labels[code].setText(
-                    "{} · {}".format(lane.get("title", code), lane.get("total", 0))
+            self.crm_pipeline_items = items
+            count_by_lane = {
+                lane["id"]: lane["total"] for lane in lanes
+                if isinstance(lane, dict) and
+                lane.get("id") in self.crm_pipeline_stage_buttons and
+                isinstance(lane.get("total"), int)
+            }
+            count_by_lane["all"] = data.get("overall_total", 0)
+            names = {
+                "all": "All", "prospecting": "Prospecting",
+                "engagement": "Engagement", "proposal": "Proposals",
+                "won": "Won", "lost": "Lost"
+            }
+            for code, button in self.crm_pipeline_stage_buttons.items():
+                button.setText("{} · {}".format(
+                    names[code], count_by_lane.get(code, 0)
+                ))
+                button.setChecked(code == self.crm_pipeline_lane)
+            self.crm_pipeline_table.blockSignals(True)
+            self.crm_pipeline_table.setRowCount(len(items))
+            for row, entry in enumerate(items):
+                company = str(entry.get("company_name_at_creation") or "Untitled")
+                stage = str(entry.get("stage") or "").replace("_", " ").title()
+                action = str(entry.get("next_action") or "No next action recorded")
+                due = format_followup_due(
+                    entry.get("due_date"), entry.get("stage")
                 )
-                widget.blockSignals(True)
-                for entry in entries:
-                    title = (entry.get("company_name_at_creation") or "Untitled")
-                    stage = (entry.get("stage") or "").replace("_", " ").title()
-                    estimate = entry.get("probability_percent")
-                    if estimate is not None:
-                        stage += " · {}% estimated win chance".format(estimate)
-                    next_action = entry.get("next_action") or ""
-                    if len(next_action) > 70:
-                        next_action = next_action[:67] + "…"
-                    due = format_followup_due(
-                        entry.get("due_date"), entry.get("stage")
+                updated = display_date(entry.get("updated_at"))[:10]
+                values = [
+                    company, stage,
+                    action if len(action) <= 180 else action[:177].rstrip() + "…",
+                    due, updated
+                ]
+                for col, value in enumerate(values):
+                    cell = QTableWidgetItem(value)
+                    cell.setToolTip(
+                        action if col == 2 else str(value)
                     )
-                    card = QListWidgetItem(
-                        "{}\n{}\n{}\n{}".format(title, stage, next_action, due)
-                    )
-                    widget.addItem(card)
-                widget.blockSignals(False)
-                any_truncated = any_truncated or bool(lane.get("more"))
-            message = "{} opportunity/opportunities across five stages.".format(
-                data.get("total", 0)
+                    if col == 0:
+                        font = cell.font()
+                        font.setBold(True)
+                        cell.setFont(font)
+                    self.crm_pipeline_table.setItem(row, col, cell)
+                self.crm_pipeline_table.setRowHeight(row, 60)
+            self.crm_pipeline_table.blockSignals(False)
+            first = (self.crm_pipeline_page - 1) * 25 + 1 if total else 0
+            last = min(self.crm_pipeline_page * 25, total)
+            self.crm_pipeline_notice.setText(
+                "Showing {}–{} of {} matching opportunities ({} total).".format(
+                    first, last, total, data.get("overall_total", total)
+                )
             )
-            if any_truncated:
-                message += (
-                    " Some columns display their first 30 items only. "
-                    "Use Follow-ups to search all records."
-                )
-            self.crm_pipeline_notice.setText(message)
+            self.crm_pipeline_page_label.setText(
+                "Page {} / {}".format(self.crm_pipeline_page, pages)
+            )
+            self.crm_pipeline_previous.setEnabled(self.crm_pipeline_page > 1)
+            self.crm_pipeline_next.setEnabled(self.crm_pipeline_page < pages)
 
-        self.bridge.call("crm-sales-pipeline", callback=received)
+        self.bridge.call(
+            "crm-sales-pipeline-page", payload=payload, callback=received
+        )
 
-    def pipeline_selected(self, lane):
-        cards = self.crm_pipeline_lists[lane]
-        selected = cards.currentRow()
-        if selected < 0 or selected >= len(self.crm_pipeline_cards[lane]):
-            if self.crm_pipeline_selected and self.crm_pipeline_selected[0] == lane:
-                self.crm_pipeline_selected = None
-                self.crm_pipeline_edit.setEnabled(False)
-                self.crm_pipeline_proposal.setEnabled(False)
-            return
-        for code, other in self.crm_pipeline_lists.items():
-            if code != lane:
-                other.blockSignals(True)
-                other.setCurrentRow(-1)
-                other.clearSelection()
-                other.blockSignals(False)
-        self.crm_pipeline_selected = (lane, selected)
-        self.crm_pipeline_edit.setEnabled(True)
-        self.crm_pipeline_proposal.setEnabled(True)
+    def pipeline_selected(self):
+        row = self.crm_pipeline_table.currentRow()
+        if row < 0 or row >= len(self.crm_pipeline_items):
+            self.crm_pipeline_selected = None
+        else:
+            self.crm_pipeline_selected = row
+        selected = self.crm_pipeline_selected is not None
+        self.crm_pipeline_edit.setEnabled(selected)
+        self.crm_pipeline_proposal.setEnabled(selected)
 
     def open_pipeline_opportunity(self):
-        selection = self.crm_pipeline_selected
-        if not selection:
+        row = self.crm_pipeline_selected
+        if row is None or not 0 <= row < len(self.crm_pipeline_items):
             return
         if self.crm_followup_dialog and self.crm_followup_dialog.isVisible():
             self.crm_followup_dialog.raise_()
             return
-        lane, row = selection
-        entries = self.crm_pipeline_cards.get(lane, [])
-        if row < 0 or row >= len(entries):
-            return
-        existing = dict(entries[row])
+        existing = dict(self.crm_pipeline_items[row])
         self.build_followup_dialog({
-            "id": existing["prospect_id"],
+            "id": existing.get("prospect_id"),
             "company_name": existing.get("company_name_at_creation") or ""
         }, existing)
 
@@ -4269,6 +4474,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_ticket_items = []
             self.crm_company_tickets_table.setRowCount(0)
             self.crm_link_ticket_button.setEnabled(False)
+            self.crm_new_company_ticket_button.setEnabled(False)
             self.crm_ticket_opportunity_button.setEnabled(False)
             self.crm_open_company_ticket_button.setEnabled(False)
             if error:
@@ -4341,6 +4547,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_ticket_seq += 1
             self.crm_company_tickets_table.setRowCount(0)
             self.crm_link_ticket_button.setEnabled(False)
+            self.crm_new_company_ticket_button.setEnabled(False)
             self.crm_ticket_opportunity_button.setEnabled(False)
             self.crm_open_company_ticket_button.setEnabled(False)
             return
@@ -4365,6 +4572,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_retention_button.setEnabled(False)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
+        self.crm_new_company_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
         self.refresh_selected_company_contacts(company_id)
 
@@ -9532,6 +9740,11 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(buttons)
         self.crm_link_dialog = dialog
         self.crm_link_dialog_company_id = company_id
+        # Prefill exact ticket number, never pre-approve or automatically link.
+        prefill = self.crm_ticket_link_prefill
+        self.crm_ticket_link_prefill = None
+        if isinstance(prefill, str) and prefill:
+            self.crm_link_ticket_search.setText(prefill)
         dialog.open()
         self.load_ticket_link_options()
 
@@ -10258,17 +10471,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
-        selected = self.crm_pipeline_selected
-        if not selected:
+        row = self.crm_pipeline_selected
+        if row is None or not 0 <= row < len(self.crm_pipeline_items):
             return
         if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
             self.crm_proposal_dialog.raise_()
             return
-        lane, row = selected
-        cards = self.crm_pipeline_cards.get(lane, [])
-        if row < 0 or row >= len(cards):
-            return
-        opportunity = cards[row]
+        opportunity = self.crm_pipeline_items[row]
         self.show_proposal_dialog({
             "opportunity_id": opportunity["id"],
             "company_name_at_creation": opportunity.get(
@@ -16893,6 +17102,29 @@ class EnkyronWindow(QMainWindow):
     def show_error(self, message):
         self.status.setText("Operation blocked: " + message)
 
+    def open_new_company_ticket(self):
+        """Start intake from exact CRM company; linking remains human-reviewed."""
+        if self.new_ticket_dialog and self.new_ticket_dialog.isVisible():
+            self.new_ticket_dialog.raise_()
+            self.new_ticket_dialog.activateWindow()
+            return
+        company_id = self.crm_company_id
+        company = next(
+            (row for row in self.crm_company_items
+             if row.get("id") == company_id), None
+        )
+        name = company.get("name") if company else None
+        if not company_id or not isinstance(name, str) or not name.strip():
+            QMessageBox.warning(
+                self, "Select a company",
+                "Choose a registered CRM company before creating a ticket."
+            )
+            return
+        self.new_ticket_company_context = {
+            "id": company_id, "name": name.strip()
+        }
+        self.open_new_ticket()
+
     def open_new_ticket(self):
         """Front-door intake; no assessment, Git target or test is created."""
         if self.new_ticket_dialog and self.new_ticket_dialog.isVisible():
@@ -16910,6 +17142,14 @@ class EnkyronWindow(QMainWindow):
             "associate the ticket with a CRM company or launch an assessment. "
             "Review the association later in CRM → Companies → Tickets."
         )
+        company_context = self.new_ticket_company_context
+        if company_context:
+            hint.setText(
+                "Selected CRM company: {}. The name is prefilled from its "
+                "canonical record. Creating a ticket will NOT link it "
+                "automatically. You will review the exact association next."
+                .format(company_context["name"])
+            )
         hint.setWordWrap(True)
         layout.addWidget(hint)
         form = QFormLayout()
@@ -16921,6 +17161,9 @@ class EnkyronWindow(QMainWindow):
         self.intake_client.setMaxLength(160)
         self.intake_client.setPlaceholderText("Organisation or client name, not contact person")
         form.addRow("Organisation / client *", self.intake_client)
+        if company_context:
+            self.intake_client.setText(company_context["name"])
+            self.intake_client.setReadOnly(True)
         self.intake_contact = QLineEdit()
         self.intake_contact.setMaxLength(160)
         self.intake_contact.setPlaceholderText("Person who contacted us (optional)")
@@ -16953,6 +17196,9 @@ class EnkyronWindow(QMainWindow):
         buttons.addWidget(self.intake_submit)
         layout.addLayout(buttons)
         self.new_ticket_dialog = dialog
+        dialog.finished.connect(
+            lambda _result: setattr(self, "new_ticket_company_context", None)
+        )
         dialog.open()
 
     def create_ticket(self):
@@ -16972,30 +17218,107 @@ class EnkyronWindow(QMainWindow):
             QMessageBox.warning(dialog, "Required fields",
                 "Organisation/client, subject and request are required.")
             return
+        # A network/IPC failure after commit is ambiguous. Disable resubmit
+        # until a human has independently checked the canonical ticket list.
+        if not self.intake_submit.isEnabled():
+            return
         self.intake_submit.setEnabled(False)
+        company_context = self.new_ticket_company_context
 
-        def completed(result, error):
-            if error or not isinstance(result, dict) or not result.get("id"):
-                QMessageBox.warning(
-                    dialog, "Ticket not created",
-                    error or "Local ticket creation failed."
+        def outcome_uncertain(reason):
+            self.status.setText(
+                "Ticket creation NOT VERIFIED. Search existing tickets before "
+                "starting a new request; do not submit this form again."
+            )
+            QMessageBox.warning(
+                dialog, "Ticket outcome not verified",
+                "The ticket may already exist. Do not submit the same request "
+                "again. Close this form and search the ticket list/history first. "
+                "Diagnostic: " + str(reason or "No confirmed response")[:220]
+            )
+            # Leave submit disabled; no blind retry after an ambiguous write.
+
+        def verified_readback(received, read_error, result):
+            ticket = received.get("ticket") if isinstance(received, dict) else None
+            events = received.get("events") if isinstance(received, dict) else None
+            matches = (
+                not read_error and isinstance(ticket, dict)
+                and ticket.get("id") == result["id"]
+                and ticket.get("ticket_number") == result["ticket_number"]
+                and ticket.get("title") == data["title"].strip()
+                and ticket.get("client_name") == data["client_name"].strip()
+                and ticket.get("target_reference") == "intake:" + data["source"]
+                and ticket.get("status") == "new"
+                and isinstance(events, list)
+                and any(
+                    isinstance(event, dict)
+                    and event.get("event_type") == "created"
+                    and event.get("id")
+                    for event in events
                 )
-                self.intake_submit.setEnabled(True)
+            )
+            if not matches:
+                outcome_uncertain(read_error or "Exact ticket/event readback failed")
                 return
-            dialog.accept()
+            dialog_was_open = dialog.isVisible()
+            if dialog_was_open:
+                dialog.accept()
             self.search.clear()
             self.current_id = None
             self.current_ticket = None
-            self.status.setText(
-                "Ticket {} created in PostgreSQL from {}. No assessment created."
-                .format(result["ticket_number"], result["source"])
-            )
-            new_id = result["id"]
-            # Select the newly opened ticket after asynchronous list refresh.
-            self.pending_ticket_id = new_id
+            # New tickets are unassigned. The My Tickets filter must not
+            # silently hide a just-created record.
+            if self.my_tickets.isChecked():
+                self.my_tickets.blockSignals(True)
+                self.my_tickets.setChecked(False)
+                self.my_tickets.blockSignals(False)
+                self.my_tickets.setText("☐ My tickets")
+            self.pending_ticket_id = result["id"]
             self.load_tickets()
+            if company_context:
+                if (dialog_was_open
+                        and company_context["id"] == self.crm_company_id
+                        and self.crm_link_ticket_button.isEnabled()):
+                    self.crm_ticket_link_prefill = result["ticket_number"]
+                    self.status.setText(
+                        "Ticket {} verified in PostgreSQL. Review the exact "
+                        "CRM association next; no automatic link was made."
+                        .format(result["ticket_number"])
+                    )
+                    self.open_ticket_link_dialog()
+                else:
+                    self.status.setText(
+                        "Ticket {} verified. The intake form was closed, CRM "
+                        "selection changed or link review is unavailable. "
+                        "No company link was attempted; review via Company → Tickets."
+                        .format(result["ticket_number"])
+                    )
+            else:
+                self.status.setText(
+                    "Ticket {} verified in PostgreSQL from {}. "
+                    "No assessment created."
+                    .format(result["ticket_number"], result["source"])
+                )
+
+        def completed(result, error):
+            if error or not isinstance(result, dict) or not isinstance(result.get("id"), str) or not isinstance(result.get("ticket_number"), str):
+                outcome_uncertain(error or "No exact ticket identifier returned")
+                return
+            # The write response alone is never business verification.
+            self.bridge.call(
+                "ticket", result["id"],
+                callback=lambda saved, read_error: verified_readback(
+                    saved, read_error, result
+                )
+            )
 
         self.bridge.call("create-ticket", payload=data, callback=completed)
+
+    def my_tickets_toggled(self, checked):
+        self.my_tickets.setText(
+            "☑ My tickets" if checked else "☐ My tickets"
+        )
+        self.load_tickets()
 
     def archived_filter_toggled(self, checked):
         self.show_archived.setText(
@@ -17010,11 +17333,27 @@ class EnkyronWindow(QMainWindow):
             and self.ticket_status.isEnabled()
             and self.ticket_status.currentData() is not None
         )
+        reviewed = (
+            self.ticket_status.currentData() in ("resolved", "closed")
+            or (ticket and ticket.get("status") == "closed"
+                and self.ticket_status.currentData() == "in_progress")
+        )
+        if reviewed and ticket and (not self.ticket_local_operator or
+                                   ticket.get("assigned_to") != self.ticket_local_operator):
+            can_change = False
+            self.update_status_button.setToolTip(
+                "Assign this ticket to yourself before resolution or closure."
+            )
+        else:
+            self.update_status_button.setToolTip(
+                "Resolution and closure require a recorded human review."
+                if reviewed else "Save the selected ticket status."
+            )
         self.update_status_button.setEnabled(can_change)
 
     def _set_ticket_actions_height(self, item_count=0, unavailable=False):
         """Give real actions space, but never let an empty checklist bury work notes."""
-        height = 72 if unavailable else min(165, 44 + 48 * item_count) if item_count else 48
+        height = 90 if unavailable else min(300, 60 + 76 * item_count) if item_count else 60
         self.ticket_actions_view.setFixedHeight(height)
 
     def load_ticket_actions(self, ticket_id):
@@ -17135,6 +17474,7 @@ class EnkyronWindow(QMainWindow):
             index = state.findData(item.get("state") if item else "todo")
             state.setCurrentIndex(index if index >= 0 else 0)
             state.setEnabled(bool(item))
+            save.setText('Save changes' if item else 'Create action')
             confirmed.setChecked(False)
             reason.clear()
 
@@ -17247,17 +17587,25 @@ class EnkyronWindow(QMainWindow):
             ("Consultation", "consultation"),
         ):
             self.triage_type.addItem(label, code)
+        self.triage_type.insertItem(0, "Select request type…", None)
+        self.triage_type.setCurrentIndex(0)
         form.addRow("Request type *", self.triage_type)
         self.triage_impact = QComboBox()
         self.triage_urgency = QComboBox()
         for level in ("low", "medium", "high"):
             self.triage_impact.addItem(level.title(), level)
             self.triage_urgency.addItem(level.title(), level)
+        self.triage_impact.insertItem(0, "Select impact…", None)
+        self.triage_urgency.insertItem(0, "Select urgency…", None)
+        self.triage_impact.setCurrentIndex(0)
+        self.triage_urgency.setCurrentIndex(0)
         form.addRow("Impact *", self.triage_impact)
         form.addRow("Urgency *", self.triage_urgency)
         self.triage_priority = QComboBox()
         for level in ("low", "normal", "high", "critical"):
             self.triage_priority.addItem(level.title(), level)
+        self.triage_priority.insertItem(0, "Select priority…", None)
+        self.triage_priority.setCurrentIndex(0)
         form.addRow("Priority (human judgment) *", self.triage_priority)
         layout.addLayout(form)
         self.triage_note = QPlainTextEdit()
@@ -17284,6 +17632,15 @@ class EnkyronWindow(QMainWindow):
             if ticket_id != self.current_id or not dialog.isVisible():
                 return
             note = self.triage_note.toPlainText().strip()
+            if any(combo.currentData() is None for combo in (
+                self.triage_type, self.triage_impact,
+                self.triage_urgency, self.triage_priority
+            )):
+                QMessageBox.warning(
+                    dialog, "Classification incomplete",
+                    "Select request type, impact, urgency and priority."
+                )
+                return
             if not 30 <= len(note) <= 500 or not self.triage_confirm.isChecked():
                 QMessageBox.warning(
                     dialog, "Review required",
@@ -17332,20 +17689,125 @@ class EnkyronWindow(QMainWindow):
         dialog.open()
 
     def change_ticket_status(self):
-        if not self.current_ticket or not self.current_id:
+        """Resolve and close only after human review and exact event readback."""
+        ticket = self.current_ticket
+        if not ticket or not self.current_id:
             return
         next_status = self.ticket_status.currentData()
         if not next_status:
             return
         ticket_id = self.current_id
+        current_status = ticket.get("status")
+        reopening = current_status == "closed" and next_status == "in_progress"
+        reviewed = next_status in ("resolved", "closed") or reopening
+        payload = {"ticket_id": ticket_id, "status": next_status}
+        if reviewed:
+            if not self.ticket_local_operator or ticket.get("assigned_to") != self.ticket_local_operator:
+                QMessageBox.warning(
+                    self, "Assign ticket first",
+                    "Only the local operator assigned to this ticket "
+                    "can confirm resolution or closure."
+                )
+                return
+            review_note, accepted = QInputDialog.getMultiLineText(
+                self,
+                "Human reopening review" if reopening else (
+                    "Human resolution review" if next_status == "resolved"
+                    else "Human closure review"
+                ),
+                "Explain why this closed ticket must be reopened "
+                "(30–500 characters):" if reopening else
+                "Explain what was completed and why this ticket can be "
+                "{} (30–500 characters):".format(next_status),
+                ""
+            )
+            if not accepted:
+                return
+            review_note = review_note.strip()
+            if not 30 <= len(review_note) <= 500:
+                QMessageBox.warning(
+                    self, "Review required",
+                    "Provide a 30–500 character human rationale. "
+                    "Nothing has been saved."
+                )
+                return
+            answer = QMessageBox.question(
+                self, "Confirm ticket " + next_status,
+                "Move ticket {} from {} to {} and record your rationale "
+                "as an immutable history event? No customer message or "
+                "security assessment will be launched."
+                .format(ticket.get("ticket_number", ticket_id),
+                        current_status, next_status),
+                QMessageBox.StandardButton.Yes |
+                QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            payload.update({
+                "expected_status": current_status,
+                "review_note": review_note,
+                "confirmed": True,
+            })
         self.update_status_button.setEnabled(False)
+
+        def completion_verified(data, error, event_id, reason):
+            if ticket_id != self.current_id:
+                return
+            stored = data.get("ticket") if isinstance(data, dict) else None
+            events = data.get("events") if isinstance(data, dict) else None
+            matched = (
+                isinstance(events, list) and
+                any(isinstance(event, dict) and
+                    event.get("id") == event_id and
+                    event.get("event_type") == "status_changed" and
+                    reason in str(event.get("detail") or "")
+                    for event in events)
+            )
+            if (error or not isinstance(stored, dict) or
+                    stored.get("id") != ticket_id or
+                    stored.get("status") != next_status or not matched):
+                self.show_error(
+                    "Completion result not verified. Refresh and inspect "
+                    "the ticket history before any new attempt."
+                )
+                return
+            self.status.setText(
+                "Ticket {} verified: {} → {}. Human review in history."
+                .format(stored.get("ticket_number", ticket_id),
+                        current_status, next_status)
+            )
+            self.load_tickets()
+            item = self.ticket_list.currentItem()
+            if item:
+                self.ticket_changed(item, None)
 
         def completed(result, error):
             if ticket_id != self.current_id:
                 return
-            if error:
-                self.show_error(error)
-                self.update_status_button.setEnabled(True)
+            if (error or not isinstance(result, dict) or
+                    result.get("ticket_id") != ticket_id or
+                    result.get("status") != next_status or
+                    result.get("from") != current_status):
+                self.show_error(
+                    "Status not verified. Refresh and inspect the ticket "
+                    "before another attempt. " + str(error or "")
+                )
+                return
+            if reviewed:
+                event_id = result.get("event_id")
+                if not isinstance(event_id, str) or not event_id:
+                    self.show_error(
+                        "Completion event not verified; refresh ticket history "
+                        "before another attempt."
+                    )
+                    return
+                self.bridge.call(
+                    "ticket", ticket_id,
+                    callback=lambda data, error: completion_verified(
+                        data, error, event_id, payload["review_note"]
+                    )
+                )
                 return
             self.status.setText(
                 "Ticket status: {} → {}. Event saved in PostgreSQL."
@@ -17357,9 +17819,7 @@ class EnkyronWindow(QMainWindow):
                 self.ticket_changed(item, None)
 
         self.bridge.call(
-            "ticket-status",
-            payload={"ticket_id": ticket_id, "status": next_status},
-            callback=completed,
+            "ticket-status", payload=payload, callback=completed
         )
 
     def ticket_operator_display(self, account):
@@ -17378,11 +17838,23 @@ class EnkyronWindow(QMainWindow):
         ticket = self.current_ticket
         if not ticket:
             return
-        operator = self.ticket_operator_display(ticket.get("assessor_name"))
-        self.meta.setText("{}  ·  {}  ·  Engineer: {}{}".format(
-            ticket["client_name"], ticket["status"].replace("_", " ").upper(),
-            operator, " · ARCHIVED" if ticket.get("archived_at") else ""
-        ))
+        owner = self.ticket_operator_display(ticket.get("assigned_to"))
+        linked = (
+            ticket.get("target_kind") == "git"
+            and bool(ticket.get("linked_project_id"))
+            and bool(ticket.get("linked_assessment_id"))
+        )
+        meta = "{}  ·  {}  ·  Assigned: {}".format(
+            ticket["client_name"],
+            ticket["status"].replace("_", " ").upper(),
+            owner
+        )
+        if linked:
+            engineer = self.ticket_operator_display(ticket.get("assessor_name"))
+            meta += "  ·  Assessment engineer: " + engineer
+        if ticket.get("archived_at"):
+            meta += "  ·  ARCHIVED"
+        self.meta.setText(meta)
         self.owner_label.setText(
             "Assigned to: {}".format(self.ticket_operator_display(ticket.get("assigned_to")))
         )
@@ -17638,10 +18110,19 @@ class EnkyronWindow(QMainWindow):
             self.ticket_list.clear()
             matching = None
             for item in data.get("items", []):
-                label = "{}   ·   {}\n{}   ·   {}{}".format(
+                priority = str(item.get("priority") or "Not triaged").replace("_", " ").upper()
+                assignee = self.ticket_operator_display(item.get("assigned_to"))
+                due = item.get("next_due_on")
+                due_text = (
+                    "   ·   Next due {}: {}".format(
+                        str(due)[:10], item.get("next_action_title") or "Action"
+                    ) if due else ""
+                )
+                label = "{}   ·   {}\nReported client: {}   ·   {}{}\nPriority: {}   ·   Assigned: {}{}".format(
                     item["ticket_number"], item["title"], item["client_name"],
                     item["status"].replace("_", " ").upper(),
-                    "   ·   ARCHIVED" if item.get("archived_at") else ""
+                    "   ·   ARCHIVED" if item.get("archived_at") else "",
+                    priority, assignee, due_text
                 )
                 widget = QListWidgetItem(label)
                 widget.setData(Qt.ItemDataRole.UserRole, item["id"])
@@ -17664,11 +18145,31 @@ class EnkyronWindow(QMainWindow):
                     self.show_ticket_index()
             total = len(data.get("items", []))
             suffix = " (first 100; refine search)" if data.get("more") else ""
-            self.list_notice.setText(f"{total} ticket(s) shown{suffix}")
-        self.bridge.call(
-            "tickets-archived" if self.show_archived.isChecked() else "tickets",
-            self.search.text(), callback=received,
+            if total == 0:
+                if self.search.text().strip():
+                    notice = "No matching tickets. Clear search or change the queue filter."
+                elif self.my_tickets.isChecked():
+                    notice = (
+                        "No tickets assigned to you. Switch off My tickets, "
+                        "open a ticket and choose Assign to me."
+                    )
+                else:
+                    notice = "No tickets yet. Use New ticket to record a request."
+                self.list_notice.setText(notice)
+            else:
+                notice = f"{total} ticket(s) shown{suffix}"
+                if not data.get("priority_available", True):
+                    notice += " · Priority history unavailable."
+                if not data.get("actions_available", True):
+                    notice += " · Action deadlines unavailable."
+                self.list_notice.setText(notice)
+        command = (
+            "tickets-mine-archived" if self.my_tickets.isChecked()
+                and self.show_archived.isChecked() else
+            "tickets-mine" if self.my_tickets.isChecked() else
+            "tickets-archived" if self.show_archived.isChecked() else "tickets"
         )
+        self.bridge.call(command, self.search.text(), callback=received)
 
     def ticket_changed(self, item, _previous):
         if not item:
@@ -17766,6 +18267,22 @@ class EnkyronWindow(QMainWindow):
                 return
             ticket = data["ticket"]
             self.current_ticket = ticket
+            self.ticket_local_operator = data.get("local_operator")
+            linked_assessment = (
+                ticket.get("target_kind") == "git"
+                and bool(ticket.get("linked_project_id"))
+                and bool(ticket.get("linked_assessment_id"))
+            )
+            if not linked_assessment and self.tabs.currentIndex() in (1, 4, 5, 6):
+                self.tabs.setCurrentIndex(0)
+            for tab_index in (1, 4, 5, 6):
+                self.tabs.setTabVisible(tab_index, linked_assessment)
+            self.assessment_heading.setText(
+                "ARL ASSESSMENT" if linked_assessment
+                else "ARL ASSESSMENT · NOT LINKED"
+            )
+            self.binding.setVisible(linked_assessment)
+            self.scope_review_button.setVisible(linked_assessment)
             self.title.setText("{}   |   {}".format(ticket["ticket_number"], ticket["title"]))
             self._refresh_ticket_identity_labels()
             self.scope.setPlainText(

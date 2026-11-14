@@ -76,12 +76,12 @@ class MailNativeUXSmoke(unittest.TestCase):
         with patch.object(DesktopBridge, "call", return_value=None):
             window = EnkyronWindow()
             try:
-                self.assertGreaterEqual(window.notes_view.minimumHeight(), 170)
-                self.assertEqual(window.ticket_actions_view.height(), 48)
+                self.assertGreaterEqual(window.notes_view.minimumHeight(), 230)
+                self.assertEqual(window.ticket_actions_view.height(), 90)
                 window._set_ticket_actions_height(item_count=2)
-                self.assertGreater(window.ticket_actions_view.height(), 48)
+                self.assertGreater(window.ticket_actions_view.height(), 90)
                 window._set_ticket_actions_height()
-                self.assertEqual(window.ticket_actions_view.height(), 48)
+                self.assertEqual(window.ticket_actions_view.height(), 60)
                 window.operator_profile_state = {
                     "local_operator": "emprex",
                     "current": {"display_name": "Guillaume Strohecker"},
@@ -92,7 +92,7 @@ class MailNativeUXSmoke(unittest.TestCase):
                     "archived_at": None,
                 }
                 window._refresh_ticket_identity_labels()
-                self.assertIn("Engineer: Guillaume Strohecker", window.meta.text())
+                self.assertIn("Assigned: Guillaume Strohecker", window.meta.text())
                 self.assertEqual(window.owner_label.text(),
                                  "Assigned to: Guillaume Strohecker")
                 self.assertEqual(window.ticket_operator_display("another_user"),
