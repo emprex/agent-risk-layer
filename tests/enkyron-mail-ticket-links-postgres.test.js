@@ -99,7 +99,7 @@ test('Mail ↔ Ticket: real immutable PostgreSQL roundtrip and read isolation',{
     assert.equal(ticket.items.length,1);
     assert.equal(ticket.items[0].thread_id,f.threadA);
     assert.equal(ticket.items[0].subject,'Synthetic CI mail reference');
-    assert.equal((await listMailTicketLinks(pool,f.foreign,mailInput)).available,false);
+    await assert.rejects(listMailTicketLinks(pool,f.foreign,mailInput),/Mail read permission not granted/);
     assert.deepEqual((await listTicketMailLinks(pool,f.foreign,
       {ticket_id:f.ticketA.id})).items,[]);
     // Provider and the source ticket remain untouched, with no duplicate reference.
