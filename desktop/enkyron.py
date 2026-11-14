@@ -4672,8 +4672,8 @@ class EnkyronWindow(QMainWindow):
             layout.addWidget(section_title("LINKED MAIL CONVERSATIONS · READ ONLY"))
             view = QPlainTextEdit()
             view.setReadOnly(True)
-            view.setPlainText("\\n\\n".join(
-                "{} · {}\\n{}\\nLinked by {} at {}\\nThread {}".format(
+            view.setPlainText("\n\n".join(
+                "{} · {}\n{}\nLinked by {} at {}\nThread {}".format(
                     item.get("mailbox_key") or "",
                     item.get("last_message_at") or "",
                     item.get("subject") or "(No subject)",
