@@ -190,6 +190,7 @@ class MailInboxView(QWidget):
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
     localCompanyLinkRequested = Signal(str, str)
+    localTicketLinkRequested = Signal(str, str)
     replySubmitRequested = Signal()
     sentFollowUpRequested = Signal(int)
 
@@ -424,6 +425,13 @@ class MailInboxView(QWidget):
         self.crm_link_button.clicked.connect(self._request_company_link)
         self.crm_link_button.hide()
         reply_toolbar.addWidget(self.crm_link_button)
+        self.ticket_link_button = QPushButton("Link to Ticket…")
+        self.ticket_link_button.setObjectName("enkyronMailLinkTicket")
+        self.ticket_link_button.setToolTip(
+            "Explicitly associate this saved conversation with an existing Client Desk ticket")
+        self.ticket_link_button.clicked.connect(self._request_ticket_link)
+        self.ticket_link_button.hide()
+        reply_toolbar.addWidget(self.ticket_link_button)
         reply_toolbar.addStretch()
         right_layout.addLayout(reply_toolbar)
         self.reply_editor = QFrame()
@@ -755,6 +763,7 @@ class MailInboxView(QWidget):
         self.forward_button.hide()
         self.full_text_button.hide()
         self.crm_link_button.hide()
+        self.ticket_link_button.hide()
         self.crm_link_button.setEnabled(True)
         self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
@@ -1063,6 +1072,7 @@ class MailInboxView(QWidget):
         self.forward_button.hide()
         self.full_text_button.hide()
         self.crm_link_button.hide()
+        self.ticket_link_button.hide()
         self.crm_link_button.setEnabled(True)
         self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
@@ -1144,6 +1154,36 @@ class MailInboxView(QWidget):
             return
         self.localCompanyLinkRequested.emit(
             self.current_thread_mailbox, self.current_thread_id)
+
+    def _request_ticket_link(self):
+        if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
+                or not self.current_thread_id or self.selected_folder in
+                ("sent", "drafts", "spam", "trash")
+                or self.ticket_link_button.isHidden()
+                or not self.ticket_link_button.isEnabled()):
+            return
+        self.localTicketLinkRequested.emit(
+            self.current_thread_mailbox, self.current_thread_id)
+
+    def show_ticket_links(self, mailbox, thread_id, data):
+        """Only server-confirmed links; missing migration is not an empty list."""
+        if (not self.local_mode or mailbox != self.current_thread_mailbox
+                or thread_id != self.current_thread_id):
+            return False
+        if (not isinstance(data, dict) or not data.get("available")
+                or data.get("mailbox") != mailbox
+                or data.get("thread_id") != thread_id
+                or not isinstance(data.get("items"), list)):
+            self.ticket_link_button.setText("Ticket links unavailable")
+            self.ticket_link_button.setEnabled(False)
+            return False
+        total = len(data["items"])
+        self.ticket_link_button.setText(
+            "Linked tickets · " + str(total) if total else "Link to Ticket…")
+        self.ticket_link_button.setToolTip(
+            "Review existing ticket associations or explicitly link another ticket")
+        self.ticket_link_button.setEnabled(True)
+        return True
 
     def show_company_link(self, mailbox, thread_id, data):
         """Display the server-confirmed association; never infer from email sender."""
@@ -1261,6 +1301,11 @@ class MailInboxView(QWidget):
         self.crm_link_button.setText("Link to CRM…")
         self.crm_link_button.setEnabled(False)  # pending server-side link-status check
         self.crm_link_button.setVisible(
+            self.local_mode and bool(messages)
+            and self.selected_folder not in ("sent", "drafts", "spam", "trash"))
+        self.ticket_link_button.setText("Link to Ticket…")
+        self.ticket_link_button.setEnabled(False)  # server readback first
+        self.ticket_link_button.setVisible(
             self.local_mode and bool(messages)
             and self.selected_folder not in ("sent", "drafts", "spam", "trash"))
         return True
