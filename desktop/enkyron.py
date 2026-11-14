@@ -16655,26 +16655,52 @@ class EnkyronWindow(QMainWindow):
         },callback=lambda result,error:self.mail_send_completed(dialog,result,error))
 
     def mail_send_completed(self,dialog,result,error):
+        """Resolve a single submitted revision; never suggest blind resending."""
         if not dialog.isVisible():
             return
-        if error or not result:
-            self.crm_mail_send.setEnabled(True)
-            QMessageBox.warning(dialog,"Email not confirmed",
-                str(error or "Check local drafts and Resend before retrying."))
+        outcome = result.get("outcome") if isinstance(result, dict) else None
+        if error or outcome not in ("accepted", "uncertain"):
+            # Backend may have reserved an idempotent provider attempt before
+            # the IPC response was lost. The draft is already persisted; a
+            # second Send click could create confusion or a duplicate message.
+            # Close the saved editor, preserve all records and require an
+            # explicit Sent/provider readback before any separate action.
+            self.crm_mail_send.setEnabled(False)
+            self.crm_mail_save.setEnabled(False)
+            dialog._close_approved = True
+            dialog.accept()
+            self.load_mail_drafts()
+            self.load_unsent_mail_drafts()
+            self.load_mail_sent()
+            QMessageBox.warning(
+                self, "Email submission not verified",
+                "The message draft was saved locally, but ENKYRON could not "
+                "verify whether Resend accepted it. Check Mail → Sent and "
+                "Resend before composing or sending another message. "
+                "Do not retry this draft blindly."
+            )
             return
-        dialog._close_approved = True  # provider submission response recorded
+        dialog._close_approved = True  # exact provider outcome recorded locally
         dialog.accept()
         self.load_mail_drafts()
-        # The submitted draft leaves Mail → Drafts immediately. The original
-        # immutable draft and send-attempt records remain in PostgreSQL.
+        # The submitted draft leaves Mail → Drafts when the backend records an
+        # attempt; 'accepted' never means the recipient has received it.
         self.mail_inbox.activate_local_folder("sent")
         self.crm_tabs.setCurrentIndex(3)
         self.crm_mail_folders.setCurrentIndex(1)
         self.load_mail_sent()
-        QMessageBox.information(
-            self,"Resend send result",
-            result.get("notice") or "The email status could not be confirmed."
-        )
+        if outcome == "uncertain":
+            QMessageBox.warning(
+                self, "Resend submission uncertain",
+                str(result.get("notice") or
+                    "Check Resend and Sent before any new email. Do not retry.")
+            )
+        else:
+            QMessageBox.information(
+                self, "Resend send result",
+                str(result.get("notice") or
+                    "Resend accepted the message. Delivery is not confirmed.")
+            )
 
     def open_activity_history(self):
         row = self.crm_followup_table.currentRow()
