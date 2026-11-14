@@ -49,23 +49,27 @@ class PipelineCompanyUpdateSmoke(unittest.TestCase):
     def open_existing(self, window, calls):
         window.navigation.setCurrentRow(2)
         window.crm_tabs.setCurrentIndex(4)
-        self.callback(calls, "crm-sales-pipeline")({
+        self.callback(calls, "crm-sales-pipeline-page")({
             "available": True,
-            "total": 1,
+            "overall_total": 1, "total": 1,
+            "page": 1, "page_size": 25, "total_pages": 1,
             "lanes": [
-                {"id": "prospecting", "title": "Prospecting", "total": 1,
-                 "more": False, "items": [{
-                     "id": OPPORTUNITY, "prospect_id": None,
-                     "company_id": COMPANY, "owner_local": "synthetic-operator",
-                     "company_name_at_creation": "Synthetic Engineering Ltd",
-                     "stage": "research", "next_action": "Review company fit",
-                     "due_date": None, "probability_percent": None,
-                     "version": 1
-                 }]}
-            ]
+                {"id": "prospecting", "title": "Prospecting", "total": 1},
+                {"id": "engagement", "title": "Engagement", "total": 0},
+                {"id": "proposal", "title": "Proposals", "total": 0},
+                {"id": "won", "title": "Won", "total": 0},
+                {"id": "lost", "title": "Lost", "total": 0}
+            ],
+            "items": [{
+                "id": OPPORTUNITY, "prospect_id": None,
+                "company_id": COMPANY, "owner_local": "synthetic-operator",
+                "company_name_at_creation": "Synthetic Engineering Ltd",
+                "stage": "research", "next_action": "Review company fit",
+                "due_date": None, "probability_percent": None, "version": 1
+            }]
         }, None)
-        self.assertEqual(window.crm_pipeline_cards["prospecting"][0]["company_id"], COMPANY)
-        window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
+        self.assertEqual(window.crm_pipeline_items[0]["company_id"], COMPANY)
+        window.crm_pipeline_table.selectRow(0)
         self.assertTrue(window.crm_pipeline_edit.isEnabled())
         window.open_pipeline_opportunity()
         dialog = window.crm_followup_dialog
@@ -134,7 +138,7 @@ class PipelineCompanyUpdateSmoke(unittest.TestCase):
             self.assertEqual(len([x for x in calls
                                   if x[0] == "crm-update-opportunity"]), 1)
             self.assertTrue(any(x[0] == "crm-sales-overview" for x in calls))
-            self.assertTrue(any(x[0] == "crm-sales-pipeline" for x in calls))
+            self.assertTrue(any(x[0] == "crm-sales-pipeline-page" for x in calls))
             self.assertFalse(any(x[0] in {
                 "create-ticket", "mail-send-draft", "assessment-link",
                 "crm-invoice-issue", "crm-proposal-create"
