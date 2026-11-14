@@ -95,8 +95,7 @@ class MailDraftDiscardSmoke(unittest.TestCase):
 
     def test_verified_local_draft_save_can_close_without_discard_warning(self):
         self.window.crm_mail_subject.setText("Assessment follow-up")
-        fake = self.bridge
-        fake.stop()
+        # Override only this one callback; keep the ordinary test stub active.
         def callback(_bridge, action, arg="", payload=None, callback=None):
             if action == "crm-mail-create" and callback:
                 callback({"id":"11111111-2222-4333-8444-555555555555",
