@@ -1199,5 +1199,85 @@ class MailNativeUXSmoke(unittest.TestCase):
             DesktopBridge.call = prior
 
 
+    def test_successfully_opened_mail_marks_read_only_after_render_and_ack(self):
+        ui = MailInboxView()
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.set_connection_state("connected")
+            self.assertTrue(ui.show_threads("all", [{
+                "id": THREAD, "mailbox": "direction",
+                "subject": "Synthetic unread conversation",
+                "sender": "Samuel Essiaw <sam@example.invalid>",
+                "last_message_at": "2026-11-14T22:00:00Z",
+                "unread": True,
+            }]))
+            requested = []
+            ui.localReadRequested.connect(
+                lambda mb, ident, unread: requested.append((mb, ident, unread)))
+            ui.thread_list.setCurrentRow(0)
+            row = ui.thread_list.item(0)
+            self.assertTrue(row.text().startswith("● "))
+            self.assertTrue(row.font().bold())
+            self.assertFalse(ui.show_messages("support", THREAD, [
+                {"from": "sam@example.invalid", "text": "Wrong mailbox"}]))
+            self.assertTrue(ui.show_messages("direction", THREAD, []))
+            self.assertEqual(requested, [])
+            self.assertTrue(ui.show_messages("direction", THREAD, [{
+                "from": "Samuel Essiaw <sam@example.invalid>",
+                "to": [CARD["mailboxes"][0]["address"]],
+                "subject": "Synthetic unread conversation",
+                "text": "Safe synthetic content",
+                "created_at": "2026-11-14T22:00:00Z"
+            }]))
+            # A rendered email requests local read persistence; do not claim
+            # success visually before the backend has confirmed the write.
+            self.assertEqual(requested, [("direction", THREAD, False)])
+            self.assertTrue(row.font().bold())
+            ui.reply_body.setPlainText("Unsent text must survive a read acknowledgement")
+            self.assertTrue(ui.apply_local_read_status("direction", THREAD, False))
+            self.assertFalse(row.font().bold())
+            self.assertNotIn("● ", row.text())
+            self.assertEqual(ui.current_thread_id, THREAD)
+            self.assertEqual(ui.reply_body.toPlainText(),
+                             "Unsent text must survive a read acknowledgement")
+            self.assertTrue(ui.show_messages("direction", THREAD, [{
+                "from": "sam@example.invalid", "text": "Safe synthetic content"}]))
+            self.assertEqual(len(requested), 1)
+        finally:
+            self._dispose(ui)
+
+    def test_confirmed_read_callback_preserves_current_reader_without_refresh(self):
+        calls = []
+        def stub_bridge(_self, command, arg="", payload=None, callback=None):
+            calls.append((command, payload))
+            if command == "mail-local-read" and callback:
+                callback({"unread": payload["unread"], "changed": True}, None)
+        with patch.object(DesktopBridge, "call", new=stub_bridge):
+            window = EnkyronWindow()
+            try:
+                ui = window.mail_inbox
+                ui.set_owner_mailboxes(CARD)
+                ui.set_connection_state("connected")
+                self.assertTrue(ui.show_threads("all", [{
+                    "id": THREAD, "mailbox": "direction", "unread": True,
+                    "sender": "Test <test@example.invalid>",
+                    "subject": "Test thread"}]))
+                ui.thread_list.setCurrentRow(0)
+                ui.reply_body.setPlainText("Pending reply")
+                with patch.object(window, "load_local_mail",
+                                  side_effect=AssertionError("Unexpected reload")):
+                    window.set_local_mail_read("direction", THREAD, False)
+                self.assertEqual(calls[-1][0], "mail-local-read")
+                self.assertEqual(calls[-1][1],
+                    {"mailbox": "direction", "thread_id": THREAD, "unread": False})
+                self.assertEqual(ui.current_thread_id, THREAD)
+                self.assertEqual(ui.reply_body.toPlainText(), "Pending reply")
+                self.assertFalse(ui.thread_list.item(0).font().bold())
+                self.assertFalse(any(command.startswith("mail-send") for command, _ in calls))
+            finally:
+                self._dispose(window)
+
+
 if __name__ == "__main__":
     unittest.main()
