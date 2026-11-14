@@ -2,9 +2,12 @@
 // No provider folder mutation, deletion, implicit send, or HTML rendering.
 import {randomUUID} from 'node:crypto';
 import {mailThreads,mailMessages} from './enkyron-mail-service.mjs';
+import {OWNER_MAILBOXES} from './enkyron-owner-mail-access.mjs';
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const MAILBOXES=['direction','support'],PROVIDER=['inbox','archive','spam','trash'];
 const SYSTEM=['inbox','sent','drafts','archive','spam','trash'];
+// Match the actual configured accounts, not the operator display name.
+const OWN_EMAILS=OWNER_MAILBOXES.map(({address})=>address.toLowerCase());
 function scope(owner){
   if(typeof owner!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(owner))
     throw Error('Invalid Mail operator');
@@ -127,17 +130,32 @@ export async function localMailList(pool,actor,input={}){
     throw Error('Invalid Mail page');
   const rows=(await pool.query(
     'SELECT t.mailbox_key AS mailbox,t.thread_id AS id,t.subject,'+
-    'COALESCE(last_mail.sender, \'\') AS sender,'+
+    'COALESCE(external_mail.sender,external_to.recipient,\'\') AS sender,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder,'+
     "COALESCE(string_agg(DISTINCT l.name, ', '), '') AS labels "+
     'FROM enkyron_mail_local_threads t LEFT JOIN enkyron_mail_thread_labels tl '+
     'ON tl.workspace_key=t.workspace_key AND tl.mailbox_key=t.mailbox_key '+
     'AND tl.thread_id=t.thread_id LEFT JOIN enkyron_mail_local_labels l '+
     'ON l.workspace_key=tl.workspace_key AND l.label_id=tl.label_id '+
+    // Replies must not rename a conversation to its own operator.
+    // Prefer the most recent real external sender. For outgoing-only threads,
+    // use an external recipient. No cached participants => no invented name.
     'LEFT JOIN LATERAL (SELECT m.sender FROM enkyron_mail_local_messages m '+
     'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
-    'AND m.thread_id=t.thread_id ORDER BY m.created_at DESC LIMIT 1) '+
-    'last_mail ON TRUE '+
+    'AND m.thread_id=t.thread_id AND NULLIF(BTRIM(m.sender),\'\') IS NOT NULL '+
+    'AND LOWER(BTRIM(COALESCE(SUBSTRING(m.sender FROM \'<([^<>]+)>\'),m.sender))) '+
+    '<> ALL($6::text[]) '+
+    'ORDER BY m.created_at DESC,m.message_id DESC LIMIT 1) external_mail ON TRUE '+
+    'LEFT JOIN LATERAL (SELECT recipient.address AS recipient '+
+    'FROM enkyron_mail_local_messages m '+
+    'CROSS JOIN LATERAL jsonb_array_elements_text('+
+    "CASE WHEN jsonb_typeof(m.recipients)='array' THEN m.recipients "+
+    "ELSE '[]'::jsonb END) AS recipient(address) "+
+    'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
+    'AND m.thread_id=t.thread_id AND NULLIF(BTRIM(recipient.address),\'\') IS NOT NULL '+
+    'AND LOWER(BTRIM(COALESCE(SUBSTRING(recipient.address FROM \'<([^<>]+)>\'),recipient.address))) '+
+    '<> ALL($6::text[]) '+
+    'ORDER BY m.created_at DESC,m.message_id DESC LIMIT 1) external_to ON TRUE '+
     'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.folder_key=$2) '+
     'AND ($3::text=\'all\' OR t.mailbox_key=$3) '+
     'AND ($4::text=\'\' OR '+
@@ -155,10 +173,10 @@ export async function localMailList(pool,actor,input={}){
     'WHERE tl2.workspace_key=t.workspace_key AND tl2.mailbox_key=t.mailbox_key '+
     'AND tl2.thread_id=t.thread_id AND '+
     'POSITION(LOWER($4) IN LOWER(l2.name))>0)) '+
-    'GROUP BY t.mailbox_key,t.thread_id,t.subject,last_mail.sender,'+
+    'GROUP BY t.mailbox_key,t.thread_id,t.subject,external_mail.sender,external_to.recipient,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder '+
     'ORDER BY t.last_message_at DESC,t.mailbox_key,t.thread_id LIMIT 51 OFFSET $5',
-    [key,folder,mailbox,search,page*50]
+    [key,folder,mailbox,search,page*50,OWN_EMAILS]
   )).rows;
   return {mailbox,folder,search,page,items:rows.slice(0,50),
     has_more:rows.length>50,source:'local'};
