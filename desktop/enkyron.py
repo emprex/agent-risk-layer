@@ -2807,7 +2807,7 @@ class EnkyronWindow(QMainWindow):
                 return
             if error or not isinstance(data, dict):
                 self.mail_inbox.ticket_link_button.setEnabled(False)
-                self.mail_inbox.ticket_link_button.setText("Ticket links unavailable")
+                self.mail_inbox.ticket_link_button.hide()
                 return
             self.mail_inbox.show_ticket_links(mailbox, thread_id, data)
         self.bridge.call("mail-local-ticket-links",
