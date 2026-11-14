@@ -3274,19 +3274,32 @@ class EnkyronWindow(QMainWindow):
                 "recipient_verified":True,"confirmed":True,
             }
             def sent(result,send_error):
-                if send_error or not isinstance(result,dict):
-                    inbox.reply_send.setEnabled(False)
+                outcome = result.get("outcome") if isinstance(result,dict) else None
+                if send_error or outcome not in ("accepted","uncertain"):
+                    # The exact reply draft exists in PostgreSQL, but we cannot
+                    # distinguish an accepted provider submission from a lost
+                    # bridge result. Never leave Send enabled for a blind retry.
+                    inbox.hide_reply_editor()
+                    self._reply_context = None
+                    self.load_unsent_mail_drafts()
+                    self.load_mail_sent()
                     QMessageBox.warning(self, "Reply outcome unknown",
-                        "The reply was saved locally, but sending could not be "
-                        "confirmed. Check Sent and Resend before attempting another.")
+                        "The reply draft was saved locally, but sending could not "
+                        "be confirmed. Check Sent and Resend before another email. "
+                        "Do not retry blindly.")
                     return
                 inbox.hide_reply_editor()
                 self._reply_context = None
                 self.load_mail_sent()
-                if result.get("outcome") == "accepted":
+                if outcome == "accepted":
                     self.sync_local_mail(ctx["mailbox"])
-                QMessageBox.information(self, "Reply status",
-                    str(result.get("notice") or "Provider result unavailable."))
+                    QMessageBox.information(self, "Reply status",
+                        str(result.get("notice") or
+                            "Provider accepted the reply; delivery unverified."))
+                else:
+                    QMessageBox.warning(self, "Reply outcome uncertain",
+                        str(result.get("notice") or
+                            "Check Resend and Sent before another reply."))
             self.bridge.call("mail-reply-draft",payload=payload,callback=sent)
         self.bridge.call("crm-mail-create",payload=fields,callback=saved)
 
@@ -4016,19 +4029,29 @@ class EnkyronWindow(QMainWindow):
                 "recipient_verified":True,"confirmed":True,
             }
             def sent_result(result,send_error):
-                if send_error or not isinstance(result,dict):
-                    inbox.reply_send.setEnabled(False)
+                outcome = result.get("outcome") if isinstance(result,dict) else None
+                if send_error or outcome not in ("accepted","uncertain"):
+                    inbox.hide_reply_editor()
+                    self._sent_followup_context = None
+                    self.load_unsent_mail_drafts()
+                    self.load_mail_sent()
                     QMessageBox.warning(
                         self,"Follow-up outcome unknown",
-                        "The follow-up draft was saved; sending could not be "
-                        "confirmed. Check Sent and Resend before attempting again."
-                    )
+                        "The follow-up draft was saved locally; sending could not "
+                        "be confirmed. Check Sent and Resend before another email. "
+                        "Do not retry blindly.")
                     return
                 inbox.hide_reply_editor()
                 self._sent_followup_context = None
                 self.load_mail_sent()
-                QMessageBox.information(self,"Follow-up status",
-                     str(result.get("notice") or "Provider result unavailable."))
+                if outcome == "uncertain":
+                    QMessageBox.warning(self,"Follow-up outcome uncertain",
+                        str(result.get("notice") or
+                            "Check Sent and Resend before another email."))
+                else:
+                    QMessageBox.information(self,"Follow-up status",
+                         str(result.get("notice") or
+                             "Provider accepted the message; delivery unverified."))
             self.bridge.call("mail-send-draft",payload=payload,callback=sent_result)
         self.bridge.call("crm-mail-create",payload=draft,callback=saved)
 
