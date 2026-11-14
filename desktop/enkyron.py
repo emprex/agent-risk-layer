@@ -16648,6 +16648,13 @@ class EnkyronWindow(QMainWindow):
         dialog=self.crm_draft_dialog
         if not dialog or not dialog.isVisible():
             return
+        # Exact saved revision is now being submitted. Freeze the visible
+        # editor so late keystrokes cannot be lost or mistaken for the payload.
+        self.crm_mail_to.setReadOnly(True)
+        self.crm_mail_subject.setReadOnly(True)
+        self.crm_mail_body.setReadOnly(True)
+        self.crm_mail_from.setEnabled(False)
+        self.crm_mail_save.setEnabled(False)
         self.crm_mail_send.setEnabled(False)
         self.bridge.call("mail-send-draft",payload={
             "draft_id":draft_id,"expected_revision":revision,
