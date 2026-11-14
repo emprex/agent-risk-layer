@@ -103,7 +103,9 @@ export async function linkMailTicket(pool,actor,input){
         'SELECT company_id FROM enkyron_crm_effective_ticket_links '+
         'WHERE workspace_key=$1 AND ticket_id=$2',
         [key,data.ticket_id])).rows[0];
-      if(company&&String(company.company_id)!==String(thread.crm_company_id))
+      if(!company)
+        throw Error('Mail has a reviewed CRM company but ticket has no reviewed ticket company');
+      if(String(company.company_id)!==String(thread.crm_company_id))
         throw Error('Mail and ticket belong to different reviewed CRM companies');
     }
     const result=await client.query(
