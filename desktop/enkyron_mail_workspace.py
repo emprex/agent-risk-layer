@@ -1174,7 +1174,7 @@ class MailInboxView(QWidget):
                 or data.get("mailbox") != mailbox
                 or data.get("thread_id") != thread_id
                 or not isinstance(data.get("items"), list)):
-            self.ticket_link_button.setText("Ticket links unavailable")
+            self.ticket_link_button.hide()
             self.ticket_link_button.setEnabled(False)
             return False
         total = len(data["items"])
