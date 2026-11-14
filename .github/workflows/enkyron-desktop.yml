@@ -3077,9 +3077,9 @@ jobs:
           window.crm_tabs.setCurrentIndex(4)
           assert calls[-1][0] == "crm-sales-pipeline"
           calls[-1][3]({
-              "available": True, "total": 1,
+              "available": True, "total": 2,
               "lanes": [{
-                  "id": "prospecting", "title": "Prospecting", "total": 1,
+                  "id": "prospecting", "title": "Prospecting", "total": 2,
                   "more": False, "items": [{
                       "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
                       "prospect_id": "ARL-P-000001",
@@ -3087,10 +3087,33 @@ jobs:
                       "stage": "research", "version": 1,
                       "next_action": "Review public company background",
                       "due_date": "2026-11-12"
+                  }, {
+                      "id": "aaaaaaaa-bbbb-4ccc-8ddd-ffffffffffff",
+                      "prospect_id": "ARL-P-000002",
+                      "company_name_at_creation": "Independent Client Ltd",
+                      "stage": "contacted", "version": 2,
+                      "next_action": "Schedule a focused ARL scope discussion",
+                      "due_date": None
                   }]
               }]
           }, None)
-          window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
+          cards = window.crm_pipeline_lists["prospecting"]
+          assert cards.count() == 2
+          first = cards.itemWidget(cards.item(0))
+          second = cards.itemWidget(cards.item(1))
+          assert first is not None and second is not None and first is not second
+          assert first.objectName() == "pipelineOpportunityCard"
+          assert first.findChild(QLabel, "pipelineCompany").text() == "Synthetic Research Co."
+          assert second.findChild(QLabel, "pipelineCompany").text() == "Independent Client Ltd"
+          assert first.findChild(QLabel, "pipelineNextAction").text() == "Review public company background"
+          assert second.findChild(QLabel, "pipelineDue").text() == "Due: Not scheduled"
+          cards.setCurrentRow(1)
+          assert window.crm_pipeline_selected == ("prospecting", 1)
+          assert "#e2f4f6" in second.styleSheet()
+          assert "#ffffff" in first.styleSheet()
+          cards.setCurrentRow(0)
+          assert window.crm_pipeline_selected == ("prospecting", 0)
+          assert window.crm_pipeline_edit.isEnabled()
           window.open_pipeline_opportunity()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.currentData() == "research"
