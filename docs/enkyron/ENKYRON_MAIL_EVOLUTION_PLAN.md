@@ -2,7 +2,7 @@
 
 **Référence :** `ENK-MAIL-ROADMAP-001` · **Version :** 1.0 · **Mis à jour :** 14 novembre 2026  
 **Propriétaire :** AGENTRISKLAYER LTD · **Priorité :** P0 usage quotidien et revenus  
-**Source produit :** [ENK-PLAN-001](../../ENKYRON_PLAN_DEVELOPPEMENT_DIRECTEUR_v1.0.md) (si absent dans le checkout, document maître fourni dans le dossier projet), `ENK-B04 / ENK-06 / UAT-05`; [spécification Mail](../ENKYRON_PROFESSIONAL_MAIL_SPEC.md), [directive fondateur #602](https://github.com/emprex/agent-risk-layer/issues/602).  
+**Source produit :** plan directeur fourni `ENKYRON_PLAN_DEVELOPPEMENT_DIRECTEUR_v1.0.md` (document du projet, non présent dans l'arborescence GitHub à cette révision), sections `ENK-B04 / ENK-06 / UAT-05`; [spécification Mail](../ENKYRON_PROFESSIONAL_MAIL_SPEC.md), [directive fondateur #602](https://github.com/emprex/agent-risk-layer/issues/602).  
 **Suivi de travail :** [issue #565](https://github.com/emprex/agent-risk-layer/issues/565) · [PR de développement #601](https://github.com/emprex/agent-risk-layer/pull/601) (Draft, **ne pas fusionner**).  
 **Tutoriel opérateur :** [ENKYRON et ARL — Guide utilisateur](ENKYRON_ARL_GUIDE_UTILISATEUR.md).  
 **Références historiques Mail :** PRs #560, #561, #562 — commits déjà présents comme ancêtres de #601 ; **ne pas les fusionner une nouvelle fois**.
