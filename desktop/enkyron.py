@@ -1811,7 +1811,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
         self.crm_mail_folders.tabBar().hide()
         self.crm_mail_folders.setCurrentIndex(0)
+        # Mail is reachable only through the main workspace navigation.
+        # Keep this existing page mounted for the Mail module and detach flow,
+        # but do not show a duplicate Mail tab inside CRM.
         self.crm_tabs.addTab(mail_page, "Mail")
+        self.crm_tabs.tabBar().setTabVisible(self.crm_tabs.indexOf(mail_page), False)
 
         # Pipeline is an overview of the existing human-owned opportunities;
         # the only write path is the existing audited Update follow-up dialog.
@@ -3906,6 +3910,7 @@ class EnkyronWindow(QMainWindow):
         placeholder = self._detached_notice("Mail")
         self.crm_tabs.removeTab(slot)
         self.crm_tabs.insertTab(slot, placeholder, "Mail")
+        self.crm_tabs.tabBar().setTabVisible(slot, False)
         self.crm_tabs.setCurrentIndex(slot)
         self.mail_detach_placeholder = placeholder
         window = DetachableModuleWindow(
@@ -3930,6 +3935,7 @@ class EnkyronWindow(QMainWindow):
         if page is not None and slot >= 0:
             self.crm_tabs.removeTab(slot)
             self.crm_tabs.insertTab(slot, page, "Mail")
+            self.crm_tabs.tabBar().setTabVisible(slot, False)
             self.crm_tabs.setCurrentIndex(slot)
         if self.mail_detach_placeholder is not None:
             self.mail_detach_placeholder.deleteLater()
