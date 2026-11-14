@@ -2244,38 +2244,35 @@ jobs:
           assert window.navigation.currentRow() == 2
           assert window.crm_tabs.currentIndex() == 2
 
-          # Real five-lane pipeline is a bounded read-only snapshot.
+          # Pipeline now uses full-width 25-row server paging and stage counters.
           assert window.crm_tabs.tabText(4) == "Pipeline"
           window.crm_tabs.setCurrentIndex(4)
-          assert calls[-1][0] == "crm-sales-pipeline"
+          assert calls[-1][0] == "crm-sales-pipeline-page"
+          assert calls[-1][2]["lane"] == "all"
+          assert calls[-1][2]["page"] == 1
           calls[-1][3]({
-              "available": True,
-              "total": 1, "preview_per_lane": 30,
+              "available": True, "overall_total": 1, "total": 1,
+              "page": 1, "page_size": 25, "total_pages": 1,
               "lanes": [
-                  {"id":"prospecting","title":"Prospecting","total":1,
-                   "more":False,"items":[{
-                       "id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-                       "prospect_id":"ARL-P-000001",
-                       "company_name_at_creation":"Synthetic Research Co.",
-                       "stage":"research","version":1,
-                       "next_action":"Review public company background",
-                       "due_date":"2026-11-12"
-                   }]},
-                  {"id":"engagement","title":"Engagement","total":0,
-                   "more":False,"items":[]},
-                  {"id":"proposal","title":"Proposals","total":0,
-                   "more":False,"items":[]},
-                  {"id":"won","title":"Won","total":0,
-                   "more":False,"items":[]},
-                  {"id":"lost","title":"Lost","total":0,
-                   "more":False,"items":[]}
-              ]
+                  {"id":"prospecting","title":"Prospecting","total":1},
+                  {"id":"engagement","title":"Engagement","total":0},
+                  {"id":"proposal","title":"Proposals","total":0},
+                  {"id":"won","title":"Won","total":0},
+                  {"id":"lost","title":"Lost","total":0}
+              ],
+              "items": [{
+                  "id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "prospect_id":"ARL-P-000001",
+                  "company_name_at_creation":"Synthetic Research Co.",
+                  "stage":"research","version":1,
+                  "next_action":"Review public company background",
+                  "due_date":"2026-11-12"
+              }]
           }, None)
-          assert window.crm_pipeline_lists["prospecting"].count() == 1
-          assert window.crm_pipeline_labels["prospecting"].text() == "Prospecting · 1"
-          assert window.crm_pipeline_lists["won"].count() == 0
+          assert window.crm_pipeline_table.rowCount() == 1
+          assert window.crm_pipeline_stage_buttons["prospecting"].text() == "Prospecting · 1"
           assert not window.crm_pipeline_edit.isEnabled()
-          window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
+          window.crm_pipeline_table.selectRow(0)
           assert window.crm_pipeline_edit.isEnabled()
           assert window.crm_pipeline_proposal.isEnabled()
           window.open_pipeline_proposal()
