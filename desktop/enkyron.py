@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QProcess, QTimer, Qt
+from PySide6.QtCore import QDate, QProcess, QTimer, Qt, QSize
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QFormLayout, QFrame, QHBoxLayout,
@@ -1855,7 +1855,18 @@ class EnkyronWindow(QMainWindow):
             label.setStyleSheet("font-weight: bold;")
             pane_l.addWidget(label)
             cards = QListWidget()
+            cards.setObjectName("pipelineOpportunityList")
             cards.setWordWrap(True)
+            cards.setSpacing(8)
+            cards.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            cards.setStyleSheet(
+                "QListWidget#pipelineOpportunityList { background: transparent; "
+                "border: 0; outline: none; }"
+                "QListWidget#pipelineOpportunityList::item { background: transparent; "
+                "border: 0; padding: 0; }"
+            )
             cards.setSelectionMode(
                 QAbstractItemView.SelectionMode.SingleSelection
             )
@@ -4152,21 +4163,16 @@ class EnkyronWindow(QMainWindow):
                 )
                 widget.blockSignals(True)
                 for entry in entries:
-                    title = (entry.get("company_name_at_creation") or "Untitled")
-                    stage = (entry.get("stage") or "").replace("_", " ").title()
-                    estimate = entry.get("probability_percent")
-                    if estimate is not None:
-                        stage += " · {}% estimated win chance".format(estimate)
-                    next_action = entry.get("next_action") or ""
-                    if len(next_action) > 70:
-                        next_action = next_action[:67] + "…"
-                    due = format_followup_due(
-                        entry.get("due_date"), entry.get("stage")
-                    )
-                    card = QListWidgetItem(
-                        "{}\n{}\n{}\n{}".format(title, stage, next_action, due)
-                    )
-                    widget.addItem(card)
+                    # Separate native cards, not four undifferentiated text lines.
+                    # Full values remain in crm_pipeline_cards for the edit dialog.
+                    card = self.make_pipeline_card(entry)
+                    item = QListWidgetItem()
+                    item.setSizeHint(QSize(0, 196))
+                    title = entry.get("company_name_at_creation") or "Untitled"
+                    action = entry.get("next_action") or "No next action recorded"
+                    item.setToolTip("{}\n{}".format(title, action))
+                    widget.addItem(item)
+                    widget.setItemWidget(item, card)
                 widget.blockSignals(False)
                 any_truncated = any_truncated or bool(lane.get("more"))
             message = "{} opportunity/opportunities across five stages.".format(
@@ -4181,6 +4187,90 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-sales-pipeline", callback=received)
 
+    @staticmethod
+    def make_pipeline_card(entry):
+        """Visual-only commercial card; never changes backend opportunity data."""
+        title = str(entry.get("company_name_at_creation") or "Untitled")
+        stage = str(entry.get("stage") or "unclassified").replace("_", " ").title()
+        estimate = entry.get("probability_percent")
+        if estimate is not None:
+            stage += " · {}% estimated".format(estimate)
+        action = str(entry.get("next_action") or "").strip()
+        due = format_followup_due(entry.get("due_date"), entry.get("stage"))
+
+        card = QFrame()
+        card.setObjectName("pipelineOpportunityCard")
+        card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        card.setAccessibleName(
+            "{}. Stage: {}. Next action: {}. Due: {}".format(
+                title, stage, action or "Not recorded", due
+            )
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(11, 10, 11, 10)
+        layout.setSpacing(4)
+
+        company = QLabel(title)
+        company.setObjectName("pipelineCompany")
+        company.setTextFormat(Qt.TextFormat.PlainText)
+        company.setWordWrap(True)
+        company.setStyleSheet(
+            "font-weight: bold; font-size: 14px; color: #17364c;"
+        )
+        company.setToolTip(title)
+        layout.addWidget(company)
+
+        state = QLabel("Stage: " + stage)
+        state.setObjectName("pipelineStage")
+        state.setTextFormat(Qt.TextFormat.PlainText)
+        state.setWordWrap(True)
+        state.setStyleSheet("color: #526b7e; font-size: 12px;")
+        layout.addWidget(state)
+
+        next_label = QLabel("NEXT ACTION")
+        next_label.setStyleSheet(
+            "color: #526b7e; font-size: 11px; font-weight: bold;"
+        )
+        layout.addWidget(next_label)
+        # A readable preview keeps cards compact; tooltip/edit opens full text.
+        preview = action if len(action) <= 96 else action[:93].rstrip() + "…"
+        next_text = QLabel(preview or "No next action recorded")
+        next_text.setObjectName("pipelineNextAction")
+        next_text.setTextFormat(Qt.TextFormat.PlainText)
+        next_text.setWordWrap(True)
+        next_text.setToolTip(action or "No next action recorded")
+        next_text.setStyleSheet("color: #20354a;")
+        layout.addWidget(next_text)
+
+        due_label = QLabel("Due: " + due)
+        due_label.setObjectName("pipelineDue")
+        due_label.setTextFormat(Qt.TextFormat.PlainText)
+        due_label.setWordWrap(True)
+        due_label.setStyleSheet("color: #526b7e; font-size: 12px;")
+        layout.addWidget(due_label)
+        layout.addStretch()
+        card.setStyleSheet(
+            "QFrame#pipelineOpportunityCard { background: #ffffff; "
+            "border: 1px solid #d2dfe8; border-radius: 7px; }"
+        )
+        return card
+
+    def style_pipeline_selection(self):
+        """Visible selection follows the list's existing row/IPC mapping."""
+        for code, listing in self.crm_pipeline_lists.items():
+            for row in range(listing.count()):
+                panel = listing.itemWidget(listing.item(row))
+                if panel is None:
+                    continue
+                chosen = self.crm_pipeline_selected == (code, row)
+                bg = "#e2f4f6" if chosen else "#ffffff"
+                border = "#168398" if chosen else "#d2dfe8"
+                panel.setStyleSheet(
+                    "QFrame#pipelineOpportunityCard { background: " + bg +
+                    "; border: 2px solid " + border +
+                    "; border-radius: 7px; }"
+                )
+
     def pipeline_selected(self, lane):
         cards = self.crm_pipeline_lists[lane]
         selected = cards.currentRow()
@@ -4189,6 +4279,7 @@ class EnkyronWindow(QMainWindow):
                 self.crm_pipeline_selected = None
                 self.crm_pipeline_edit.setEnabled(False)
                 self.crm_pipeline_proposal.setEnabled(False)
+                self.style_pipeline_selection()
             return
         for code, other in self.crm_pipeline_lists.items():
             if code != lane:
@@ -4199,6 +4290,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_pipeline_selected = (lane, selected)
         self.crm_pipeline_edit.setEnabled(True)
         self.crm_pipeline_proposal.setEnabled(True)
+        self.style_pipeline_selection()
 
     def open_pipeline_opportunity(self):
         selection = self.crm_pipeline_selected
