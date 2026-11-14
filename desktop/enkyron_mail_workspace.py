@@ -887,6 +887,11 @@ class MailInboxView(QWidget):
         if (self.connection_state in ("connected", "error")
                 and (self.selected_mailbox in self._mailboxes
                      or self.selected_mailbox == "all")):
+            # Manual Send / Receive may rebuild the message list. It must not
+            # silently destroy a reply in the inline editor.
+            if not self._confirm_inline_reply_discard():
+                return
+            self.hide_reply_editor()
             self.refreshRequested.emit(self.selected_mailbox)
 
     def show_threads(self, mailbox, items, has_more=False, folder='inbox',
@@ -1058,6 +1063,11 @@ class MailInboxView(QWidget):
 
     def _search_saved_mail(self):
         if self.local_mode and self.connection_state == "connected":
+            # Executing a server search reloads the current thread list; a
+            # typed inline reply is still UNSAVED until its submission.
+            if not self._confirm_inline_reply_discard():
+                return
+            self.hide_reply_editor()
             self.localSearchRequested.emit(self.search.text().strip())
 
     def _filter(self, value):
