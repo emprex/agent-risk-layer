@@ -107,6 +107,66 @@ class MailDraftDiscardSmoke(unittest.TestCase):
                 question.assert_not_called()
         self.assertTrue(self.dialog._close_approved)
 
+    def test_unknown_send_result_does_not_offer_repeat_send(self):
+        self.window.crm_mail_subject.setText("Synthetic business email")
+        self.window.crm_mail_send.setEnabled(False)
+        self.window.crm_mail_save.setEnabled(False)
+        with patch.object(self.window, "load_mail_drafts") as drafts, \
+             patch.object(self.window, "load_unsent_mail_drafts") as unsent, \
+             patch.object(self.window, "load_mail_sent") as sent, \
+             patch.object(QMessageBox, "warning") as warning:
+            self.window.mail_send_completed(
+                self.dialog, None, "Synthetic lost bridge reply")
+            self.assertFalse(self.dialog.isVisible())
+            self.assertFalse(self.window.crm_mail_send.isEnabled())
+            self.assertTrue(self.dialog._close_approved)
+            drafts.assert_called_once()
+            unsent.assert_called_once()
+            sent.assert_called_once()
+            self.assertIn("Do not retry", warning.call_args.args[2])
+        # A late or malformed response is treated like a network uncertainty.
+        self.window.open_mail_compose()
+        self.dialog = self.window.crm_draft_dialog
+        self.window.crm_mail_send.setEnabled(False)
+        with patch.object(QMessageBox, "warning") as warning:
+            self.window.mail_send_completed(self.dialog,
+                {"unexpected":"not a provider result"}, None)
+            self.assertFalse(self.dialog.isVisible())
+            self.assertIn("not verified", warning.call_args.args[1].lower())
+
+    def test_saved_send_outcome_uncertain_is_not_presented_as_delivery(self):
+        self.window.crm_mail_send.setEnabled(False)
+        with patch.object(self.window, "load_mail_drafts"), \
+             patch.object(self.window, "load_mail_sent"), \
+             patch.object(self.window.mail_inbox, "activate_local_folder"), \
+             patch.object(QMessageBox, "warning") as warning, \
+             patch.object(QMessageBox, "information") as info:
+            self.window.mail_send_completed(self.dialog, {
+                "outcome":"uncertain", "notice":
+                "Resend request outcome unknown. Provider check required."}, None)
+            self.assertFalse(self.dialog.isVisible())
+            self.assertTrue(self.dialog._close_approved)
+            warning.assert_called_once()
+            self.assertIn("uncertain", warning.call_args.args[1].lower())
+            info.assert_not_called()
+
+    def test_sending_freezes_editor_and_cannot_close_mid_flight(self):
+        with patch.object(DesktopBridge, "call") as bridge:
+            self.window.submit_mail_send(
+                "11111111-2222-4333-8444-555555555555", 1)
+            self.assertTrue(self.window.crm_mail_to.isReadOnly())
+            self.assertTrue(self.window.crm_mail_subject.isReadOnly())
+            self.assertTrue(self.window.crm_mail_body.isReadOnly())
+            self.assertFalse(self.window.crm_mail_from.isEnabled())
+            self.assertFalse(self.window.crm_mail_save.isEnabled())
+            self.assertFalse(self.window.crm_mail_send.isEnabled())
+            bridge.assert_called_once()
+            self.assertEqual(bridge.call_args.args[0], "mail-send-draft")
+            with patch.object(QMessageBox, "information") as info:
+                self.dialog.reject()
+                self.assertTrue(self.dialog.isVisible())
+                info.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
