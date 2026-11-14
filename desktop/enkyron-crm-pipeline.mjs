@@ -80,3 +80,91 @@ export async function getSalesPipeline(pool,actor){
     throw error;
   }
 }
+
+const PIPELINE_PAGE_SIZE=25;
+const PIPELINE_PAGE_SORT=Object.freeze({
+  updated:'updated_at DESC,id ASC',
+  due:'due_date ASC NULLS LAST,updated_at DESC,id ASC',
+  company:'LOWER(company_name_at_creation) ASC,id ASC'
+});
+const STAGE_LANE_SQL="CASE WHEN stage IN ('research','qualified') THEN 'prospecting' "
+  +"WHEN stage IN ('contact_planned','contacted','discovery') THEN 'engagement' "
+  +"WHEN stage IN ('proposal','negotiation') THEN 'proposal' "
+  +"WHEN stage='won' THEN 'won' WHEN stage='lost' THEN 'lost' ELSE NULL END";
+
+export function validatePipelinePageRequest(input){
+  if(!input||typeof input!=='object'||Array.isArray(input)
+    ||Object.keys(input).some(k=>!['lane','page','search','sort'].includes(k)))
+    throw new Error('CRM invalid pipeline page request');
+  const lane=input.lane??'all',page=input.page??1,search=input.search??'';
+  const sort=input.sort??'updated';
+  if(lane!=='all'&&!PIPELINE_LANES.some(x=>x.id===lane))
+    throw new Error('CRM invalid pipeline lane');
+  if(!Number.isSafeInteger(page)||page<1||page>10000)
+    throw new Error('CRM invalid pipeline page');
+  if(typeof search!=='string'||search.length>100||/[\\x00-\\x1f\\x7f]/.test(search))
+    throw new Error('CRM invalid pipeline search');
+  if(!Object.hasOwn(PIPELINE_PAGE_SORT,sort))
+    throw new Error('CRM invalid pipeline sort');
+  return {lane,page,search:search.trim(),sort};
+}
+
+/** Paginated, read-only view: no per-stage 30-row ceiling or data duplication. */
+export async function getSalesPipelinePage(pool,input,actor){
+  const req=validatePipelinePageRequest(input);
+  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
+    throw new Error('CRM invalid local operator');
+  const workspaceKey='local:'+actor;
+  try{
+    const grouped=await pool.query(
+      "SELECT stage,count(*)::integer AS total FROM enkyron_crm_opportunities "
+      +"WHERE workspace_key=$1 GROUP BY stage",[workspaceKey]
+    );
+    const lanes=PIPELINE_LANES.map(x=>({...x,total:0}));
+    const byLane=new Map(lanes.map(l=>[l.id,l]));
+    for(const row of grouped.rows){
+      const lane=byLane.get(pipelineLane(row.stage));
+      if(!Number.isSafeInteger(row.total)||row.total<0)
+        throw new Error('CRM invalid pipeline count');
+      lane.total+=row.total;
+    }
+    const scoped="WITH scoped AS (SELECT id,prospect_id,company_id,owner_local,"
+      +"company_name_at_creation,stage,next_action,due_date,probability_percent,"
+      +"version,updated_at,("+STAGE_LANE_SQL+") AS lane "
+      +"FROM enkyron_crm_opportunities WHERE workspace_key=$1) ";
+    const where=" WHERE ($2='all' OR lane=$2) "
+      +"AND ($3='' OR POSITION(LOWER($3) IN LOWER(company_name_at_creation))>0 "
+      +"OR POSITION(LOWER($3) IN LOWER(COALESCE(next_action,'')))>0)";
+    const params=[workspaceKey,req.lane,req.search];
+    const count=await pool.query(scoped+"SELECT count(*)::integer AS total FROM scoped"+where,params);
+    const total=count.rows[0]?.total;
+    if(!Number.isSafeInteger(total)||total<0)
+      throw new Error('CRM invalid pipeline page count');
+    const order=PIPELINE_PAGE_SORT[req.sort];
+    const page=await pool.query(
+      scoped+"SELECT id,prospect_id,company_id,owner_local,company_name_at_creation,"
+      +"stage,next_action,due_date,probability_percent,version,updated_at,lane "
+      +"FROM scoped"+where+" ORDER BY "+order+" LIMIT $4 OFFSET $5",
+      [...params,PIPELINE_PAGE_SIZE,(req.page-1)*PIPELINE_PAGE_SIZE]
+    );
+    if(page.rows.length>PIPELINE_PAGE_SIZE)
+      throw new Error('CRM invalid pipeline page size');
+    const seen=new Set();
+    const items=page.rows.map(row=>{
+      if(!row.id||seen.has(row.id)||pipelineLane(row.stage)!==row.lane)
+        throw new Error('CRM invalid pipeline page row');
+      seen.add(row.id);
+      return {...row,company_id:row.company_id??null,
+        owner_local:row.owner_local??null,probability_percent:row.probability_percent??null};
+    });
+    return {available:true,lanes,overall_total:lanes.reduce((x,l)=>x+l.total,0),
+      total,page:req.page,page_size:PIPELINE_PAGE_SIZE,
+      total_pages:Math.max(1,Math.ceil(total/PIPELINE_PAGE_SIZE)),
+      lane:req.lane,search:req.search,sort:req.sort,items,
+      notice:'Manual pipeline stages; no automatic outreach or commercial approval.'};
+  }catch(error){
+    if(error?.code==='42P01')return {available:false,
+      notice:'Commercial pipeline is not available until CRM setup is complete.'};
+    throw error;
+  }
+}
