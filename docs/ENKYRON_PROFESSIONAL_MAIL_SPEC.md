@@ -16,6 +16,12 @@
 
 Keep one main navigation entry **Mail**, not a duplicate CRM tab. Main layout: **left** mailboxes and folders, **centre** paginated/searchable conversations, **right** safe threaded reader. Empty areas may remain empty until real correspondence exists; no dummy customer messages. Maintain readable laptop widths, accessible keyboard focus and optional detachable Mail window. From either Mail, CRM or Ticket, show the *same* saved conversation reference, not three divergent copies. Standard customer operations should not require SQL/CLI.
 
+## Operational tracking and operator tutorial
+
+- **Current milestone board:** [ENKYRON Mail evolution M01–M10](enkyron/ENKYRON_MAIL_EVOLUTION_PLAN.md), with actual state, delivery gates, remaining work and required human decisions.
+- **Living operator guide:** [How to use ENKYRON and ARL](enkyron/ENKYRON_ARL_GUIDE_UTILISATEUR.md), based on Debian-observed workflows and a separate honest section for suspended ARL assessment.
+- This feature contract defines what we must build; the milestone board shows **what is done and what is next**; the guide teaches the operator **how to use capabilities that actually exist**.
+
 ## Feature register (status is deliberately conservative)
 
 | Capability | Existing basis | Required acceptance or implementation |
