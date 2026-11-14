@@ -2159,16 +2159,27 @@ jobs:
           assert "NOT YET REVIEWED" in window.ticket_triage_label.text()
           window.ticket_triage_button.click()
           assert window.ticket_triage_dialog.isVisible()
-          window.triage_type.setCurrentIndex(5)
-          window.triage_impact.setCurrentIndex(0)
-          window.triage_urgency.setCurrentIndex(0)
-          window.triage_priority.setCurrentIndex(1)
+          # UAT-04 requires an explicit selection in all four triage fields.
+          # Look up semantic values, not the pre-placeholder indices.
+          for combo, value in (
+              (window.triage_type, "consultation"),
+              (window.triage_impact, "low"),
+              (window.triage_urgency, "low"),
+              (window.triage_priority, "normal"),
+          ):
+              index = combo.findData(value)
+              assert index >= 0, "Missing synthetic triage choice: " + value
+              combo.setCurrentIndex(index)
+              assert combo.currentData() == value
           window.triage_note.setPlainText(
               "Synthetic qualification reviewed by local operator, not client authorisation."
           )
           window.triage_confirm.setChecked(True)
-          with patch("desktop.enkyron.QMessageBox.question",
-                     return_value=QMessageBox.StandardButton.Yes):
+          # Never let an unexpected modal warning hang headless CI.
+          with patch("desktop.enkyron.QMessageBox.warning",
+                     side_effect=AssertionError("Unexpected triage modal warning")), patch(
+                 "desktop.enkyron.QMessageBox.question",
+                 return_value=QMessageBox.StandardButton.Yes):
               window.triage_submit.click()
           assert calls[-1][0] == "ticket-triage-save"
           assert calls[-1][2]["ticket_id"] == ticket_id
