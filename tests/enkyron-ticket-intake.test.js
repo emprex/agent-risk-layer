@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateIntake, validateStatusChange, createDeskTicket,
-  updateDeskTicketStatus, TICKET_TRANSITIONS,
+  updateDeskTicketStatus, TICKET_TRANSITIONS, listDeskTickets,
   validateAssignment, assignDeskTicket, validateArchive, archiveDeskTicket
 } from '../desktop/enkyron-ticket-intake.mjs';
 
@@ -101,16 +101,127 @@ test('unauthorised status jump and unknown ticket never update records',async()=
   for(const previous of ['new',null]) {
     const db=fakePool({previous});
     await assert.rejects(
-      ()=>updateDeskTicketStatus(db,{ticket_id:ticketId,status:'closed'}),
+      ()=>updateDeskTicketStatus(db,{
+        ticket_id:ticketId,status:'closed',expected_status:'resolved',
+        review_note:'All customer issues were addressed and reviewed by the assigned operator.',
+        confirmed:true
+      },'localoperator'),
       previous===null?/Ticket not found/:/Status transition not allowed/
     );
     assert.deepEqual(db.calls.map(x=>x.sql),[
-      'BEGIN','SELECT status,assessor_name,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'BEGIN','SELECT status,assessor_name,assigned_to,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       'ROLLBACK','RELEASE'
     ]);
   }
 });
 
+
+test('ENK-05 resolution requires reviewed current status, long rationale and confirmation',()=>{
+  const base={
+    ticket_id:ticketId,status:'resolved',
+    expected_status:'pending_review',
+    review_note:'Operator verified the documented result and informed the requester internally.',
+    confirmed:true
+  };
+  assert.deepEqual(validateStatusChange(base),{
+    ticketId,status:'resolved',expectedStatus:'pending_review',
+    reviewNote:base.review_note
+  });
+  for(const invalid of [
+    {...base,confirmed:false},{...base,expected_status:null},
+    {...base,expected_status:'new'}, {...base,review_note:'too short'},
+    {...base,review_note:'x'.repeat(501)}, {...base,review_note:undefined},
+    {...base,review_note:'one\\u0000two'}, {...base,spoof_actor:'other'},
+    {...base,status:'closed',expected_status:'pending_review'},
+  ]) assert.throws(()=>validateStatusChange(invalid));
+  assert.throws(()=>validateStatusChange({
+    ticket_id:ticketId,status:'closed'
+  }),/Reviewed ticket resolution/);
+});
+
+test('ENK-05 reviewed resolve/close appends immutable event under local operator in same transaction',async()=>{
+  const review='All work notes were reviewed and the exact customer request was resolved.';
+  const eventId='00000000-0000-4000-8000-000000000099';
+  for(const [previous,status] of [
+    ['pending_review','resolved'],['resolved','closed']
+  ]){
+    const db=fakePool({previous,assignee:'localoperator'});
+    const result=await updateDeskTicketStatus(db,{
+      ticket_id:ticketId,status,expected_status:previous,
+      review_note:review,confirmed:true
+    },'localoperator',{uuid:()=>eventId});
+    assert.deepEqual(result,{
+      ticket_id:ticketId,from:previous,status,event_id:eventId
+    });
+    assert.equal(db.calls[0].sql,'BEGIN');
+    assert.equal(db.calls[4].sql,'COMMIT');
+    assert.equal(db.calls[5].sql,'RELEASE');
+    assert.match(db.calls[2].sql,/UPDATE arl_workbench_tickets/);
+    assert.match(db.calls[3].sql,/status_changed/);
+    assert.deepEqual(db.calls[3].params.slice(0,2),[eventId,ticketId]);
+    assert.ok(db.calls[3].params[2].includes(review));
+    assert.equal(db.calls[3].params[3],'localoperator');
+    assert.ok(!db.calls.some(x=>/INSERT INTO assessments|\bDELETE FROM\b/i.test(x.sql)));
+  }
+});
+
+test('ENK-05 stale, unassigned, wrong-owner or already-resolved completion never updates ticket',async()=>{
+  const base={
+    ticket_id:ticketId,status:'resolved',expected_status:'pending_review',
+    review_note:'The operator completed each requested work item and independently reviewed the result.',
+    confirmed:true
+  };
+  for(const sample of [
+    {previous:'pending_review',assignee:null,actor:'localoperator',error:/Assign this ticket/},
+    {previous:'pending_review',assignee:'anotheroperator',actor:'localoperator',error:/Assign this ticket/},
+    {previous:'in_progress',assignee:'localoperator',actor:'localoperator',error:/Status transition not allowed/},
+    {previous:'resolved',assignee:'localoperator',actor:'localoperator',error:/Status transition not allowed/}
+  ]){
+    const db=fakePool(sample);
+    await assert.rejects(
+      ()=>updateDeskTicketStatus(db,base,sample.actor),sample.error
+    );
+    assert.equal(db.calls.some(x=>/UPDATE arl_workbench_tickets/.test(x.sql)),false);
+    assert.ok(db.calls.some(x=>x.sql==='ROLLBACK'));
+  }
+  const stale=fakePool({previous:'pending_review',assignee:'localoperator'});
+  await assert.rejects(()=>updateDeskTicketStatus(stale,{
+    ...base, expected_status:'resolved',status:'closed'
+  },'localoperator'),/Status transition not allowed/);
+  const malformed=fakePool({previous:'pending_review',assignee:'localoperator'});
+  await assert.rejects(()=>updateDeskTicketStatus(malformed,{
+    ...base,confirmed:false
+  },'localoperator'),/Reviewed ticket resolution/);
+  assert.equal(malformed.calls.length,0,'Missing confirmation must fail before any DB connection');
+});
+
+test('ENK-05 reopening a closed ticket requires current state, assignee and human review',async()=>{
+  const reviewed={
+    ticket_id:ticketId,status:'in_progress',expected_status:'closed',
+    review_note:'The human operator reviewed the original closure and confirmed additional work is necessary.',
+    confirmed:true
+  };
+  const validated=validateStatusChange(reviewed);
+  assert.equal(validated.expectedStatus,'closed');
+  const rejected=[
+    {payload:{ticket_id:ticketId,status:'in_progress'},actor:'localoperator',assignee:'localoperator'},
+    {payload:{...reviewed,confirmed:false},actor:'localoperator',assignee:'localoperator'},
+    {payload:{...reviewed,review_note:'short'},actor:'localoperator',assignee:'localoperator'},
+    {payload:reviewed,actor:'anotheroperator',assignee:'localoperator'},
+    {payload:reviewed,actor:'localoperator',assignee:null},
+  ];
+  for(const entry of rejected){
+    const db=fakePool({previous:'closed',assignee:entry.assignee});
+    await assert.rejects(()=>updateDeskTicketStatus(db,entry.payload,entry.actor));
+    assert.ok(!db.calls.some(c=>/UPDATE arl_workbench_tickets/.test(c.sql)));
+  }
+  const db=fakePool({previous:'closed',assignee:'localoperator'});
+  const eventId='00000000-0000-4000-8000-000000000090';
+  const result=await updateDeskTicketStatus(db,reviewed,'localoperator',{uuid:()=>eventId});
+  assert.deepEqual(result,{ticket_id:ticketId,from:'closed',status:'in_progress',event_id:eventId});
+  assert.match(db.calls[3].params[2],/Human reopen review/);
+  assert.equal(db.calls[3].params[3],'localoperator');
+});
 
 test('self-assignment is atomic and records a separate owner, not an assessor rewrite', async()=>{
   const db=fakePool();
@@ -181,4 +292,47 @@ test('open/already archived tickets cannot be archived or modified',async()=>{
     ()=>assignDeskTicket(a,{ticket_id:ticketId,action:'self'},'localoperator'),
     /Archived or closed ticket/
   );
+});
+
+
+test('My tickets queue uses local assignment and latest recorded priority/due action, read-only',async()=>{
+  const queries=[];
+  const pool={query:async(sql,args)=>{
+    queries.push({sql,args});
+    if(sql.includes('FROM arl_workbench_tickets t'))return {rows:[{
+      id:ticketId,ticket_number:'ARL-2026-000999',title:'Synthetic support',
+      client_name:'Example Co',status:'in_progress',assigned_to:'localoperator',
+      archived_at:null,updated_at:'2026-11-13'
+    }]};
+    if(sql.includes('FROM enkyron_ticket_triage_reviews'))
+      return {rows:[{ticket_id:ticketId,priority:'high'}]};
+    if(sql.includes('FROM enkyron_ticket_action_versions'))
+      return {rows:[{ticket_id:ticketId,title:'Call customer',due_on:'2026-11-16'}]};
+    throw Error('Unexpected query');
+  }};
+  const result=await listDeskTickets(pool,'ARL-2026','localoperator',{mineOnly:true});
+  assert.equal(result.mine_only,true);
+  assert.equal(result.items.length,1);
+  assert.equal(result.items[0].priority,'high');
+  assert.equal(result.items[0].next_action_title,'Call customer');
+  assert.equal(result.items[0].next_due_on,'2026-11-16');
+  assert.match(queries[0].sql,/t.assigned_to=\$5/);
+  assert.equal(queries[0].args[4],'localoperator');
+  assert.ok(queries.every(x=>/^\s*SELECT/.test(x.sql)));
+});
+
+test('queue explicitly reports absent optional triage/action history schema without inventing priority',async()=>{
+  const pool={query:async(sql)=>{
+    if(sql.includes('FROM arl_workbench_tickets t'))return {rows:[{
+      id:ticketId,ticket_number:'ARL-2026-000999',title:'Support',
+      client_name:'Example Co',status:'new',assigned_to:null
+    }]};
+    const err=new Error('undefined_table');err.code='42P01';throw err;
+  }};
+  const result=await listDeskTickets(pool,'','localoperator');
+  assert.equal(result.priority_available,false);
+  assert.equal(result.actions_available,false);
+  assert.equal(result.items[0].priority,null);
+  assert.equal(result.items[0].next_due_on,null);
+  await assert.rejects(()=>listDeskTickets(pool,'',''),/local operator is required/);
 });

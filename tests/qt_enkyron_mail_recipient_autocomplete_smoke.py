@@ -51,6 +51,9 @@ class MailRecipientAutocompleteSmoke(unittest.TestCase):
             self.assertEqual(creates[0][2]["company_id"],COMPANY)
             self.assertEqual(creates[0][2]["recipient_contact_id"],CONTACT)
             self.assertFalse(any(x[0]=="mail-send-draft" for x in calls))
+            # The fake DB intentionally never calls back; skip the production
+            # pending-save close guard only for synthetic test teardown.
+            dialog._close_approved = True
             dialog.reject()
         finally:
             if window:

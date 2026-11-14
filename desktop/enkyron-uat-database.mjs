@@ -2,10 +2,23 @@
 // interlock, NOT an authentication or multi-user authorization mechanism.
 // Normal operator behaviour (no UAT variables) remains unchanged.
 export const ENKYRON_UAT_MARKER = 'ENK03_SYNTHETIC_ONLY';
+export const ENKYRON_ENK05_UAT_MARKER = 'ENK05_SYNTHETIC_ONLY';
+export const ENKYRON_ENK05_UAT_DATABASE = 'enkyron_uat_enk05';
 
 const DATABASE_PREFIX = /^enkyron_uat_[a-z0-9_]{1,40}$/;
+// Separate and exact ENK-05 acceptance scope. Never broaden the ENK-03
+// R1/R2 UAT allowlist or use its existing accepted database for ticket writes.
+const ENK05_COMMANDS = new Set([
+  'tickets', 'tickets-archived', 'tickets-mine', 'tickets-mine-archived',
+  'ticket', 'create-ticket', 'ticket-status', 'ticket-assignment',
+  'ticket-archive', 'ticket-triage-save', 'ticket-actions',
+  'ticket-action-save', 'note',
+  'crm-companies', 'crm-create-company', 'crm-company-dossier',
+  'crm-company-history', 'crm-company-tickets', 'crm-ticket-options',
+  'crm-ticket-company', 'crm-link-ticket'
+]);
 const UAT_COMMANDS = new Set([
-  'tickets', 'crm-sales-overview', 'crm-sales-pipeline',
+  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page',
   'crm-companies', 'crm-contacts',
   'crm-company-duplicates', 'crm-contact-duplicates',
   'crm-create-company', 'crm-create-contact',
@@ -26,7 +39,7 @@ const UAT_COMMANDS = new Set([
 // It is active ONLY when paired with the exact synthetic DB and marker.
 // An allowlist (not a negative list) prevents unknown operations from slipping in.
 const UX_PREVIEW_READ_COMMANDS = new Set([
-  'tickets', 'crm-sales-overview', 'crm-sales-pipeline',
+  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page',
   'crm-companies', 'crm-contacts', 'crm-company-dossier',
   'crm-company-history', 'crm-opportunities', 'crm-activity-timeline',
   'crm-company-followups', 'crm-company-followups-upcoming',
@@ -53,6 +66,15 @@ export function resolveEnkyronDatabase(env = process.env) {
   if (!hasName && !hasGate) {
     return Object.freeze({ database: 'arl_local', uat: false });
   }
+  // ENK-05 name and marker are a reserved pair. A legacy ENK-03 marker
+  // must never route the ENK-05 database into the old CRM UAT rules.
+  if (env.ENKYRON_UAT_DATABASE === ENKYRON_ENK05_UAT_DATABASE) {
+    if (env.ENKYRON_UAT_GUARD !== ENKYRON_ENK05_UAT_MARKER) {
+      throw new Error('ENKYRON UAT requires the exact ENK-05 synthetic-only marker');
+    }
+    return Object.freeze({ database: ENKYRON_ENK05_UAT_DATABASE,
+      uat: true, marker: ENKYRON_ENK05_UAT_MARKER });
+  }
   if (env.ENKYRON_UAT_GUARD !== ENKYRON_UAT_MARKER
       || !DATABASE_PREFIX.test(env.ENKYRON_UAT_DATABASE || '')) {
     throw new Error('ENKYRON UAT requires a synthetic-only acknowledgement and an enkyron_uat_ database');
@@ -61,6 +83,13 @@ export function resolveEnkyronDatabase(env = process.env) {
 }
 
 export function requireEnkyronUatCommand(target, command) {
+  if (target.uat && target.database === ENKYRON_ENK05_UAT_DATABASE) {
+    if (target.marker !== ENKYRON_ENK05_UAT_MARKER ||
+        !ENK05_COMMANDS.has(command)) {
+      throw new Error('ENKYRON ENK-05 UAT blocks operations outside synthetic Service Desk acceptance');
+    }
+    return;
+  }
   if (target.uat && !UAT_COMMANDS.has(command)) {
     throw new Error('ENKYRON UAT blocks operations outside Company 360 synthetic acceptance');
   }
@@ -69,6 +98,15 @@ export function requireEnkyronUatCommand(target, command) {
 // ENK-04: a synthetic commercial edit may touch only a reviewed company-linked
 // opportunity. This supplements backend workspace, association and revision checks.
 export function requireEnkyronUatPayload(target, command, payload) {
+  // ENK-05 controls operate only through their existing backend validators,
+  // local-operator checks and explicit human review. No mail or assessment IPC.
+  if (target.uat && target.database === ENKYRON_ENK05_UAT_DATABASE) {
+    if (target.marker !== ENKYRON_ENK05_UAT_MARKER ||
+        !ENK05_COMMANDS.has(command)) {
+      throw new Error('ENKYRON ENK-05 UAT operation denied');
+    }
+    return;
+  }
   if (target.uat && command === 'crm-update-opportunity' &&
       (payload?.confirmed !== true || typeof payload?.company_id !== 'string')) {
     throw new Error('ENKYRON UAT company opportunity update requires explicit reviewed company');
@@ -133,7 +171,8 @@ export async function verifyEnkyronUatDatabase(pool, target) {
   const result = await pool.query(
     'SELECT current_database() AS database, EXISTS(' +
     'SELECT 1 FROM public.enkyron_uat_guard WHERE marker = $1) AS verified',
-    [ENKYRON_UAT_MARKER]
+    [target.database === ENKYRON_ENK05_UAT_DATABASE
+      ? target.marker : ENKYRON_UAT_MARKER]
   );
   if (result.rows?.length !== 1
       || result.rows[0].database !== target.database

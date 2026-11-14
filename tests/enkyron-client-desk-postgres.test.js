@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import {createCompany} from '../desktop/enkyron-crm.mjs';
+import {linkTicketToCompany,ticketLinkedCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {recordTicketTriage} from '../desktop/enkyron-ticket-triage.mjs';
+import {recordTicketAction} from '../desktop/enkyron-ticket-actions.mjs';
 import {
-  createDeskTicket, assignDeskTicket, updateDeskTicketStatus,
+  createDeskTicket, assignDeskTicket, listDeskTickets, updateDeskTicketStatus,
   archiveDeskTicket
 } from '../desktop/enkyron-ticket-intake.mjs';
 
@@ -40,10 +44,62 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     assert.match(created.scope_text,/Telephone: 0000 0000/);
     await assignDeskTicket(pool,{ticket_id:intake.id,action:'self'},'ci-operator');
     assert.equal((await fetch()).assigned_to,'ci-operator');
+    // Server-side My Tickets filter may only use the actual OS principal
+    // supplied by the bridge, never an assignee injected by the UI.
+    const own=await listDeskTickets(pool,intake.ticket_number,'ci-operator',{mineOnly:true});
+    assert.ok(own.items.some(row=>row.id===intake.id && row.assigned_to==='ci-operator'));
+    const other=await listDeskTickets(pool,intake.ticket_number,'different-operator',{mineOnly:true});
+    assert.ok(!other.items.some(row=>row.id===intake.id));
 
-    const transitions=['scoping','in_progress','pending_review','resolved','closed'];
+
+    // ENK-05 integrated disposable-CI journey: real canonical company link,
+    // human triage and scheduled work in the same exact ticket.
+    const company=await createCompany(pool,{name:'CI Sample Company'},'ci-operator');
+    const association=await linkTicketToCompany(pool,{
+      company_id:company.id,ticket_id:intake.id,
+      ticket_client_name_at_review:'CI Sample Company',
+      review_note:'Operator checked the canonical company and exact source ticket ID before linking.',
+      reviewed:true
+    },'ci-operator');
+    assert.equal(association.ticket_id,intake.id);
+    assert.equal((await ticketLinkedCompany(pool,intake.id,'ci-operator')).link.company_id,company.id);
+    assert.equal((await ticketLinkedCompany(pool,intake.id,'not-the-operator')).link,null);
+    const triage=await recordTicketTriage(pool,{
+      ticket_id:intake.id,request_type:'support_request',
+      impact:'medium',urgency:'high',priority:'high',
+      expected_latest_id:null,confirmed:true,
+      review_note:'Human operator examined the synthetic request and assigned high priority.'
+    },'ci-operator');
+    assert.equal(triage.priority,'high');
+    const action=await recordTicketAction(pool,{
+      ticket_id:intake.id,action_id:null,expected_revision:null,
+      title:'Call customer to confirm outcome',
+      details:'Synthetic planning only, no external contact is performed.',
+      due_on:'2026-11-16',state:'todo',
+      rationale:'Schedule a human follow-up after the internal review.',
+      confirmed:true
+    },'ci-operator');
+    assert.equal(action.ticket_id,intake.id);
+    const prioritised=await listDeskTickets(pool,intake.ticket_number,'ci-operator',{mineOnly:true});
+    const queueRecord=prioritised.items.find(row=>row.id===intake.id);
+    assert.ok(queueRecord);
+    assert.equal(queueRecord.priority,'high');
+    assert.equal(queueRecord.next_action_title,'Call customer to confirm outcome');
+    assert.equal(new Date(queueRecord.next_due_on).toISOString().slice(0,10),'2026-11-16');
+
+    const transitions=['scoping','waiting','in_progress','pending_review','resolved','closed'];
+    let previous='new';
     for(const status of transitions) {
-      await updateDeskTicketStatus(pool,{ticket_id:intake.id,status});
+      const humanCompletion=['resolved','closed'].includes(status);
+      const input={ticket_id:intake.id,status};
+      if(humanCompletion)Object.assign(input,{
+        expected_status:previous,confirmed:true,
+        review_note:'CI human operator reviewed the completed synthetic support work and closure evidence.'
+      });
+      const saved=await updateDeskTicketStatus(pool,input,'ci-operator');
+      assert.equal(saved.from,previous);
+      if(humanCompletion)assert.match(saved.event_id,/^[0-9a-f-]{36}$/);
+      previous=status;
     }
     await assert.rejects(
       ()=>archiveDeskTicket(pool,{ticket_id:intake.id,reason:'short'},'ci-operator'),
@@ -52,6 +108,31 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     const closed=await fetch();
     assert.equal(closed.status,'closed');
     assert.equal(closed.archived_at,null);
+    // Reopening is a separate consequential human decision: bare status
+    // transition is denied under the same row lock and no event is added.
+    await assert.rejects(
+      ()=>updateDeskTicketStatus(pool,{
+        ticket_id:intake.id,status:'in_progress'
+      },'ci-operator'),/Reviewed ticket reopening/
+    );
+    const reopening=await updateDeskTicketStatus(pool,{
+      ticket_id:intake.id,status:'in_progress',expected_status:'closed',
+      confirmed:true,
+      review_note:'The operator verified a newly reported synthetic request and reopened this ticket for follow-up.'
+    },'ci-operator');
+    assert.equal(reopening.from,'closed');
+    assert.match(reopening.event_id,/^[0-9a-f-]{36}$/);
+    await updateDeskTicketStatus(pool,{ticket_id:intake.id,status:'pending_review'});
+    await updateDeskTicketStatus(pool,{
+      ticket_id:intake.id,status:'resolved',expected_status:'pending_review',
+      confirmed:true,
+      review_note:'Operator confirmed that the reopened synthetic follow-up was handled and the outcome checked.'
+    },'ci-operator');
+    await updateDeskTicketStatus(pool,{
+      ticket_id:intake.id,status:'closed',expected_status:'resolved',
+      confirmed:true,
+      review_note:'Reopened customer request is complete, independently checked and ready for closure.'
+    },'ci-operator');
     const archived=await archiveDeskTicket(pool,{
       ticket_id:intake.id,reason:'Synthetic closed ticket retained for the audit history'
     },'ci-operator');
@@ -66,7 +147,7 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
     )).rows;
     assert.equal(history.filter(x=>x.event_type==='created').length,1);
     assert.equal(history.filter(x=>x.event_type==='assigned').length,1);
-    assert.equal(history.filter(x=>x.event_type==='status_changed').length,5);
+    assert.equal(history.filter(x=>x.event_type==='status_changed').length,10);
     assert.equal(history.filter(x=>x.event_type==='archived').length,1);
     assert.ok(history.every(x=>x.actor==='ci-operator'));
     await assert.rejects(
@@ -77,6 +158,6 @@ test('real temporary PostgreSQL round-trip: phone intake, assignment, closure, a
       'SELECT COUNT(*)::int AS n FROM arl_workbench_ticket_events WHERE ticket_id=$1',
       [intake.id]
     )).rows[0].n;
-    assert.equal(retained,8);
+    assert.equal(retained,13);
   }finally{await pool.end();}
 });

@@ -1,6 +1,7 @@
 // ENKYRON Client Desk — local intake and ticket lifecycle.
 // The existing ARL ticket schema is authoritative. Intake never launches an assessment.
 import { randomUUID } from 'node:crypto';
+import { boundedSearch } from './enkyron-contract.mjs';
 
 export const TICKET_TRANSITIONS = Object.freeze({
   new: ['scoping', 'waiting'],
@@ -50,14 +51,108 @@ export function validateIntake(data) {
   return {title, client, source:data.source, scope};
 }
 
+const REVIEWED_COMPLETION = new Set(['resolved', 'closed']);
 export function validateStatusChange(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)
+      || Object.keys(data).some(key => ![
+        'ticket_id', 'status', 'expected_status', 'review_note', 'confirmed'
+      ].includes(key))
       || typeof data.ticket_id !== 'string' || !TICKET_ID.test(data.ticket_id)
       || typeof data.status !== 'string'
       || !Object.hasOwn(TICKET_TRANSITIONS, data.status)) {
     throw new Error('Invalid ticket status request');
   }
-  return {ticketId:data.ticket_id, status:data.status};
+  // A closed ticket may only return to work through the same human gate.
+  // Bare in_progress changes from other source states remain compatible;
+  // the transaction independently blocks unreviewed closed -> in_progress.
+  const proposedReopen=data.status==='in_progress' &&
+    data.expected_status==='closed';
+  if (!REVIEWED_COMPLETION.has(data.status) && !proposedReopen) {
+    return {ticketId:data.ticket_id, status:data.status};
+  }
+  // Resolution and closure are consequential human decisions. Do not accept
+  // stale, unassigned or unreviewed transitions via a bare IPC status string.
+  if (data.confirmed !== true
+      || typeof data.expected_status !== 'string'
+      || !Object.hasOwn(TICKET_TRANSITIONS, data.expected_status)
+      || !TICKET_TRANSITIONS[data.expected_status].includes(data.status)) {
+    throw new Error('Reviewed ticket resolution/closure requires expected status and confirmation');
+  }
+  const reviewNote=field(data.review_note,'completion rationale',500,true);
+  if (reviewNote.length<30) {
+    throw new Error('Ticket completion rationale must contain at least 30 characters');
+  }
+  return {ticketId:data.ticket_id, status:data.status,
+    expectedStatus:data.expected_status, reviewNote};
+}
+
+// Read-only, bounded Service Desk queue; a local assignment filter is an
+// operator convenience, not multi-user RBAC or a substitute for backend checks.
+export async function listDeskTickets(pool, search, actor, options={}) {
+  const query=boundedSearch(search);
+  const operator=field(actor,'local operator',120,true);
+  const includeArchived=options.includeArchived===true;
+  const mineOnly=options.mineOnly===true;
+  const tickets=(await pool.query(
+    `SELECT t.id,t.ticket_number,t.title,t.client_name,t.status,
+            t.archived_at,t.updated_at,t.assigned_to
+     FROM arl_workbench_tickets t
+     WHERE ($3::boolean OR t.archived_at IS NULL)
+       AND ($3::boolean OR NOT EXISTS (
+         SELECT 1 FROM enkyron_crm_opportunity_origin_corrections c
+         WHERE c.old_source_ticket_id=t.id
+       ))
+       AND (NOT $4::boolean OR t.assigned_to=$5)
+       AND ($1='' OR t.ticket_number ILIKE $2 OR t.title ILIKE $2
+            OR t.client_name ILIKE $2 OR t.target_reference ILIKE $2)
+     ORDER BY t.updated_at DESC,t.id LIMIT 101`,
+    [query,'%'+query+'%',includeArchived,mineOnly,operator]
+  )).rows;
+  const items=tickets.slice(0,100).map(row=>({
+    ...row,priority:null,next_due_on:null,next_action_title:null
+  }));
+  const ids=items.map(item=>item.id);
+  let priorityAvailable=true, actionsAvailable=true;
+  if(ids.length) {
+    try {
+      const priorities=(await pool.query(
+        `SELECT DISTINCT ON (ticket_id) ticket_id,priority
+         FROM enkyron_ticket_triage_reviews
+         WHERE ticket_id=ANY($1::text[])
+         ORDER BY ticket_id,recorded_at DESC,id DESC`,[ids]
+      )).rows;
+      const lookup=new Map(priorities.map(row=>[row.ticket_id,row.priority]));
+      for(const item of items)item.priority=lookup.get(item.id)??null;
+    }catch(error) {
+      if(error?.code!=='42P01')throw error;
+      priorityAvailable=false;
+    }
+    try {
+      const due=(await pool.query(
+        `SELECT DISTINCT ON (ticket_id) ticket_id,title,due_on
+         FROM (
+           SELECT DISTINCT ON (ticket_id,action_id)
+             ticket_id,action_id,title,due_on,state
+           FROM enkyron_ticket_action_versions
+           WHERE ticket_id=ANY($1::text[])
+           ORDER BY ticket_id,action_id,revision DESC
+         ) latest
+         WHERE state IN ('todo','blocked') AND due_on IS NOT NULL
+         ORDER BY ticket_id,due_on ASC,title`,[ids]
+      )).rows;
+      const lookup=new Map(due.map(row=>[row.ticket_id,row]));
+      for(const item of items) {
+        const next=lookup.get(item.id);
+        item.next_due_on=next?.due_on??null;
+        item.next_action_title=next?.title??null;
+      }
+    }catch(error) {
+      if(error?.code!=='42P01')throw error;
+      actionsAvailable=false;
+    }
+  }
+  return {items,more:tickets.length>100,priority_available:priorityAvailable,
+    actions_available:actionsAvailable,mine_only:mineOnly};
 }
 
 async function transaction(pool, work) {
@@ -106,11 +201,19 @@ export async function createDeskTicket(pool, data, actor, options={}) {
   });
 }
 
-export async function updateDeskTicketStatus(pool, data) {
-  const {ticketId,status} = validateStatusChange(data);
+export async function updateDeskTicketStatus(pool, data, actor=null, options={}) {
+  const {ticketId,status,expectedStatus,reviewNote}=validateStatusChange(data);
+  const completion=REVIEWED_COMPLETION.has(status);
+  const proposedReopen=status==='in_progress' && expectedStatus==='closed';
+  const principal=(completion || proposedReopen)?
+    field(actor,'local operator',120,true):null;
+  if ((completion || proposedReopen) &&
+      !/^[A-Za-z0-9_.-]{1,120}$/.test(principal)) {
+    throw new Error('Invalid local ticket operator');
+  }
   return transaction(pool, async client => {
     const current = (await client.query(
-      'SELECT status,assessor_name,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'SELECT status,assessor_name,assigned_to,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       [ticketId]
     )).rows[0];
     if (!current) throw new Error('Ticket not found');
@@ -119,6 +222,21 @@ export async function updateDeskTicketStatus(pool, data) {
         !TICKET_TRANSITIONS[current.status].includes(status)) {
       throw new Error('Status transition not allowed');
     }
+    const reopening=current.status==='closed' && status==='in_progress';
+    if (reopening && (!proposedReopen || data.confirmed!==true || !reviewNote)) {
+      throw new Error('Reviewed ticket reopening requires expected closed status and human confirmation');
+    }
+    const reviewed=completion || reopening;
+    if (reviewed && expectedStatus!==current.status) {
+      throw new Error('Ticket changed; reopen and review before completing');
+    }
+    const operator=reviewed?(principal || field(actor,'local operator',120,true)):null;
+    if (reviewed && current.assigned_to!==operator) {
+      throw new Error('Assign this ticket to your local operator before completion');
+    }
+    const eventId=(options.uuid||randomUUID)();
+    const detail=current.status+' -> '+status+
+      (reviewed?'\\nHuman '+(reopening?'reopen':'completion')+' review: '+reviewNote:'');
     await client.query(
       'UPDATE arl_workbench_tickets SET status=$1,updated_at=NOW() WHERE id=$2',
       [status,ticketId]
@@ -126,9 +244,10 @@ export async function updateDeskTicketStatus(pool, data) {
     await client.query(
       'INSERT INTO arl_workbench_ticket_events ' +
       "(id,ticket_id,event_type,detail,actor) VALUES ($1,$2,'status_changed',$3,$4)",
-      [randomUUID(),ticketId,current.status+' -> '+status,current.assessor_name]
+      [eventId,ticketId,detail,reviewed?operator:current.assessor_name]
     );
-    return {ticket_id:ticketId, from:current.status, status};
+    return {ticket_id:ticketId, from:current.status, status,
+      ...(reviewed?{event_id:eventId}: {})};
   });
 }
 
