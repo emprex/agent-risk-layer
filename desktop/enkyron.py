@@ -2629,13 +2629,17 @@ class EnkyronWindow(QMainWindow):
             callback=received)
 
     def set_local_mail_read(self, mailbox, thread_id, unread):
-        """Persist operator-selected unread status in NEMORYTH only."""
+        """Persist confirmed read status in NEMORYTH; keep reader/draft intact."""
         def received(data, error):
-            if error or not isinstance(data, dict):
+            if (error or not isinstance(data, dict)
+                    or data.get("unread") is not bool(unread)):
                 QMessageBox.warning(
-                    self, "Mail status", "Could not change the saved read status.")
+                    self, "Mail status", "Could not verify the saved read status.")
                 return
-            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            # The exact server result is authoritative. Never redraw the folder
+            # after reading: the operator may already be composing a reply.
+            self.mail_inbox.apply_local_read_status(
+                mailbox, thread_id, bool(unread))
         self.bridge.call("mail-local-read",
             payload={"mailbox":mailbox,"thread_id":thread_id,
                      "unread":bool(unread)},callback=received)

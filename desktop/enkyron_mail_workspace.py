@@ -1401,4 +1401,40 @@ class MailInboxView(QWidget):
         self.ticket_link_button.setVisible(
             self.local_mode and bool(messages)
             and self.selected_folder not in ("sent", "drafts", "spam", "trash"))
+        # Opening a successfully rendered saved conversation marks it read.
+        # Never mark unread items read on a failed/empty load or stale selection.
+        if self.local_mode and messages and any(
+            isinstance(record, dict)
+            and record.get("id") == thread_id
+            and record.get("mailbox") == mailbox
+            and record.get("unread") is True
+            for record in self.items
+        ):
+            self.localReadRequested.emit(mailbox, thread_id, False)
         return True
+
+    def apply_local_read_status(self, mailbox, thread_id, unread):
+        """Apply a confirmed database readback without losing the live reader.
+
+        Avoid reloading the folder: that would close a selected conversation
+        or discard text being typed in the unsent inline reply editor.
+        """
+        if not self.local_mode or not isinstance(unread, bool):
+            return False
+        for index in range(self.thread_list.count()):
+            entry = self.thread_list.item(index)
+            if entry.data(Qt.ItemDataRole.UserRole) != (mailbox, thread_id):
+                continue
+            for record in self.items:
+                if (isinstance(record, dict) and record.get("id") == thread_id
+                        and record.get("mailbox") == mailbox):
+                    record["unread"] = unread
+            label = entry.text()
+            star = "★ " if label.startswith("★ ") else ""
+            body = label[len(star):].removeprefix("● ")
+            entry.setText(star + ("● " if unread else "") + body)
+            font = QFont(entry.font())
+            font.setBold(unread)
+            entry.setFont(font)
+            return True
+        return False
