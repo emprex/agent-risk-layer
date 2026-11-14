@@ -2809,6 +2809,187 @@ class EnkyronWindow(QMainWindow):
             payload={"mailbox": mailbox, "thread_id": thread_id},
             callback=received)
 
+    def open_mail_ticket_link(self, mailbox, thread_id):
+        """Review and link one existing exact ticket; no automatic identity matching."""
+        if (mailbox != self.mail_inbox.current_thread_mailbox
+                or thread_id != self.mail_inbox.current_thread_id
+                or self.mail_inbox.selected_folder in ("spam", "trash", "sent", "drafts")
+                or not self.mail_inbox.ticket_link_button.isEnabled()):
+            return
+        previous = getattr(self, "mail_ticket_link_dialog", None)
+        if previous is not None and previous.isVisible():
+            previous.raise_()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Link Mail to existing Ticket")
+        dialog.setMinimumWidth(680)
+        layout = QVBoxLayout(dialog)
+        instruction = QLabel(
+            "Choose an existing Client Desk ticket. Review the ticket number and "
+            "client before linking. Email addresses do not establish identity. "
+            "No email, ticket, assessment or provider operation is created.")
+        instruction.setWordWrap(True)
+        instruction.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(instruction)
+        existing = QLabel("Checking linked tickets…")
+        existing.setTextFormat(Qt.TextFormat.PlainText)
+        existing.setWordWrap(True)
+        layout.addWidget(existing)
+        search_bar = QHBoxLayout()
+        search = QLineEdit()
+        search.setObjectName("enkyronMailTicketSearch")
+        search.setMaxLength(100)
+        search.setPlaceholderText("Search exact ticket number, title or client…")
+        search_bar.addWidget(search, 1)
+        find = QPushButton("Find tickets")
+        find.setObjectName("enkyronMailTicketFind")
+        search_bar.addWidget(find)
+        layout.addLayout(search_bar)
+        select = QComboBox()
+        select.setObjectName("enkyronMailTicketChoice")
+        select.addItem("Choose an existing ticket…", None)
+        layout.addWidget(select)
+        note = QPlainTextEdit()
+        note.setObjectName("enkyronMailTicketReason")
+        note.setPlaceholderText("Why does this conversation belong to this ticket? (30–1000 characters)")
+        note.setMaximumHeight(100)
+        layout.addWidget(note)
+        checked = QCheckBox(
+            "I reviewed the selected ticket and approve this exact association.")
+        checked.setObjectName("enkyronMailTicketConfirm")
+        layout.addWidget(checked)
+        notice = QLabel("No ticket selected. No record changed.")
+        notice.setWordWrap(True)
+        notice.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(notice)
+        actions = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        actions.addWidget(cancel)
+        actions.addStretch()
+        save = QPushButton("Link ticket")
+        save.setObjectName("enkyronMailTicketSubmit")
+        save.setEnabled(False)
+        actions.addWidget(save)
+        layout.addLayout(actions)
+        self.mail_ticket_link_dialog = dialog
+        state = {"seq": 0, "tickets": {}, "ready": False, "saving": False}
+
+        def enable_save():
+            save.setEnabled(
+                state["ready"] and not state["saving"]
+                and select.currentData() in state["tickets"]
+                and checked.isChecked()
+                and 30 <= len(note.toPlainText().strip()) <= 1000)
+        select.currentIndexChanged.connect(enable_save)
+        checked.toggled.connect(enable_save)
+        note.textChanged.connect(enable_save)
+
+        def read_existing():
+            def received(data, error):
+                if not dialog.isVisible():
+                    return
+                if (error or not isinstance(data, dict)
+                        or not data.get("available")
+                        or not isinstance(data.get("items"), list)):
+                    state["ready"] = False
+                    find.setEnabled(False)
+                    existing.setText(
+                        "Ticket linking requires reviewed schema 116. "
+                        "No association was changed.")
+                    enable_save()
+                    return
+                state["ready"] = True
+                numbers = [str(item.get("ticket_number") or "")[:70]
+                           for item in data["items"] if isinstance(item, dict)]
+                existing.setText(
+                    "Already linked: " + ", ".join(numbers[:10]) if numbers
+                    else "No linked tickets.")
+                enable_save()
+            self.bridge.call("mail-local-ticket-links", payload={
+                "mailbox": mailbox, "thread_id": thread_id}, callback=received)
+
+        def lookup():
+            term = search.text().strip()
+            if not state["ready"] or len(term) < 2:
+                notice.setText("Enter at least two characters to search existing tickets.")
+                return
+            state["seq"] += 1
+            generation = state["seq"]
+            state["tickets"] = {}
+            select.clear()
+            select.addItem("Searching…", None)
+            enable_save()
+
+            def found(data, error):
+                if (not dialog.isVisible() or generation != state["seq"]
+                        or term != search.text().strip()):
+                    return
+                select.clear()
+                select.addItem("Choose an existing ticket…", None)
+                items = data.get("items") if isinstance(data, dict) else None
+                if error or not isinstance(items, list):
+                    notice.setText("Ticket search unavailable; nothing changed.")
+                    return
+                for item in items[:100]:
+                    if not isinstance(item, dict) or item.get("archived_at"):
+                        continue
+                    tid = item.get("id")
+                    number = str(item.get("ticket_number") or "").strip()
+                    client = str(item.get("client_name") or "").strip()
+                    if not isinstance(tid, str) or len(tid) != 36 or not number or not client:
+                        continue
+                    state["tickets"][tid] = (number, client)
+                    select.addItem("{} · {}".format(number[:70], client[:80]), tid)
+                notice.setText("{} matching existing ticket(s).".format(
+                    len(state["tickets"])))
+                enable_save()
+            self.bridge.call("tickets", term, callback=found)
+        search.returnPressed.connect(lookup)
+        find.clicked.connect(lookup)
+
+        def submit():
+            ticket_id = select.currentData()
+            snapshot = state["tickets"].get(ticket_id)
+            rationale = note.toPlainText().strip()
+            if (not state["ready"] or state["saving"] or not snapshot
+                    or not checked.isChecked() or not 30 <= len(rationale) <= 1000
+                    or mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            number, client = snapshot
+            confirm = QMessageBox.question(
+                dialog, "Confirm Mail → Ticket link",
+                "Link this conversation to ticket {} for {}?\n\nReason: {}\n\n"
+                "No email will be sent and no ticket will be created.".format(
+                    number, client, rationale),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+            state["saving"] = True
+            enable_save()
+
+            def stored(data, error):
+                if not dialog.isVisible():
+                    return
+                if (error or not isinstance(data, dict) or data.get("linked") is not True
+                        or data.get("ticket_id") != ticket_id
+                        or data.get("thread_id") != thread_id):
+                    state["ready"] = False
+                    notice.setText("Link outcome uncertain. Re-read the saved links before retrying.")
+                    read_existing()
+                    return
+                dialog.accept()
+                self.load_mail_ticket_links(mailbox, thread_id)
+            self.bridge.call("mail-local-ticket-link", payload={
+                "mailbox": mailbox, "thread_id": thread_id, "ticket_id": ticket_id,
+                "ticket_number_at_review": number, "client_name_at_review": client,
+                "review_note": rationale, "confirmed": True}, callback=stored)
+        save.clicked.connect(submit)
+        dialog.open()
+        read_existing()
+
     def open_mail_company_link(self, mailbox, thread_id):
         """E04-04: operator-selected existing company, not inferred client."""
         if (mailbox != self.mail_inbox.current_thread_mailbox
