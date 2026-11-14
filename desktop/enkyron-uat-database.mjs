@@ -18,7 +18,7 @@ const ENK05_COMMANDS = new Set([
   'crm-ticket-company', 'crm-link-ticket'
 ]);
 const UAT_COMMANDS = new Set([
-  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline',
+  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page',
   'crm-companies', 'crm-contacts',
   'crm-company-duplicates', 'crm-contact-duplicates',
   'crm-create-company', 'crm-create-contact',
@@ -39,7 +39,7 @@ const UAT_COMMANDS = new Set([
 // It is active ONLY when paired with the exact synthetic DB and marker.
 // An allowlist (not a negative list) prevents unknown operations from slipping in.
 const UX_PREVIEW_READ_COMMANDS = new Set([
-  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline',
+  'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page',
   'crm-companies', 'crm-contacts', 'crm-company-dossier',
   'crm-company-history', 'crm-opportunities', 'crm-activity-timeline',
   'crm-company-followups', 'crm-company-followups-upcoming',
