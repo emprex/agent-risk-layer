@@ -923,6 +923,13 @@ class MailNativeUXSmoke(unittest.TestCase):
             window = EnkyronWindow()
             mail_widget = window.mail_page
             calendar_widget = window.calendar_view
+            # Mail is a main navigation module, not a duplicate visible CRM tab.
+            self.assertEqual(window.crm_tabs.tabText(3), "Mail")
+            self.assertFalse(window.crm_tabs.tabBar().isTabVisible(3))
+            window.navigation.setCurrentRow(3)
+            self.assertIs(window.crm_tabs.currentWidget(), mail_widget)
+            window.navigation.setCurrentRow(2)
+            self.assertFalse(window.crm_tabs.tabBar().isTabVisible(3))
             window.toggle_mail_window()
             window.toggle_calendar_window()
             self.assertIsNotNone(window.mail_detached_window)
@@ -943,6 +950,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             window.mail_detached_window.close()
             self.assertIsNone(window.mail_detached_window)
             self.assertIs(window.crm_tabs.widget(3), mail_widget)
+            self.assertFalse(window.crm_tabs.tabBar().isTabVisible(3))
             window.calendar_detached_window.close()
             self.assertIsNone(window.calendar_detached_window)
             self.assertIs(window.pages.widget(3), calendar_widget)
