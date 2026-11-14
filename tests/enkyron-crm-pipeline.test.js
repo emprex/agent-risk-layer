@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 import {PIPELINE_LANES,pipelineLane,getSalesPipeline,getSalesPipelinePage,validatePipelinePageRequest}
   from '../desktop/enkyron-crm-pipeline.mjs';
 const id='11111111-2222-4333-8444-555555555555';
@@ -125,4 +126,17 @@ test('pipeline paging validates filter sort size and rejects bad scopes',async()
     const e=new Error('missing');e.code='42P01';throw e;
   }},{lane:'all',page:1,search:'',sort:'updated'},'emprex');
   assert.equal(unavailable.available,false);
+});
+
+test('desktop bridge accepts paginated pipeline command and rejects invalid input before DB access',()=>{
+  const child=spawnSync(process.execPath,
+    ['desktop/enkyron-bridge.mjs','crm-sales-pipeline-page'],{
+      input:'{"page":0}\n',encoding:'utf8',timeout:10000
+    });
+  assert.equal(child.error,undefined);
+  assert.equal(child.status,1);
+  const response=JSON.parse(child.stdout.trim());
+  assert.equal(response.ok,false);
+  assert.match(response.error,/CRM invalid pipeline page/);
+  assert.doesNotMatch(response.error,/Unsupported desktop operation/);
 });
