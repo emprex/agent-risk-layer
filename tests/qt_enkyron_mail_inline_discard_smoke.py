@@ -123,6 +123,27 @@ class InlineReplyDiscardSmoke(unittest.TestCase):
         self.assertEqual(signals,["support"])
         self.assertFalse(self.ui.reply_editor.isVisible())
 
+    def test_manual_sync_and_server_search_require_explicit_discard(self):
+        refreshed=[]
+        searched=[]
+        self.ui.refreshRequested.connect(refreshed.append)
+        self.ui.localSearchRequested.connect(searched.append)
+        with patch.object(QMessageBox,"question",
+                          return_value=QMessageBox.StandardButton.No):
+            self.ui._refresh()
+            self.ui.search.setText("Client")
+            self.ui._search_saved_mail()
+        self.assertEqual(refreshed,[])
+        self.assertEqual(searched,[])
+        self.assertTrue(self.ui.reply_editor.isVisible())
+        self.assertEqual(self.ui.reply_body.toPlainText(),
+                         "This unsent reply is important.")
+        with patch.object(QMessageBox,"question",
+                          return_value=QMessageBox.StandardButton.Yes):
+            self.ui._search_saved_mail()
+        self.assertEqual(searched,["Client"])
+        self.assertFalse(self.ui.reply_editor.isVisible())
+
     def test_repeat_reply_does_not_clear_existing_text(self):
         self.assertTrue(self.ui.show_reply_editor(
             "direction",THREAD_1,"customer@example.invalid"))
