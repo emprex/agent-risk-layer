@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ENKYRON EK">
+  <defs>
+    <radialGradient id="navy" cx="0.23" cy="0.07" r="1.1">
+      <stop offset="0" stop-color="#145c78"/>
+      <stop offset="0.46" stop-color="#073855"/>
+      <stop offset="1" stop-color="#04243f"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10c4ce"/>
+      <stop offset="0.45" stop-color="#07788e"/>
+      <stop offset="1" stop-color="#0b768e"/>
+    </linearGradient>
+  </defs>
+  <rect x="29" y="29" width="454" height="454" rx="91" fill="url(#navy)" stroke="url(#rim)" stroke-width="5"/>
+  <g fill="#fff">
+    <path d="M116 177H239V207H155V240H225V270H155V305H239V336H116Z"/>
+    <path d="M263 177H300V241L361 177H409L340 251L409 336H363L312 273L300 286V336H263Z"/>
+  </g>
+</svg>
