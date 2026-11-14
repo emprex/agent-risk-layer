@@ -790,6 +790,11 @@ class EnkyronWindow(QMainWindow):
         self.back_to_tickets = QPushButton("← Back to tickets")
         self.back_to_tickets.clicked.connect(self.show_ticket_index)
         detail_nav.addWidget(self.back_to_tickets)
+        self.ticket_related_mail = QPushButton("Linked Mail…")
+        self.ticket_related_mail.setObjectName("enkyronTicketLinkedMail")
+        self.ticket_related_mail.setEnabled(False)
+        self.ticket_related_mail.clicked.connect(self.open_ticket_related_mail)
+        detail_nav.addWidget(self.ticket_related_mail)
         detail_nav.addStretch()
         body.addLayout(detail_nav)
         self.title = QLabel("Select a customer ticket")
@@ -4638,6 +4643,53 @@ class EnkyronWindow(QMainWindow):
         self.ticket_list.blockSignals(False)
         self.current_id = None
         self.current_ticket = None
+        self.ticket_related_mail.setEnabled(False)
+
+    def open_ticket_related_mail(self):
+        """Display exact Mail-to-Ticket associations; never alter provider data."""
+        ticket_id = self.current_id
+        if not ticket_id:
+            return
+        self.ticket_related_mail.setEnabled(False)
+
+        def received(data, error):
+            if self.current_id != ticket_id:
+                return
+            self.ticket_related_mail.setEnabled(True)
+            if error or not isinstance(data, dict) or not data.get("available"):
+                QMessageBox.information(
+                    self, "Mail links unavailable",
+                    "Mail-to-ticket associations are not installed or cannot be read. "
+                    "No messages or tickets were changed.")
+                return
+            records = data.get("items")
+            if not isinstance(records, list):
+                return
+            dialog = QDialog(self)
+            dialog.setWindowTitle("ENKYRON · Mail linked to ticket")
+            dialog.resize(770, 440)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(section_title("LINKED MAIL CONVERSATIONS · READ ONLY"))
+            view = QPlainTextEdit()
+            view.setReadOnly(True)
+            view.setPlainText("\\n\\n".join(
+                "{} · {}\\n{}\\nLinked by {} at {}\\nThread {}".format(
+                    item.get("mailbox_key") or "",
+                    item.get("last_message_at") or "",
+                    item.get("subject") or "(No subject)",
+                    item.get("linked_by") or "",
+                    display_date(item.get("linked_at")),
+                    item.get("thread_id") or "")
+                for item in records if isinstance(item, dict)
+            ) or "No Mail conversations linked to this ticket.")
+            layout.addWidget(view)
+            close = QPushButton("Close")
+            close.clicked.connect(dialog.accept)
+            layout.addWidget(close)
+            dialog.exec()
+
+        self.bridge.call("mail-ticket-conversations",
+            payload={"ticket_id": ticket_id}, callback=received)
 
     def load_companies(self):
         self.crm_company_seq += 1
@@ -18386,6 +18438,7 @@ class EnkyronWindow(QMainWindow):
         self.ticket_views.setCurrentIndex(1)
         self.current_id = ticket_id
         self.current_ticket = None
+        self.ticket_related_mail.setEnabled(True)
         # Restore the control for this ticket, never the previous client's.
         self.record_control.blockSignals(True)
         self.record_control.setValue(
