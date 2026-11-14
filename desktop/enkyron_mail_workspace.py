@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
     QStackedWidget, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QInputDialog,
-    QTextBrowser,
+    QTextBrowser, QMessageBox,
 )
 
 
@@ -210,6 +210,7 @@ class MailInboxView(QWidget):
         self.local_folders = []
         self.local_labels = []
         self._full_text_options = []
+        self._accepted_mailbox = None
         self._build()
 
     def _build(self):
@@ -449,7 +450,7 @@ class MailInboxView(QWidget):
         reply_layout.addWidget(self.reply_body)
         reply_actions = QHBoxLayout()
         cancel = QPushButton("Cancel")
-        cancel.clicked.connect(self.hide_reply_editor)
+        cancel.clicked.connect(self.cancel_reply_editor)
         reply_actions.addWidget(cancel)
         reply_actions.addStretch()
         self.reply_send = QPushButton("Send reply…")
@@ -600,12 +601,29 @@ class MailInboxView(QWidget):
     def select_local_folder(self, item, _column):
         self.activate_local_folder(item.data(0, Qt.ItemDataRole.UserRole))
 
+    def _restore_local_folder_selection(self):
+        if not self.local_mode:
+            return
+        for row in range(self.folder_tree.topLevelItemCount()):
+            item = self.folder_tree.topLevelItem(row)
+            if item.data(0, Qt.ItemDataRole.UserRole) == self._folder:
+                self.folder_tree.blockSignals(True)
+                self.folder_tree.setCurrentItem(item)
+                self.folder_tree.blockSignals(False)
+                break
+
     def activate_local_folder(self, folder):
         """Navigate with one folder tree, with no secondary Sent/Drafts pages."""
         if not self.local_mode or not isinstance(folder, str):
             return
         keys = {f.get("key") for f in self.local_folders if isinstance(f, dict)}
-        if folder not in keys or folder == self._folder:
+        if folder not in keys:
+            self._restore_local_folder_selection()
+            return
+        if folder == self._folder:
+            return
+        if not self._confirm_inline_reply_discard():
+            self._restore_local_folder_selection()
             return
         self._folder = folder
         for row in range(self.folder_tree.topLevelItemCount()):
@@ -735,6 +753,7 @@ class MailInboxView(QWidget):
         idx = self.account_picker.findData(previous)
         self.account_picker.setCurrentIndex(idx if idx >= 0 else 0)
         self.account_picker.blockSignals(False)
+        self._accepted_mailbox = self.selected_mailbox
         self._clear_threads("No messages yet.")
 
     def set_connection_state(self, state, explanation=None):
@@ -799,6 +818,14 @@ class MailInboxView(QWidget):
             self._show_empty("Inbox is empty", explanation)
 
     def _account_changed(self, _index):
+        if (self.selected_mailbox != self._accepted_mailbox
+                and not self._confirm_inline_reply_discard()):
+            index = self.account_picker.findData(self._accepted_mailbox)
+            self.account_picker.blockSignals(True)
+            self.account_picker.setCurrentIndex(index)
+            self.account_picker.blockSignals(False)
+            return
+        self._accepted_mailbox = self.selected_mailbox
         self._clear_threads("No messages yet.")
         if self.selected_mailbox is not None:
             self.mailboxChanged.emit(self.selected_mailbox)
@@ -806,6 +833,12 @@ class MailInboxView(QWidget):
     def _folder_changed(self, _index):
         folder = self.selected_folder
         if folder not in ('inbox','archive','spam','trash'):
+            return
+        if folder != self._folder and not self._confirm_inline_reply_discard():
+            old = self.folder_picker.findData(self._folder)
+            self.folder_picker.blockSignals(True)
+            self.folder_picker.setCurrentIndex(old)
+            self.folder_picker.blockSignals(False)
             return
         self._folder = folder
         self._clear_threads('No conversations in this folder.')
@@ -1067,6 +1100,17 @@ class MailInboxView(QWidget):
             self.mail_stack.setCurrentIndex(1)
 
     def _selected(self, current, _previous):
+        if (current is not _previous and
+                not self._confirm_inline_reply_discard()):
+            # Qt reports selection AFTER moving to the new item. Restore the
+            # previous reader without emitting a second selection event.
+            self.thread_list.blockSignals(True)
+            if _previous is not None:
+                self.thread_list.setCurrentItem(_previous)
+            else:
+                self.thread_list.setCurrentRow(-1)
+            self.thread_list.blockSignals(False)
+            return
         self.hide_reply_editor()
         self.reply_button.hide()
         self.forward_button.hide()
@@ -1238,6 +1282,11 @@ class MailInboxView(QWidget):
                 or thread_id != self.current_thread_id
                 or not isinstance(recipient, str) or "@" not in recipient):
             return False
+        if self.reply_editor.isVisible():
+            # Re-selecting Reply on the SAME conversation cannot erase
+            # something the operator has already typed.
+            self.reply_body.setFocus()
+            return True
         self.reply_target.setText("Reply to: " + recipient)
         self.reply_body.clear()
         self.reply_send.setText("Send reply…")
@@ -1254,6 +1303,9 @@ class MailInboxView(QWidget):
                 or reference != ("local-sent", index)
                 or not isinstance(recipient, str) or "@" not in recipient):
             return False
+        if self.reply_editor.isVisible():
+            self.reply_body.setFocus()
+            return True
         self.reply_target.setText("New follow-up to: " + recipient)
         self.reply_body.clear()
         self.reply_send.setText("Send follow-up…")
@@ -1262,8 +1314,39 @@ class MailInboxView(QWidget):
         self.reply_body.setFocus()
         return True
 
+    def _confirm_inline_reply_discard(self):
+        """Protect inline replies and sent follow-ups before USER navigation.
+
+        Inline text is not yet a saved PostgreSQL draft. A successful send
+        uses hide_reply_editor() directly after the backend outcome is known.
+        """
+        if not self.reply_editor.isVisible():
+            return True
+        if not self.reply_send.isEnabled():
+            QMessageBox.information(
+                self, "Mail operation in progress",
+                "Wait for the current reply outcome before changing conversations."
+            )
+            return False
+        if not self.reply_body.toPlainText().strip():
+            return True
+        decision = QMessageBox.question(
+            self, "Discard unsent reply?",
+            "This reply has not been saved or sent.\n\n"
+            "Discard it and continue? Choosing No keeps the text here.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        return decision == QMessageBox.StandardButton.Yes
+
+    def cancel_reply_editor(self):
+        if self._confirm_inline_reply_discard():
+            self.hide_reply_editor()
+
     def hide_reply_editor(self):
+        """Only call directly after an intentional discard or confirmed send."""
         self.reply_editor.hide()
+        self.reply_body.clear()
         self.reply_send.setEnabled(True)
         self.reply_target.clear()
 
