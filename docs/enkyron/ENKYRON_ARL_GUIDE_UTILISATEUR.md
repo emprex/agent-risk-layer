@@ -60,6 +60,8 @@ Disposition actuelle :
 
 **New email** : point d'entrée de composition. S'assurer de la bonne boîte émettrice, du vrai destinataire, de l'objet et du texte. Un brouillon enregistré n'est pas un message envoyé. L'état `accepted` côté fournisseur ne prouve pas une remise dans la boîte distante.
 
+**Protection contre la perte d'un brouillon — développement M02, pas encore recetté sur Debian :** si tu as saisi ou modifié l'adresse, l'objet, le message, la boîte émettrice ou la sélection de contact, le bouton **Close without saving** et la croix de la fenêtre doivent demander confirmation avant de jeter le travail. Choisir **No** conserve l'éditeur ouvert avec son texte. Pendant un enregistrement/envoi en cours, la fermeture est bloquée ; elle ne redevient possible qu'après vérification de l'opération. **Save draft** enregistre localement, n'envoie rien et peut fermer l'éditeur sans avertissement de perte. Ce paragraphe décrit le comportement prévu par le nouveau code ; marquer **PASS Debian** seulement après test utilisateur. Les réponses en ligne (Reply) ont encore leur propre parcours à recetter.
+
 **Link to CRM…** : propose un lien explicitement revu vers une société existante. Une adresse expéditeur ne confirme ni le client ni son consentement. L'association doit être vérifiée humainement ; le parcours complet reste à recetter.
 
 **Link to Ticket…** : fonction développée dans la PR #601 et testée en CI, **pas encore activée sur `arl_local` au 14/11** : le schéma 116 requiert préflight, accord explicite, sauvegarde et recette locale. Ne pas la considérer comme un bouton disponible dans la version Debian courante.
