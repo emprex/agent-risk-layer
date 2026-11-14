@@ -145,7 +145,7 @@ def make_text_area(readonly=True):
 
 
 class GuardedCompanyWindow(QDialog):
-    """Only the independent company dossier asks before discarding edits."""
+    """Guard unsaved edits in independent company dossiers and mail drafts."""
 
     def __init__(self, parent=None, flags=Qt.WindowType.Widget):
         super().__init__(parent, flags)
@@ -16126,6 +16126,42 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
+    def confirm_mail_draft_close(self):
+        """Prevent unintentional loss of a composed message (Close or window X)."""
+        dialog = self.crm_draft_dialog
+        ctx = self.crm_draft_context or {}
+        if dialog is None or not dialog.isVisible():
+            return True
+        if ctx.get("mail_state") in ("external_send_reported", "provider_submitted"):
+            return True
+        # While saving or sending, even a second close click must not hide the
+        # pending outcome. The guard is bypassed only after a confirmed result.
+        if not self.crm_mail_save.isEnabled() or not self.crm_mail_send.isEnabled():
+            QMessageBox.information(
+                dialog, "Email operation in progress",
+                "The message is being saved or submitted. Review the outcome "
+                "before closing the editor."
+            )
+            return False
+        changed = (
+            self.crm_mail_to.text().strip() != ctx.get("loaded_to", "")
+            or self.crm_mail_subject.text().strip() != ctx.get("loaded_subject", "")
+            or self.crm_mail_body.toPlainText().strip() != ctx.get("loaded_body", "")
+            or self.crm_mail_from.currentData() != ctx.get("loaded_mailbox")
+            or ctx.get("recipient_contact_id") is not None
+            or ctx.get("company_id") != ctx.get("original_company_id")
+        )
+        if not changed:
+            return True
+        answer = QMessageBox.question(
+            dialog, "Discard unsaved email?",
+            "This message contains unsaved changes.\n\n"
+            "Discard them and close the editor? The email has not been sent.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
     def show_mail_draft_dialog(self, draft):
         existing = bool(draft.get("id"))
         state = draft.get("mail_state", "draft")
@@ -16138,8 +16174,10 @@ class EnkyronWindow(QMainWindow):
             "ENKYRON · Edit draft" if existing else "ENKYRON · New draft"
         )
         dialog = make_workspace_window(
-            title, size=(770, 620), minimum=(610, 500)
+            title, size=(770, 620), minimum=(610, 500),
+            dialog_type=GuardedCompanyWindow
         )
+        dialog.close_guard = self.confirm_mail_draft_close
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
             "MESSAGE SUBMITTED THROUGH RESEND" if submitted else
@@ -16547,6 +16585,7 @@ class EnkyronWindow(QMainWindow):
                 })
                 self.submit_mail_send(data["id"],data["revision"])
                 return
+            dialog._close_approved = True  # exact draft revision saved
             dialog.accept()
             if (context.get("dossier_company_id")
                     and self.crm_dossier_dialog
@@ -16623,6 +16662,7 @@ class EnkyronWindow(QMainWindow):
             QMessageBox.warning(dialog,"Email not confirmed",
                 str(error or "Check local drafts and Resend before retrying."))
             return
+        dialog._close_approved = True  # provider submission response recorded
         dialog.accept()
         self.load_mail_drafts()
         # The submitted draft leaves Mail → Drafts immediately. The original
