@@ -102,7 +102,7 @@ export function validatePipelinePageRequest(input){
     throw new Error('CRM invalid pipeline lane');
   if(!Number.isSafeInteger(page)||page<1||page>10000)
     throw new Error('CRM invalid pipeline page');
-  if(typeof search!=='string'||search.length>100||/[\\x00-\\x1f\\x7f]/.test(search))
+  if(typeof search!=='string'||search.length>100||/[\x00-\x1f\x7f]/.test(search))
     throw new Error('CRM invalid pipeline search');
   if(!Object.hasOwn(PIPELINE_PAGE_SORT,sort))
     throw new Error('CRM invalid pipeline sort');
