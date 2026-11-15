@@ -1,1 +1,0 @@
-No semantic changes: snapshots, applicability, tests, evidence trust, findings, remediation, retest, approvals, Runtime and deployment-decision derivation are unchanged by the containment.

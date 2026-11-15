@@ -1,1 +1,0 @@
-Acceptance: after deploy, the Northstar focused Test page must render and remain responsive on hard refresh. Existing saved plan remains planned; no new test result, finding or deployment decision is created by the recovery.
