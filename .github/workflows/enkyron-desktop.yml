@@ -2012,7 +2012,9 @@ jobs:
           window.open_followup_update()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.isEnabled()
-          assert window.crm_followup_probability.value() == -1
+          assert not window.crm_followup_probability_toggle.isChecked()
+          assert not window.crm_followup_probability.isEnabled()
+          window.crm_followup_probability_toggle.setChecked(True)
           window.crm_followup_probability.setValue(35)
           assert window.crm_followup_has_date.isChecked()
           window.crm_followup_stage.setCurrentIndex(
