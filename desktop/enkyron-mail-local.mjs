@@ -571,6 +571,8 @@ export async function fetchAndCacheThread(pool,actor,input,{
 export async function moveLocalThread(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
   const target=requireFolderKey(input?.folder);
+  if(target==='sent'||target==='drafts'||target==='purged')
+    throw Error('Inbound mail cannot move into Sent, Drafts or a hidden folder');
   return withTransaction(pool,async c=>{
     // Serialize moves with empty-folder deletion so mail cannot be left
     // referring to a folder concurrently removed by the operator.
