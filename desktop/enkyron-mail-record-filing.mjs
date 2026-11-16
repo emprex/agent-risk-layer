@@ -27,10 +27,11 @@ export async function moveSavedMailRecord(pool,actor,input){
    return {moved:true,folder:req.to,draft_id:req.draft_id,provider_unchanged:true};
  });
 }
-export async function listTrashedSavedMail(pool,actor,input={}){
- const key=actorKey(actor),mailbox=input.mailbox??'all';
+export async function listFiledSavedMail(pool,actor,input={}){
+ const key=actorKey(actor),mailbox=input.mailbox??'all',selected=input.folder;
  if(!['all','direction','support'].includes(mailbox))throw Error('Invalid Mail mailbox');
- const rows=(await pool.query('SELECT d.id AS draft_id,d.mailbox_key,d.recipient_email,d.subject,d.updated_at,CASE WHEN EXISTS (SELECT 1 FROM enkyron_mail_send_attempts a WHERE a.workspace_key=d.workspace_key AND a.draft_id=d.id) OR EXISTS (SELECT 1 FROM enkyron_crm_mail_manual_sends s WHERE s.workspace_key=d.workspace_key AND s.draft_id=d.id) THEN \'sent\' ELSE \'drafts\' END AS original_kind FROM enkyron_mail_record_filing f JOIN enkyron_crm_mail_drafts d ON d.workspace_key=f.workspace_key AND d.id=f.draft_id WHERE f.workspace_key=$1 AND f.folder_key=\'trash\' AND ($2=\'all\' OR d.mailbox_key=$2) ORDER BY f.updated_at DESC LIMIT 101',[key,mailbox])).rows;
+ if(!['archive','spam','trash'].includes(selected))throw Error('Invalid local filed Mail folder');
+ const rows=(await pool.query('SELECT d.id AS draft_id,d.mailbox_key,d.recipient_email,d.subject,d.updated_at,CASE WHEN EXISTS (SELECT 1 FROM enkyron_mail_send_attempts a WHERE a.workspace_key=d.workspace_key AND a.draft_id=d.id) OR EXISTS (SELECT 1 FROM enkyron_crm_mail_manual_sends s WHERE s.workspace_key=d.workspace_key AND s.draft_id=d.id) THEN \'sent\' ELSE \'drafts\' END AS original_kind FROM enkyron_mail_record_filing f JOIN enkyron_crm_mail_drafts d ON d.workspace_key=f.workspace_key AND d.id=f.draft_id WHERE f.workspace_key=$1 AND f.folder_key=$3 AND ($2=\'all\' OR d.mailbox_key=$2) ORDER BY f.updated_at DESC LIMIT 101',[key,mailbox,selected])).rows;
  return {items:rows.slice(0,100),more:rows.length>100};
 }
 export async function clearTrashedLocalMail(pool,actor,input){
