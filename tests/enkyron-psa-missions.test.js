@@ -221,7 +221,7 @@ test('ENK-08 Owner write IPC: verified MFA on every action, not local-user-only 
   assert.match(source,/PSA schema is not installed/);
   assert.doesNotMatch(main,/psa-create-mission' \? await/);
 });
-test('ENK-08 installer: explicit live confirmation, no clone or automatic backup',()=>{
+test('ENK-08 installer: one explicitly confirmed private backup, never a clone',()=>{
   const source=fs.readFileSync(
     new URL('../scripts/enkyron-enk08-install.mjs',import.meta.url),'utf8');
   assert.match(source,/pg_advisory_xact_lock\(814720260\)/);
@@ -234,6 +234,18 @@ test('ENK-08 installer: explicit live confirmation, no clone or automatic backup
   assert.match(source,/backupCandidate\(\)/);
   assert.match(source,/default_transaction_read_only=on/);
   assert.match(source,/port:5432,database:'arl_local'/);
-  assert.doesNotMatch(source,/pg_virtualenv|pg_dump|CREATE DATABASE|runMigrations\(/);
-  assert.doesNotMatch(source,/rmSync|unlinkSync|rotateBackups/);
+  assert.match(source,/async function createPreInstallBackup\(\)/);
+  assert.match(source,/fs\.openSync\(file,'wx',0o600\)/);
+  assert.match(source,/--host=\/var\/run\/postgresql/);
+  assert.match(source,/--port=5432/);
+  assert.match(source,/--dbname=arl_local/);
+  assert.match(source,/--format=custom/);
+  assert.match(source,/pg_restore/);
+  assert.match(source,/digest\.digest\('hex'\)/);
+  assert.match(source,/source:'postgresql:\/\/localhost:5432\/arl_local'/);
+  assert.match(source,/const preliminary=await checkState\(client,files\)/);
+  assert.match(source,/if\(answer!=='INSTALL ENK08'\)fail/);
+  assert.match(source,/if\(!backup\)\{\s*backup=await createPreInstallBackup\(\)/);
+  assert.doesNotMatch(source,/pg_virtualenv|CREATE DATABASE|runMigrations\(/);
+  assert.doesNotMatch(source,/rotateBackups|unlinkSync/);
 });

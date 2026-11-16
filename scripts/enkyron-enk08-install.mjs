@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// ENK-08 single-database PSA schema installer. No clones, no new backups.
+// ENK-08 single-database PSA installer. No clones; at most ONE new backup
+// created only after explicit confirmation, if no verified recent archive exists.
 // Applies ONLY reviewed 118/119/120 inside one arl_local transaction.
 // No Mail/Ticket/CRM migrations are executed, and no existing tables are edited
 // apart from one additive opportunity-key index required by the mission FK.
@@ -101,6 +102,82 @@ async function backupCandidate(){
   }
   return null;
 }
+
+/**
+ * Make exactly one private, manifest-backed PostgreSQL archive if there is no
+ * verified recent one. This is an actual arl_local point-in-time backup, NOT
+ * a database clone. Only invoked after the operator's interactive confirmation.
+ * Never rotate or remove existing backups.
+ */
+async function createPreInstallBackup(){
+  const dir=path.join(ROOT,'data','backups');
+  if(!fs.existsSync(dir))fail('existing private data/backups directory missing');
+  const directory=fs.lstatSync(dir);
+  if(!directory.isDirectory()||directory.isSymbolicLink()||
+     directory.uid!==process.getuid()||(directory.mode&0o077)!==0)
+    fail('backup directory is not private and operator-owned');
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  const nonce=crypto.randomBytes(4).toString('hex');
+  const name='arl_local-enk08-before-install-'+stamp+'-'+nonce+'.dump';
+  const file=path.join(dir,name);
+  const manifest=file+'.manifest.json';
+  let created=false,manifestCreated=false;
+  try{
+    // Exclusive private creation prevents overwriting ANY existing file.
+    const fd=fs.openSync(file,'wx',0o600);
+    fs.closeSync(fd);
+    created=true;
+    const dump=spawnSync('pg_dump',[
+      '--format=custom','--compress=9','--no-owner','--no-privileges',
+      '--host=/var/run/postgresql','--port=5432',
+      '--username='+actor,'--dbname=arl_local','--file='+file,
+    ],{
+      cwd:ROOT,encoding:'utf8',timeout:180000,
+      stdio:['ignore','pipe','pipe'],
+      env:{...process.env,PGHOST:'/var/run/postgresql',PGPORT:'5432',
+        PGDATABASE:'arl_local',PGUSER:actor,PGOPTIONS:'-c default_transaction_read_only=on -c statement_timeout=120000'},
+    });
+    if(dump.status!==0||dump.error)fail('pg_dump could not produce a full database archive');
+    const stat=fs.lstatSync(file);
+    if(!stat.isFile()||stat.isSymbolicLink()||stat.uid!==process.getuid()||
+       stat.nlink!==1||stat.size<1024)fail('backup archive is invalid');
+    fs.chmodSync(file,0o600);
+    const toc=spawnSync('pg_restore',['--list',file],{
+      cwd:ROOT,encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,
+      stdio:['ignore','pipe','pipe'],
+    });
+    const archiveEntries=(toc.stdout||'').split('\n')
+      .filter(line=>line&&!line.startsWith(';')).length;
+    if(toc.status!==0||toc.error||archiveEntries<10)
+      fail('backup PostgreSQL archive verification failed');
+    const digest=crypto.createHash('sha256');
+    for await(const chunk of fs.createReadStream(file,{highWaterMark:1024*1024}))
+      digest.update(chunk);
+    const sha256=digest.digest('hex');
+    const createdAt=new Date().toISOString();
+    const data={
+      schema:'arl.postgresql.backup.v1',format:'postgresql-custom',
+      source:'postgresql://localhost:5432/arl_local',
+      source_transport:'local Unix socket /var/run/postgresql',
+      archive:name,createdAt,bytes:stat.size,sha256,
+      archiveEntries,verified:true,
+    };
+    fs.writeFileSync(manifest,JSON.stringify(data,null,2)+'\n',{
+      encoding:'utf8',mode:0o600,flag:'wx'});
+    manifestCreated=true;
+    const checked=await backupCandidate();
+    if(!checked||checked.file!==file||checked.sha256!==sha256)
+      fail('generated backup did not pass the existing verification gate');
+    return checked;
+  }catch(error){
+    // Remove ONLY incomplete files just created by this specific attempt.
+    // Never touch any other pre-existing archive or code snapshot.
+    if(manifestCreated)fs.rmSync(manifest,{force:true});
+    if(created)fs.rmSync(file,{force:true});
+    throw error;
+  }
+}
+
 async function checkState(client,files){
   const ident=(await client.query(
     "SELECT current_database() AS db,current_user AS actor,"
@@ -162,18 +239,37 @@ async function main(){
         write_performed:false},null,2));
       return;
     }
-    const backup=await backupCandidate();
-    if(!backup)fail('no verified owner-readable arl_local backup from the last 24 hours; nothing installed');
-    if(!process.stdin.isTTY)fail('interactive owner confirmation required');
-    // No DDL before the operator sees the exact destructive boundary.
+    // Validate all schema prerequisites BEFORE creating any new archive.
+    await client.query('BEGIN READ ONLY');
+    open=true;
+    const preliminary=await checkState(client,files);
+    await client.query('ROLLBACK');
+    open=false;
+    if(preliminary.installed){
+      console.log('ENK-08 already installed. No backup or schema changes.');
+      return;
+    }
+    let backup=await backupCandidate();
+    if(!process.stdin.isTTY)fail('interactive operator confirmation required');
     const rl=createInterface({input:process.stdin,output:process.stdout});
     let answer='';
     try{
       answer=await rl.question(
-        'Install ONLY PSA 118/119/120 on arl_local using existing backup '
-        +path.basename(backup.file)+'? Type INSTALL ENK08: ');
+        backup
+          ? 'Install ONLY PSA 118/119/120 on arl_local with verified backup '
+            +path.basename(backup.file)+'? Type INSTALL ENK08: '
+          : 'No recent verified database backup. Create exactly ONE local '
+            +'private (not encrypted) arl_local dump, verify it, then '
+            +'install ONLY PSA 118/119/120? '
+            +'Type INSTALL ENK08: ');
     }finally{rl.close();}
     if(answer!=='INSTALL ENK08')fail('operator did not confirm');
+    if(!backup){
+      backup=await createPreInstallBackup();
+      console.log('One PostgreSQL archive created and SHA-256 verified: '
+        +path.basename(backup.file));
+      console.log('This archive is a recovery point, not a tested restore.');
+    }
     await client.query('BEGIN');
     open=true;
     await client.query("SET LOCAL lock_timeout='3000ms'");
@@ -196,7 +292,7 @@ async function main(){
     if(!done.installed)fail('post-install schema verification failed');
     await client.query('COMMIT');open=false;
     console.log('ENK-08 installed: missions, tasks and time logs. '
-      +'No unrelated migrations, clone or backup created.');
+      +'No unrelated migrations or clones; recovery archive retained.');
   }finally{
     if(open)await client.query('ROLLBACK').catch(()=>{});
     await client.end();

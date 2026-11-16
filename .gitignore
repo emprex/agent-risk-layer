@@ -19,3 +19,6 @@ benchmarks/arl17k/evidence/generated/
 
 # Local ARL assessment reports
 data/local-reports/
+
+# Confidential operator-only PostgreSQL backups: never commit to Git
+/data/backups/
