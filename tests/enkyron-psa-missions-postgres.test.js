@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
+import path from 'node:path';
 import pg from 'pg';
 import {createMissionPlan, listMissionPlans} from '../desktop/enkyron-psa-missions.mjs';
 
@@ -15,7 +16,15 @@ function disposableTarget() {
   const u = new URL(url);
   assert.equal(u.protocol, 'postgresql:');
   assert.equal(u.hostname, '127.0.0.1');
-  assert.equal(u.port === '' || u.port === '5432', true);
+  const port = Number(process.env.PGPORT);
+  assert.ok(Number.isSafeInteger(port) && port > 5432 && port < 65536,
+    'A separate PostgreSQL port is required; 5432 is production');
+  assert.equal(u.port, String(port));
+  assert.equal(process.env.PGVERSION, '17', 'Temporary PG17 only');
+  const root = path.resolve(process.env.PG_CLUSTER_CONF_ROOT || '/');
+  assert.equal(path.basename(root), 'postgresql');
+  assert.match(path.basename(path.dirname(root)), /^pg_virtualenv\.[A-Za-z0-9]+$/,
+    'Requires a Debian pg_virtualenv temporary cluster');
   assert.equal(u.pathname, '/arl_ci');
   assert.equal(u.username, 'arl_ci');
   assert.equal(u.password, 'synthetic-ci-only');
@@ -57,9 +66,19 @@ test('ENK-08: disposable PostgreSQL SQL constraints, concurrent retry and rollba
   try {
     await admin.connect();
     const target = (await admin.query(
-      'SELECT current_database() AS database, current_user AS role'
+      'SELECT current_database() AS database, current_user AS role, '
+      + 'current_setting(\'config_file\') AS config_file, '
+      + 'current_setting(\'data_directory\') AS data_directory, '
+      + 'inet_server_port() AS port'
     )).rows[0];
-    assert.deepEqual(target, {database: 'arl_ci', role: 'arl_ci'});
+    assert.equal(target.database, 'arl_ci');
+    assert.equal(target.role, 'arl_ci');
+    assert.equal(target.port, Number(process.env.PGPORT));
+    const confRoot = path.resolve(process.env.PG_CLUSTER_CONF_ROOT);
+    assert.equal(path.resolve(target.config_file), path.join(confRoot, '17/regress/postgresql.conf'),
+      'Refuse connections outside the virtual PostgreSQL cluster');
+    assert.ok(path.resolve(target.data_directory).startsWith(path.dirname(confRoot) + path.sep),
+      'Refuse non-temporary PostgreSQL data directories');
     await admin.query('CREATE SCHEMA ' + schema);
     created = true;
     pool = new pg.Pool({

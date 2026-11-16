@@ -8,17 +8,17 @@
 
 ## Safe execution
 
-Run only with the existing dedicated synthetic PostgreSQL environment:
+On Debian 13, run **as the regular operator, never with sudo**:
 
 ```bash
-CI=true \
-ARL_CI_POSTGRES_URL='postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci' \
-node --test tests/enkyron-psa-missions-postgres.test.js
+pg_virtualenv -v 17 bash scripts/enkyron-psa-virtualenv-rehearsal.sh
 ```
 
-These exact database name, role, host, port and password values are test-only fixtures; the test refuses other connection targets, and it refuses unexpected connection-string options. Do not create or modify a CI database merely by guessing credentials. If the dedicated `arl_ci` database is not already provisioned and authorised, obtain a reviewed CI environment first.
+The launcher refuses port 5432, root execution, and any server whose actual config/data paths do not belong to the `pg_virtualenv` cluster. Only **after** checking the server, it creates synthetic `arl_ci` credentials inside the throw-away cluster. The test uses the dynamically assigned port, refuses unexpected URL overrides and cross-checks server paths before creating any fixture schema. The temporary PostgreSQL cluster is destroyed by `pg_virtualenv` at command exit. No changes to `arl_local` are intended.
 
-Without `ARL_CI_POSTGRES_URL`, Node skips the integration test. **A SKIP is not a PASS.** The `CI=true` flag alone does not enable a connection; the target identity is checked before any write.
+The launcher requires an installed Node.js `pg` dependency. Do not use `npm install`, `sudo`, a production connection URL or direct migration commands to work around a failed guard.
+
+Running the integration test directly without a controlled `pg_virtualenv` context will fail closed. **A SKIP is not a PASS.** The launcher supplies `CI=true` and test connection details only inside the disposable process.
 
 The test creates a randomly named `enk08_ci_*` PostgreSQL schema under `arl_ci`, verifies that it is the current schema, creates minimal synthetic CRM fixture tables, executes the review SQL only there, tests data and audit integrity, and drops **only that generated temporary CI schema** afterwards. It never invokes `runMigrations`, and does not open `arl_local`.
 
