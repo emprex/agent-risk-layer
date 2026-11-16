@@ -89,7 +89,8 @@ def py_upgrade(s):
         "            self.load_companies()\n"
         "            self.crm_page = 1\n"
         "            self.load_prospects()\n"
-        "            self.crm_tabs.setCurrentIndex(0)\n"
+        "            if self.crm_tabs.currentIndex() == 1:\n"
+        "                self.crm_tabs.setCurrentIndex(0)\n"
         "            guided_proposal_id = self.crm_invoice_link_return_proposal_id\n",
         "rafraîchir et ouvrir Company & Contacts")
     return s
