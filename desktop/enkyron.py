@@ -2396,21 +2396,28 @@ class EnkyronWindow(QMainWindow):
                 return
             incoming = list(data.get("items") or [])
             inbound_more = bool(data.get("has_more"))
+            # Show verified inbound results immediately. The optional second
+            # local read must not hide them if an older desktop bridge lacks it.
+            self.mail_inbox.show_threads(
+                mailbox, incoming, inbound_more, folder,
+                search_query=query if query else None, page=page
+            )
             if folder == "inbox" and not query:
-                self.mail_inbox.show_threads(
-                    mailbox, incoming, inbound_more, folder, page=page
-                )
                 return
 
             def outbound_received(extra, failure):
                 if not still_current():
                     return
                 if failure or not isinstance(extra, dict) or not extra.get("available"):
-                    self.mail_inbox._show_empty(
-                        "Mail filing unavailable",
-                        "The outbound filing schema is missing or inaccessible. "
-                        "No messages were deleted."
+                    self.mail_inbox.connection_label.setText(
+                        "Outgoing folder entries unavailable; inbound mail remains visible. "
+                        "Check the local mail filing migration."
                     )
+                    self.mail_inbox.connection_label.setVisible(True)
+                    return
+                if self.mail_inbox.reply_editor.isVisible():
+                    # Never discard a reply started while the additional
+                    # local folder listing was in flight.
                     return
                 outgoing = []
                 for record in (extra.get("items") or []):
