@@ -17064,20 +17064,40 @@ class EnkyronWindow(QMainWindow):
             self.crm_followup_stage.setEnabled(False)
         form.addRow("Commercial stage", self.crm_followup_stage)
         if existing:
-            # One field inside the existing editor, not a new toolbar button.
-            # -1 means no human forecast; historical opportunities remain unknown.
-            self.crm_followup_probability = QSpinBox()
-            self.crm_followup_probability.setRange(-1, 100)
-            self.crm_followup_probability.setSpecialValueText("Not estimated")
-            self.crm_followup_probability.setSuffix(" %")
+            # An unknown forecast is explicit. Do not display a synthetic
+            # percentage for a prospect who has not replied.
             estimate = existing.get("probability_percent")
+            self.crm_followup_probability_toggle = QCheckBox("Record a manual estimate")
+            self.crm_followup_probability_toggle.setChecked(estimate is not None)
+            self.crm_followup_probability = QSpinBox()
+            self.crm_followup_probability.setRange(0, 100)
+            self.crm_followup_probability.setSingleStep(5)
+            self.crm_followup_probability.setSuffix(" %")
             self.crm_followup_probability.setValue(
-                -1 if estimate is None else int(estimate)
+                int(estimate) if estimate is not None else 0
             )
             self.crm_followup_probability.setToolTip(
-                "Your manual estimate (0–100%). Not calculated from stages or AI."
+                "Optional human-only estimate. Not calculated from stages or AI."
             )
-            form.addRow("Estimated win probability", self.crm_followup_probability)
+            self.crm_followup_probability.setEnabled(estimate is not None)
+            self.crm_followup_probability.setVisible(estimate is not None)
+            self.crm_followup_probability_unknown = QLabel("Not estimated")
+            self.crm_followup_probability_unknown.setVisible(estimate is None)
+            self.crm_followup_probability_toggle.toggled.connect(
+                self.crm_followup_probability.setEnabled
+            )
+            self.crm_followup_probability_toggle.toggled.connect(
+                self.crm_followup_probability.setVisible
+            )
+            self.crm_followup_probability_toggle.toggled.connect(
+                lambda checked: self.crm_followup_probability_unknown.setVisible(not checked)
+            )
+            forecast_row = QHBoxLayout()
+            forecast_row.addWidget(self.crm_followup_probability_toggle)
+            forecast_row.addWidget(self.crm_followup_probability)
+            forecast_row.addWidget(self.crm_followup_probability_unknown)
+            forecast_row.addStretch()
+            form.addRow("Estimated win probability", forecast_row)
         self.crm_followup_action = QPlainTextEdit()
         self.crm_followup_action.setMaximumHeight(130)
         self.crm_followup_action.setPlaceholderText(
@@ -17169,8 +17189,8 @@ class EnkyronWindow(QMainWindow):
                 "next_action": next_action,
                 "due_date": due_date,
                 "probability_percent": (
-                    None if self.crm_followup_probability.value() < 0
-                    else self.crm_followup_probability.value()
+                    self.crm_followup_probability.value()
+                    if self.crm_followup_probability_toggle.isChecked() else None
                 )
             }
             if company_id:
