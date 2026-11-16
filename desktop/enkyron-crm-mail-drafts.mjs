@@ -78,6 +78,7 @@ export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
       +'WHEN s.id IS NOT NULL THEN \'external_send_reported\' ELSE \'draft\' END AS mail_state, '
       +'s.sent_at AS external_sent_at,a.outcome AS provider_outcome '
       +'FROM enkyron_crm_mail_drafts d '
+      +'LEFT JOIN enkyron_mail_record_filing f ON f.workspace_key=d.workspace_key AND f.draft_id=d.id '
       +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
       +'LEFT JOIN enkyron_crm_companies c '
@@ -87,7 +88,7 @@ export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
       +'LEFT JOIN enkyron_mail_send_attempts a '
       +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
-      +(unsentOnly?'AND a.id IS NULL AND s.id IS NULL ':'')
+      +(unsentOnly?"AND a.id IS NULL AND s.id IS NULL AND COALESCE(f.folder_key,'drafts')='drafts' ":'')
       +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
       +"OR POSITION(lower($2) IN lower(coalesce(d.recipient_email,'')))>0) "

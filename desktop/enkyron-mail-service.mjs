@@ -164,7 +164,10 @@ export async function mailSent(pool,operator){
     'ON d.workspace_key=s.workspace_key AND d.id=s.draft_id '+
     'LEFT JOIN enkyron_crm_companies co '+
     'ON co.workspace_key=d.workspace_key AND co.id=d.company_id '+
-    'WHERE s.workspace_key=$1 ORDER BY s.recorded_at DESC LIMIT 100',
+    'LEFT JOIN enkyron_mail_record_filing f '+
+    'ON f.workspace_key=d.workspace_key AND f.draft_id=d.id '+
+    "WHERE s.workspace_key=$1 AND COALESCE(f.folder_key,'sent')='sent' "+
+    'ORDER BY s.recorded_at DESC LIMIT 100',
     [key]
   )).rows;
   return {available:true,items:rows};
