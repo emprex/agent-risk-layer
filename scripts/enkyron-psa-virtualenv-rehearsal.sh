@@ -62,4 +62,6 @@ export ARL_CI_POSTGRES_URL="postgresql://arl_ci:synthetic-ci-only@127.0.0.1:${PG
 node --test \
   tests/enkyron-psa-planning-contract.test.js \
   tests/enkyron-psa-missions.test.js \
+  tests/enkyron-psa-work-items.test.js \
+  tests/enkyron-psa-time.test.js \
   tests/enkyron-psa-missions-postgres.test.js

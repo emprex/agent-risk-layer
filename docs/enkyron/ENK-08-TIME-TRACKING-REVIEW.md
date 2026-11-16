@@ -34,15 +34,14 @@ Operator screenshots from 16 November showed that the Missions table truncated b
 
 Extended Python model, Qt smoke and static wiring tests; a new set of Node contract/mock/static tests covers time validation, linked IDs, idempotency, audit rollback and bounded reads. The guarded pg_virtualenv integration now loads **118 + 119 + 120 drafts only into its disposable CI schema** and checks real PostgreSQL constraints, concurrent retries, immutable entries and audit, bad links, attempts to mark time billable and event-insert rollback.
 
-Debian commands:
+Debian review command, as the normal user:
 
-\`\`\`bash
+```bash
 cd ~/agent-risk-layer
-QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s desktop -p 'test_enkyron_mission_board_*.py' -v
-node --test tests/enkyron-psa-planning-contract.test.js tests/enkyron-psa-missions.test.js tests/enkyron-psa-work-items.test.js tests/enkyron-psa-time.test.js
-pg_virtualenv -v 17 bash scripts/enkyron-psa-virtualenv-rehearsal.sh
-\`\`\`
+bash scripts/enkyron-psa-disposable-check.sh
+```
 
+This single wrapper runs Python syntax/Qt checks, Node syntax checks, the full targeted Node tests (including manual time tests), and real PostgreSQL 17 integration on a guarded **disposable** cluster. 'PASSED' means these synthetic review checks succeeded, not approval to deploy or assess a customer system.
 **Important:** Tests on this exact commit have not yet been executed on the operator's Debian. Previous branch: 22 pure/Node tests, 15 combined PG test process, 13 GUI Python tests were reported as passing. New tests must be evaluated independently.
 
 ## Release STOP — never bypass
