@@ -2686,7 +2686,7 @@ class EnkyronWindow(QMainWindow):
             return
         answer = QMessageBox.question(
             self, "Confirm local Mail filing",
-            "Move this saved email from {} to {} in ENKYRON?\\n\\n"
+            "Move this saved email from {} to {} in ENKYRON?\n\n"
             "This does not change Resend, erase the CRM history or send email.".format(
                 source.title(), destination.title()),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -2708,7 +2708,7 @@ class EnkyronWindow(QMainWindow):
         if self.mail_inbox.selected_folder != "trash":
             return
         keyword, accepted = QInputDialog.getText(
-            self, "Empty local Trash", "Type CLEAR to hide all local Trash items.\\n"
+            self, "Empty local Trash", "Type CLEAR to hide all local Trash items.\n"
             "CRM audit and provider copies will be retained.")
         if not accepted or keyword != "CLEAR":
             return
