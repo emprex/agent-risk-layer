@@ -1231,6 +1231,18 @@ class MailInboxView(QWidget):
             self.reader_stack.setCurrentIndex(1)
             self.localRecordRequested.emit(kind, thread_id)
             return
+        if self.local_mode and source == "filed-record":
+            if not isinstance(thread_id, int) or not 0 <= thread_id < len(self._filed_records):
+                return
+            record = self._filed_records[thread_id]
+            self.subject.setText(str(record.get("subject") or "(No subject)")[:300])
+            self.meta.setText("Locally filed " + str(record.get("original_kind") or "email"))
+            self.body.setPlainText(
+                "Open this saved message by double-clicking or right-clicking. "
+                "Moving it never changes provider delivery or CRM audit records."
+            )
+            self.reader_stack.setCurrentIndex(1)
+            return
         if source not in self._mailboxes:
             return
         self.current_thread_mailbox = source
@@ -1256,6 +1268,11 @@ class MailInboxView(QWidget):
         if self.local_mode and source in ("local-sent", "local-drafts"):
             if isinstance(thread_id, int):
                 self.localRecordOpenRequested.emit(source.removeprefix("local-"), thread_id)
+        elif self.local_mode and source == "filed-record":
+            if isinstance(thread_id, int) and 0 <= thread_id < len(self._filed_records):
+                draft_id = self._filed_records[thread_id].get("draft_id")
+                if isinstance(draft_id, str):
+                    self.filedRecordOpenRequested.emit(draft_id)
         elif source in self._mailboxes:
             self.threadOpenRequested.emit(source, thread_id)
 
