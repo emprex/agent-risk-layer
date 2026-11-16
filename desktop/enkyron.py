@@ -1739,6 +1739,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
         self.mail_inbox.localRecordMoveRequested.connect(self.move_saved_mail_record)
         self.mail_inbox.filedRecordMoveRequested.connect(self.move_filed_mail_record)
+        self.mail_inbox.filedRecordOpenRequested.connect(self.open_filed_mail_record)
         self.mail_inbox.localTrashClearRequested.connect(self.clear_local_mail_trash)
         self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
         self.mail_inbox.localRenameFolderRequested.connect(self.rename_local_folder)
@@ -2652,6 +2653,20 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
             callback=received)
+
+    def open_filed_mail_record(self, draft_id):
+        if not isinstance(draft_id, str) or len(draft_id) != 36:
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            return
+        def received(data, error):
+            if error or not isinstance(data, dict) or not isinstance(data.get("draft"), dict):
+                QMessageBox.warning(self, "Saved message unavailable",
+                    str(error or "Could not load this message.")[:300])
+                return
+            self.show_mail_draft_dialog(data["draft"])
+        self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
     def move_saved_mail_record(self, kind, index, destination):
         if kind not in ("sent", "drafts") or not isinstance(index, int):
