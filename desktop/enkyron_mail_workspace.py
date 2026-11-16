@@ -257,6 +257,13 @@ class MailInboxView(QWidget):
         self.new_email_button.setObjectName("enkyronMailCompose")
         self.new_email_button.clicked.connect(self.newEmailRequested.emit)
         toolbar.addWidget(self.new_email_button)
+        self.empty_trash_button = QPushButton("Empty Trash…")
+        self.empty_trash_button.setObjectName("enkyronMailEmptyTrash")
+        self.empty_trash_button.setToolTip(
+            "Remove local Trash items from visible folders; audit and provider records remain.")
+        self.empty_trash_button.clicked.connect(self.localEmptyTrashRequested.emit)
+        self.empty_trash_button.hide()
+        toolbar.addWidget(self.empty_trash_button)
         root.addLayout(toolbar)
 
         self.connection_label = QLabel(
@@ -634,6 +641,7 @@ class MailInboxView(QWidget):
             self._restore_local_folder_selection()
             return
         self._folder = folder
+        self.empty_trash_button.setVisible(folder == "trash")
         for row in range(self.folder_tree.topLevelItemCount()):
             node = self.folder_tree.topLevelItem(row)
             if node.data(0, Qt.ItemDataRole.UserRole) == folder:
