@@ -7,6 +7,7 @@ import unittest
 
 SOURCE = Path(__file__).with_name("enkyron.py")
 VIEW = Path(__file__).with_name("enkyron_mission_board.py")
+BRIDGE = Path(__file__).with_name("enkyron-bridge.mjs")
 
 
 class MissionBoardWiringTests(unittest.TestCase):
@@ -19,6 +20,8 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn("self.pages.setCurrentIndex(4)", text)
         self.assertIn("self.bridge.call(\"crm-companies\", \"\", callback=received)", text)
         self.assertIn("self.mission_board.crmRefreshRequested.connect", text)
+        self.assertIn("self.mission_board.missionRefreshRequested.connect", text)
+        self.assertIn('self.bridge.call("psa-board", "", callback=received)', text)
         self.assertIn("go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))", text)
 
     def test_example_never_uses_bridge_or_enables_actions(self):
@@ -32,8 +35,18 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn('self.detail_tabs.addTab(time_page, "Time entries")', text)
         self.assertIn('self.detail_tabs.addTab(crm_page, "CRM companies")', text)
         self.assertIn("normalize_crm_companies", text)
+        self.assertIn("show_live_board", text)
         for item in ("new_button", "add_task_button", "complete_button", "log_time_button"):
             self.assertIn("self." + item + ".setEnabled(False)", text)
+
+    def test_psa_bridge_is_read_only_and_uses_existing_local_ipc(self):
+        text = BRIDGE.read_text(encoding="utf-8")
+        self.assertIn("'psa-board'", text)
+        self.assertIn("await readMissionBoard(pool, os.userInfo().username)", text)
+        self.assertNotIn("'psa-create'", text)
+        self.assertNotIn("'psa-complete'", text)
+        self.assertNotIn("'psa-log-time'", text)
+
 
 
 if __name__ == "__main__":

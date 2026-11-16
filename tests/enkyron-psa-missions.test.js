@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createMissionPlan, listMissionPlans} from '../desktop/enkyron-psa-missions.mjs';
+import {createMissionPlan, listMissionPlans, readMissionBoard} from '../desktop/enkyron-psa-missions.mjs';
 
 const company = '11111111-2222-4333-8444-555555555555';
 const otherCompany = '55555555-2222-4333-8444-555555555555';
@@ -152,4 +152,55 @@ test('ENK-08: migration declares matching composite FKs and immutable event hist
   assert.equal(fs.existsSync(new URL('../migrations/118_enkyron_psa_mission_planning.sql', import.meta.url)), false,
     'REVIEW SQL must never be auto-discoverable by runMigrations');
   assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN)\b|\bTRUNCATE\b|\bDELETE\s+FROM\b/i);
+});
+
+test('ENK-08 board: missing PSA tables return explicit read-only unavailable state', async () => {
+  const calls = [];
+  const pool = {query: async (sql, args=[]) => {
+    calls.push({sql,args});
+    return {rows:[{missions:null,work_items:null,time_entries:null}]};
+  }};
+  const r = await readMissionBoard(pool,'operator');
+  assert.equal(r.available,false);
+  assert.equal(r.can_write,false);
+  assert.deepEqual(r.items,[]);
+  assert.match(r.notice,/not installed/);
+  assert.equal(calls.length,1);
+  assert.match(calls[0].sql,/to_regclass/);
+  await assert.rejects(readMissionBoard(pool,'untrusted:actor'),/trusted local operator/);
+  assert.equal(calls.length,1);
+});
+
+test('ENK-08 board: existing scoped missions, work items and time are read only',async()=>{
+  const calls = [];
+  const m = {id:mission, company_id:company, company_name:'Existing CRM Co',
+    opportunity_id:null, title:'Internal planning mission',
+    description:'Synthetic internal planning only; no accepted agreement.',
+    due_date:'2026-12-15',status:'planning',version:1};
+  const w = {id:event, mission_id:mission,kind:'task',status:'open',
+    title:'Prepare internal scope',due_date:'2026-12-10',version:1};
+  const time = {id:'99999999-aaaa-4bbb-8ccc-dddddddddddd',
+    mission_id:mission,work_item_id:null,work_date:'2026-11-16',
+    minutes:30,note:'Synthetic internal preparation',status:'draft',
+    billing_state:'not_billable'};
+  const pool = {query:async(sql,args=[])=>{
+    calls.push({sql,args});
+    if(sql.includes('to_regclass'))return {rows:[{missions:'enkyron_psa_missions',
+      work_items:'enkyron_psa_work_items',time_entries:'enkyron_psa_time_entries'}]};
+    if(sql.includes('FROM enkyron_psa_missions m')) return {rows:[m]};
+    if(sql.includes('FROM enkyron_psa_work_items'))return {rows:[w]};
+    if(sql.includes('FROM enkyron_psa_time_entries'))return {rows:[time]};
+    throw Error('Unexpected SELECT: '+sql);
+  }};
+  const r=await readMissionBoard(pool,'operator');
+  assert.equal(r.available,true);
+  assert.equal(r.can_write,false);
+  assert.equal(r.items.length,1);
+  assert.deepEqual(r.items[0].work_items,[w]);
+  assert.deepEqual(r.items[0].time_entries,[time]);
+  assert.equal(calls.length,4);
+  assert.deepEqual(calls.slice(1).map(x=>x.args),
+    [['local:operator',null],['local:operator',mission],['local:operator',mission]]);
+  assert.ok(calls.every(x=>x.sql.startsWith('SELECT ')));
+  assert.ok(calls.every(x=>!(/INSERT|UPDATE|DELETE|CREATE TABLE/i).test(x.sql)));
 });

@@ -2282,6 +2282,7 @@ class EnkyronWindow(QMainWindow):
         # ENK-08: display-only Mission Board. No bridge, database or write path.
         self.mission_board = MissionBoardView()
         self.mission_board.crmRefreshRequested.connect(self.load_mission_board_companies)
+        self.mission_board.missionRefreshRequested.connect(self.load_mission_board)
         self.pages.addWidget(self.mission_board)
 
         self.crm_search_timer = QTimer(self)
@@ -6229,6 +6230,18 @@ class EnkyronWindow(QMainWindow):
             return
         super().closeEvent(event)
 
+    def load_mission_board(self):
+        """Read existing planning missions using the current ARL local bridge."""
+        if not hasattr(self, "mission_board"):
+            return
+        self._mission_board_seq = getattr(self, "_mission_board_seq", 0) + 1
+        sequence = self._mission_board_seq
+        def received(data, error):
+            if sequence != self._mission_board_seq:
+                return
+            self.mission_board.show_live_board(data, error)
+        self.bridge.call("psa-board", "", callback=received)
+
     def load_mission_board_companies(self):
         """Reuse the existing scoped CRM read route. Never infer a Mission record."""
         if not hasattr(self, "mission_board"):
@@ -6249,6 +6262,7 @@ class EnkyronWindow(QMainWindow):
             # Projects reuses the existing scoped CRM READ route; PSA writes remain disabled.
             self.pages.setCurrentIndex(4)
             self.load_mission_board_companies()
+            self.load_mission_board()
             return
         if index == 4:
             self.pages.setCurrentIndex(3)

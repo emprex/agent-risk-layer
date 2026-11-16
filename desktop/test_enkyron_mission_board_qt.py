@@ -5,6 +5,7 @@ import unittest
 try:
     from PySide6.QtWidgets import QApplication
     from enkyron_mission_board import MissionBoardView
+    from enkyron_mission_board_model import demo_missions
     QT_AVAILABLE = True
 except ImportError:
     QT_AVAILABLE = False
@@ -74,6 +75,34 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.new_button.isEnabled())
         self.view.show_crm_companies(None, "read error")
         self.assertEqual(self.view.crm_table.rowCount(), 0)
+
+    def test_existing_planning_missions_display_only_after_real_board_read(self):
+        row = demo_missions()[0]
+        self.view.show_live_board(
+            {"available": True, "items": [row], "more": False, "can_write": False})
+        self.assertEqual(self.view.mission_table.rowCount(), 1)
+        self.assertEqual(self.view.detail_tabs.currentIndex(), 0)
+        self.assertIn("CONNECTED", self.view.notice.text())
+        self.assertIn("READ ONLY", self.view.notice.text())
+        self.assertEqual(self.view.task_table.rowCount(), 5)
+        self.assertEqual(self.view.time_table.rowCount(), 2)
+        for button in (self.view.new_button, self.view.add_task_button,
+                       self.view.complete_button, self.view.log_time_button):
+            self.assertFalse(button.isEnabled())
+        self.view.example_button.click()
+        self.assertEqual(self.view.mission_table.rowCount(), 2)
+        self.view.example_button.click()
+        self.assertEqual(self.view.mission_table.rowCount(), 1)
+
+    def test_missing_psa_schema_is_not_mistaken_for_a_mission(self):
+        self.view.show_live_board({
+            "available": False, "items": [], "more": False,
+            "notice": "Mission Board tables not installed."})
+        self.assertEqual(self.view.mission_table.rowCount(), 0)
+        self.assertIn("NOT CONNECTED", self.view.notice.text())
+        self.assertIn("not installed", self.view.notice.text())
+        self.assertFalse(self.view.new_button.isEnabled())
+
 
 
 

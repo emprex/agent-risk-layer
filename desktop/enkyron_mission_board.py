@@ -39,6 +39,7 @@ class MissionBoardView(QWidget):
     """Read-only CRM visibility and fictional mission dossier preview."""
 
     crmRefreshRequested = Signal()
+    missionRefreshRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -48,6 +49,9 @@ class MissionBoardView(QWidget):
         self._selected_id = None
         self._demo = False
         self._crm_companies = []
+        self._live_missions = []
+        self._live_available = False
+        self._live_notice = 'Mission Board tables are not installed.'
         self._setup()
         self._refresh()
 
@@ -69,6 +73,11 @@ class MissionBoardView(QWidget):
         self.example_button.setAccessibleName("Toggle fictional Mission Board example")
         self.example_button.clicked.connect(self.toggle_example)
         heading.addWidget(self.example_button)
+        self.mission_reload_button = QPushButton("Refresh missions")
+        self.mission_reload_button.setObjectName("enkyronMissionRefresh")
+        self.mission_reload_button.clicked.connect(
+            lambda: self.missionRefreshRequested.emit())
+        heading.addWidget(self.mission_reload_button)
         root.addLayout(heading)
 
         self.notice = _label("", bold=True)
@@ -247,10 +256,34 @@ class MissionBoardView(QWidget):
             for col, value in enumerate(values):
                 self.crm_table.setItem(row, col, _cell(value))
 
+    def show_live_board(self, data=None, error=None):
+        """Trusted read-only PSA records; never impersonate signed engagements."""
+        if error or not isinstance(data, dict) or data.get("available") is not True:
+            self._live_available = False
+            self._live_missions = []
+            message = data.get("notice") if isinstance(data, dict) else ""
+            self._live_notice = (str(message)[:200] if message else
+                                 "Mission Board is unavailable; no data changed.")
+        else:
+            self._live_available = True
+            self._live_missions = normalize_missions(data.get("items"))
+            self._live_notice = (
+                "Existing internal planning missions · read-only · "
+                "No contract acceptance or security-test authorisation.")
+            if data.get("more"):
+                self._live_notice += " · Showing first 50 missions"
+        if not self._demo:
+            self._missions = self._live_missions
+            self._selected_id = None
+            self._refresh()
+            if self._missions:
+                self.detail_tabs.setCurrentIndex(0)
+
     def toggle_example(self):
         self._demo = not self._demo
-        self._missions = demo_missions() if self._demo else []
-        self.detail_tabs.setCurrentIndex(0 if self._demo else 2)
+        self._missions = demo_missions() if self._demo else self._live_missions
+        self.detail_tabs.setCurrentIndex(
+            0 if (self._demo or self._missions) else 2)
         self._selected_id = None
         self.search_input.clear()
         self._refresh()
@@ -267,7 +300,8 @@ class MissionBoardView(QWidget):
             self.example_button.setText("Close example")
         else:
             self.notice.setText(
-                "NOT CONNECTED · Mission Board writes and real client data are disabled pending security acceptance.")
+                ("CONNECTED · READ ONLY · " if self._live_available else
+                 "NOT CONNECTED · ") + self._live_notice)
             self.example_button.setText("Explore example")
         self.mission_table.blockSignals(True)
         self.mission_table.setRowCount(len(self._visible))
@@ -329,8 +363,13 @@ class MissionBoardView(QWidget):
                 self.time_table.setItem(row, col, _cell(value))
 
     def _clear_detail(self):
-        self.detail_title.setText("No mission selected" if self._demo else "Mission Board not connected")
-        self.detail_company.setText("" if self._demo else "Use Explore example to review the planned interface.")
+        self.detail_title.setText(
+            "No mission selected" if (self._demo or self._live_available)
+            else "Mission Board not connected")
+        self.detail_company.setText(
+            "" if self._demo else
+            ("No planning missions recorded yet." if self._live_available
+             else "The CRM companies are listed separately."))
         self.detail_description.setText("")
         self.detail_progress.setValue(0)
         self.detail_progress.setFormat("No work items")

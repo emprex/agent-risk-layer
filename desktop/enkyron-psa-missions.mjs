@@ -113,3 +113,55 @@ export async function listMissionPlans(pool, actor, companyId = null) {
   );
   return {items: response.rows.slice(0, 50), more: response.rows.length > 50};
 }
+
+/**
+ * The canonical desktop Mission Board reader. This never creates tables,
+ * guesses missions from CRM companies, changes data or grants authorisation.
+ * One operator-scoped read returns the existing PSA records and their children.
+ */
+export async function readMissionBoard(pool, actor) {
+  const owner = psaLocalScope(actor);
+  const tables = [
+    'enkyron_psa_missions', 'enkyron_psa_work_items',
+    'enkyron_psa_time_entries',
+  ];
+  const check = await pool.query(
+    "SELECT to_regclass('public.enkyron_psa_missions') AS missions,"
+    + "to_regclass('public.enkyron_psa_work_items') AS work_items,"
+    + "to_regclass('public.enkyron_psa_time_entries') AS time_entries"
+  );
+  if (!check.rows[0]?.missions || !check.rows[0]?.work_items ||
+      !check.rows[0]?.time_entries) {
+    return {
+      available: false, items: [], more: false, can_write: false,
+      notice: 'Mission Board tables not installed. CRM companies can be viewed separately.',
+    };
+  }
+  const missions = await listMissionPlans(pool, owner.actor);
+  const items = [];
+  for (const mission of missions.items) {
+    const workItems = (await pool.query(
+      'SELECT id,mission_id,kind,title,due_date::text AS due_date,status,version '
+      + 'FROM enkyron_psa_work_items '
+      + 'WHERE workspace_key=$1 AND mission_id=$2 '
+      + 'ORDER BY created_at ASC,id ASC LIMIT 101',
+      [owner.workspace, mission.id]
+    )).rows;
+    const timeEntries = (await pool.query(
+      'SELECT id,mission_id,work_item_id,work_date::text AS work_date,'
+      + 'minutes,note,status,billing_state FROM enkyron_psa_time_entries '
+      + 'WHERE workspace_key=$1 AND mission_id=$2 '
+      + 'ORDER BY work_date DESC,created_at DESC,id DESC LIMIT 51',
+      [owner.workspace, mission.id]
+    )).rows;
+    if (workItems.length > 100 || timeEntries.length > 50) {
+      return {available: false, items: [], more: true, can_write: false,
+        notice: 'Mission contains more entries than the bounded desktop viewer supports.'};
+    }
+    items.push({...mission, work_items: workItems, time_entries: timeEntries});
+  }
+  return {
+    available: true, items, more: missions.more, can_write: false,
+    notice: 'Existing internal planning missions (read only). Contract and testing approval are separate.',
+  };
+}
