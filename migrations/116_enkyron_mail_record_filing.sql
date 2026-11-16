@@ -3,7 +3,7 @@
 -- This migration MUST be installed only by a separately approved backed-up process.
 CREATE TABLE enkyron_mail_record_filing (
   workspace_key TEXT NOT NULL CHECK (workspace_key ~ '^local:[A-Za-z0-9_.-]{1,80}$'),
-  draft_id UUID NOT NULL,
+  draft_id TEXT NOT NULL,
   folder_key TEXT NOT NULL CHECK(folder_key IN
     ('sent','drafts','archive','spam','trash','hidden')),
   previous_folder TEXT CHECK(previous_folder IN
@@ -18,7 +18,7 @@ CREATE INDEX idx_enkyron_mail_record_filing_folder
 CREATE TABLE enkyron_mail_filing_events (
   event_id UUID PRIMARY KEY,
   workspace_key TEXT NOT NULL,
-  draft_id UUID,
+  draft_id TEXT,
   operation TEXT NOT NULL CHECK (operation IN ('move','clear_trash')),
   details JSONB NOT NULL DEFAULT '{}'::jsonb,
   actor_local TEXT NOT NULL,
