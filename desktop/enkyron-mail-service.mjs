@@ -165,7 +165,7 @@ export async function mailSent(pool,operator){
     'LEFT JOIN enkyron_crm_companies co '+
     'ON co.workspace_key=d.workspace_key AND co.id=d.company_id '+
     'LEFT JOIN enkyron_mail_outbound_locations l '+
-    "ON l.workspace_key=s.workspace_key AND l.record_kind='sent' AND l.record_id=s.id "+ 
+    "ON l.workspace_key=s.workspace_key AND l.record_kind='sent' AND l.record_id=s.id::text "+ 
     "WHERE s.workspace_key=$1 AND COALESCE(l.folder_key,'sent')='sent' "+
     'ORDER BY s.recorded_at DESC LIMIT 100',
     [key]
