@@ -43,7 +43,6 @@ class MissionBoardView(QWidget):
 
     crmRefreshRequested = Signal()
     missionRefreshRequested = Signal()
-    ownerUnlockRequested = Signal()
     writeRequested = Signal(str, dict)
 
     def __init__(self, parent=None):
@@ -55,7 +54,7 @@ class MissionBoardView(QWidget):
         self._demo = False
         self._crm_companies = []
         self._live_missions = []
-        self._owner_authenticated = False
+        self._live_can_write = False
         self._write_busy = False
         self._live_available = False
         self._live_notice = 'Mission Board tables are not installed.'
@@ -85,9 +84,6 @@ class MissionBoardView(QWidget):
         self.mission_reload_button.clicked.connect(
             lambda: self.missionRefreshRequested.emit())
         heading.addWidget(self.mission_reload_button)
-        self.owner_unlock_button = QPushButton("Owner MFA · Unlock edits")
-        self.owner_unlock_button.clicked.connect(lambda: self.ownerUnlockRequested.emit())
-        heading.addWidget(self.owner_unlock_button)
         root.addLayout(heading)
 
         self.notice = _label("", bold=True)
@@ -125,7 +121,7 @@ class MissionBoardView(QWidget):
         self.new_button = QPushButton("New mission")
         self.new_button.setObjectName("enkyronMissionCreate")
         self.new_button.setEnabled(False)
-        self.new_button.setToolTip("Requires installed schema and Owner MFA")
+        self.new_button.setToolTip("Internal planning only · local operator access")
         self.new_button.clicked.connect(self._create_mission)
         actions.addWidget(self.new_button)
         root.addLayout(actions)
@@ -223,18 +219,18 @@ class MissionBoardView(QWidget):
         editor_actions = QHBoxLayout()
         self.add_task_button = QPushButton("Add work item")
         self.add_task_button.setEnabled(False)
-        self.add_task_button.setToolTip("Requires Owner MFA and a real mission")
+        self.add_task_button.setToolTip("Requires a real planning mission")
         self.add_task_button.clicked.connect(self._add_work_item)
         self.complete_button = QPushButton("Complete task")
         self.complete_button.setEnabled(False)
-        self.complete_button.setToolTip("Requires Owner MFA and an open work item")
+        self.complete_button.setToolTip("Requires an open work item")
         self.complete_button.clicked.connect(self._complete_work_item)
         editor_actions.addWidget(self.add_task_button)
         editor_actions.addWidget(self.complete_button)
         self.log_time_button = QPushButton("Log time")
         self.log_time_button.setObjectName("enkyronMissionLogTime")
         self.log_time_button.setEnabled(False)
-        self.log_time_button.setToolTip("Requires Owner MFA and the internal time schema")
+        self.log_time_button.setToolTip("Requires an existing mission and time schema")
         self.log_time_button.clicked.connect(self._log_time)
         editor_actions.addWidget(self.log_time_button)
         editor_actions.addStretch()
@@ -247,7 +243,7 @@ class MissionBoardView(QWidget):
         splitter.setSizes([580, 680])
 
         self.footer = _label(
-            "This page cannot change customers, contracts, invoices, assessments or tasks.", muted=True)
+            "Internal planning only. No contracts, invoices, assessments or security tests are authorised.", muted=True)
         self.footer.setObjectName("enkyronMissionFooter")
         root.addWidget(self.footer)
 
@@ -276,16 +272,18 @@ class MissionBoardView(QWidget):
         """Trusted read-only PSA records; never impersonate signed engagements."""
         if error or not isinstance(data, dict) or data.get("available") is not True:
             self._live_available = False
+            self._live_can_write = False
             self._live_missions = []
             message = data.get("notice") if isinstance(data, dict) else ""
             self._live_notice = (str(message)[:200] if message else
                                  "Mission Board is unavailable; no data changed.")
         else:
             self._live_available = True
+            self._live_can_write = data.get("can_write") is True
             self._live_missions = normalize_missions(data.get("items"))
             self._live_notice = (
-                "Existing internal planning missions · read-only · "
-                "No contract acceptance or security-test authorisation.")
+                "Existing internal planning missions · "
+                "Internal editing only · No contract or testing authorisation.")
             if data.get("more"):
                 self._live_notice += " · Showing first 50 missions"
         if not self._demo:
@@ -318,7 +316,7 @@ class MissionBoardView(QWidget):
             self.example_button.setText("Close example")
         else:
             self.notice.setText(
-                ("CONNECTED · READ ONLY · " if self._live_available else
+                ("CONNECTED · LOCAL PLANNING · " if self._live_available else
                  "NOT CONNECTED · ") + self._live_notice)
             self.example_button.setText("Explore example")
         self.mission_table.blockSignals(True)
@@ -382,10 +380,6 @@ class MissionBoardView(QWidget):
                 self.time_table.setItem(row, col, _cell(value))
         self._update_write_controls()
 
-    def set_owner_authenticated(self, yes):
-        self._owner_authenticated = bool(yes)
-        self._update_write_controls()
-
     def set_write_busy(self, yes):
         self._write_busy = bool(yes)
         self._update_write_controls()
@@ -397,16 +391,11 @@ class MissionBoardView(QWidget):
         return self._visible[row] if 0 <= row < len(self._visible) else None
 
     def _update_write_controls(self):
-        if not hasattr(self, "owner_unlock_button"):
+        if not hasattr(self, "new_button"):
             return
-        available = self._live_available and not self._demo
-        enabled = available and self._owner_authenticated and not self._write_busy
+        available = self._live_available and self._live_can_write and not self._demo
+        enabled = available and not self._write_busy
         selected = self._selected_real_mission()
-        self.owner_unlock_button.setEnabled(
-            available and not self._write_busy and not self._owner_authenticated)
-        self.owner_unlock_button.setText(
-            "Owner MFA verified" if self._owner_authenticated
-            else "Owner MFA · Unlock edits")
         self.new_button.setEnabled(enabled and bool(self._crm_companies))
         self.add_task_button.setEnabled(enabled and selected is not None)
         self.log_time_button.setEnabled(enabled and selected is not None)

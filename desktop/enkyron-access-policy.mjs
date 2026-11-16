@@ -16,7 +16,7 @@ export const ENKYRON_ACCESS_ROLES=Object.freeze(Object.keys(grants));
 const knownActions=new Set([
   ...Object.values(grants).flat().filter(x=>x!=='*'),
   // Privileged internal operations. New operations must be explicitly added.
-  'crm:read','crm:write','psa:plan','psa:task','psa:time','finance:read','finance:manage',
+  'crm:read','crm:write','finance:read','finance:manage',
   'account:manage','development:manage','audit:read',
   'document:read_confidential','configuration:manage','email:read','email:send',
 ]);

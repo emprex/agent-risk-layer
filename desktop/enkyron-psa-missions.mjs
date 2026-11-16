@@ -161,7 +161,7 @@ export async function readMissionBoard(pool, actor) {
     items.push({...mission, work_items: workItems, time_entries: timeEntries});
   }
   return {
-    available: true, items, more: missions.more, can_write: false,
-    notice: 'Existing internal planning missions (read only). Contract and testing approval are separate.',
+    available: true, items, more: missions.more, can_write: true,
+    notice: 'Local-operator internal planning enabled. Contract and testing approval are separate.',
   };
 }

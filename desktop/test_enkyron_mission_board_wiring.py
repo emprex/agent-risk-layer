@@ -21,11 +21,11 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn("self.bridge.call(\"crm-companies\", \"\", callback=received)", text)
         self.assertIn("self.mission_board.crmRefreshRequested.connect", text)
         self.assertIn("self.mission_board.missionRefreshRequested.connect", text)
-        self.assertIn("self.mission_board.ownerUnlockRequested.connect", text)
+        self.assertNotIn("self.mission_board.ownerUnlockRequested.connect", text)
         self.assertIn("self.mission_board.writeRequested.connect", text)
-        self.assertIn("def unlock_mission_board", text)
+        self.assertNotIn("def unlock_mission_board", text)
         self.assertIn("def save_mission_board_action", text)
-        self.assertIn('payload={"session_token": self._psa_owner_token,', text)
+        self.assertIn("self.bridge.call(action, payload=details, callback=received)", text)
         self.assertIn('self.bridge.call("psa-board", "", callback=received)', text)
         self.assertIn("go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))", text)
 
@@ -41,7 +41,8 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn('self.detail_tabs.addTab(crm_page, "CRM companies")', text)
         self.assertIn("normalize_crm_companies", text)
         self.assertIn("show_live_board", text)
-        self.assertIn("ownerUnlockRequested = Signal()", text)
+        self.assertNotIn("ownerUnlockRequested = Signal()", text)
+        self.assertNotIn("owner_unlock_button", text)
         self.assertIn("writeRequested = Signal(str, dict)", text)
         self.assertIn("def _create_mission", text)
         self.assertIn("def _add_work_item", text)
@@ -50,14 +51,17 @@ class MissionBoardWiringTests(unittest.TestCase):
         for item in ("new_button", "add_task_button", "complete_button", "log_time_button"):
             self.assertIn("self." + item + ".setEnabled(False)", text)
 
-    def test_psa_bridge_is_read_only_and_uses_existing_local_ipc(self):
+    def test_psa_bridge_uses_local_peer_identity_and_bounded_writes(self):
         text = BRIDGE.read_text(encoding="utf-8")
+        self.assertIn("const PSA_LOCAL_WRITES = new Set", text)
         self.assertIn("'psa-board'", text)
         self.assertIn("await readMissionBoard(pool, os.userInfo().username)", text)
-        self.assertNotIn("'psa-create'", text)
-        self.assertNotIn("'psa-complete'", text)
-        self.assertNotIn("'psa-log-time'", text)
-
+        self.assertIn("identity?.actor!==os.userInfo().username", text)
+        self.assertIn("identity?.port!=='5432'", text)
+        for operation in ("psa-create-mission", "psa-add-work-item",
+                          "psa-complete-work-item", "psa-log-time"):
+            self.assertIn("command === '" + operation + "'", text)
+        self.assertNotIn("Owner MFA", VIEW.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

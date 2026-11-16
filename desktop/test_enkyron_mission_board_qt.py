@@ -30,7 +30,6 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.add_task_button.isEnabled())
         self.assertFalse(self.view.complete_button.isEnabled())
         self.assertFalse(self.view.log_time_button.isEnabled())
-        self.assertFalse(self.view.owner_unlock_button.isEnabled())
         self.assertIn('NOT CONNECTED', self.view.notice.text())
         self.assertEqual(self.view.detail_tabs.currentIndex(), 2)
         self.assertEqual(self.view.crm_table.rowCount(), 0)
@@ -84,7 +83,7 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertEqual(self.view.mission_table.rowCount(), 1)
         self.assertEqual(self.view.detail_tabs.currentIndex(), 0)
         self.assertIn("CONNECTED", self.view.notice.text())
-        self.assertIn("READ ONLY", self.view.notice.text())
+        self.assertIn("LOCAL PLANNING", self.view.notice.text())
         self.assertEqual(self.view.task_table.rowCount(), 5)
         self.assertEqual(self.view.time_table.rowCount(), 2)
         for button in (self.view.new_button, self.view.add_task_button,
@@ -105,29 +104,39 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.new_button.isEnabled())
 
 
-    def test_owner_gate_only_unlocked_on_real_schema_and_never_demo(self):
-        from enkyron_mission_board_model import demo_missions
+    def test_local_operator_can_use_installed_schema_without_second_login(self):
+        self.assertFalse(hasattr(self.view, "owner_unlock_button"))
         self.view.show_crm_companies({"available": True, "more": False, "items": [
             {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-             "name": "Verified test CRM company",
+             "name": "Existing CRM company",
              "relationship_state": "prospect", "city": "", "country": ""}]})
         self.view.show_live_board({"available": True, "items": demo_missions(),
-                                   "more": False, "can_write": False})
-        self.assertTrue(self.view.owner_unlock_button.isEnabled())
-        self.assertFalse(self.view.new_button.isEnabled())
-        self.view.set_owner_authenticated(True)
+                                   "more": False, "can_write": True})
         self.assertTrue(self.view.new_button.isEnabled())
         self.assertTrue(self.view.add_task_button.isEnabled())
         self.assertTrue(self.view.log_time_button.isEnabled())
+        self.assertFalse(self.view.complete_button.isEnabled())
         self.view.set_write_busy(True)
         self.assertFalse(self.view.new_button.isEnabled())
         self.view.set_write_busy(False)
+        self.assertTrue(self.view.new_button.isEnabled())
         self.view.example_button.click()
         self.assertFalse(self.view.new_button.isEnabled())
         self.assertFalse(self.view.add_task_button.isEnabled())
         self.assertFalse(self.view.log_time_button.isEnabled())
         self.view.example_button.click()
         self.assertTrue(self.view.new_button.isEnabled())
+
+    def test_server_write_refusal_never_enables_editing(self):
+        self.view.show_crm_companies({"available": True, "more": False, "items": [
+            {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+             "name": "Existing CRM company",
+             "relationship_state": "prospect", "city": "", "country": ""}]})
+        self.view.show_live_board(
+            {"available": True, "items": demo_missions(), "can_write": False})
+        self.assertFalse(self.view.new_button.isEnabled())
+        self.assertFalse(self.view.add_task_button.isEnabled())
+        self.assertFalse(self.view.log_time_button.isEnabled())
 
 
 

@@ -171,7 +171,7 @@ test('ENK-08 board: missing PSA tables return explicit read-only unavailable sta
   assert.equal(calls.length,1);
 });
 
-test('ENK-08 board: existing scoped missions, work items and time are read only',async()=>{
+test('ENK-08 board: existing scoped missions and children are read-only queries',async()=>{
   const calls = [];
   const m = {id:mission, company_id:company, company_name:'Existing CRM Co',
     opportunity_id:null, title:'Internal planning mission',
@@ -194,7 +194,7 @@ test('ENK-08 board: existing scoped missions, work items and time are read only'
   }};
   const r=await readMissionBoard(pool,'operator');
   assert.equal(r.available,true);
-  assert.equal(r.can_write,false);
+  assert.equal(r.can_write,true);
   assert.equal(r.items.length,1);
   assert.deepEqual(r.items[0].work_items,[w]);
   assert.deepEqual(r.items[0].time_entries,[time]);
@@ -205,22 +205,35 @@ test('ENK-08 board: existing scoped missions, work items and time are read only'
   assert.ok(calls.every(x=>!(/INSERT|UPDATE|DELETE|CREATE TABLE/i).test(x.sql)));
 });
 
-test('ENK-08 Owner write IPC: verified MFA on every action, not local-user-only writes',()=>{
-  const source=fs.readFileSync(
-    new URL('../desktop/enkyron-owner-login-bridge.mjs',import.meta.url),'utf8');
-  const main=fs.readFileSync(
+test('ENK-08 local writing: peer-authenticated ARL bridge, no duplicate login',()=>{
+  const bridge=fs.readFileSync(
     new URL('../desktop/enkyron-bridge.mjs',import.meta.url),'utf8');
-  assert.match(source,/PSA_OPERATIONS=new Map/);
-  assert.match(source,/resolveLocalOwnerSession\(pool/);
-  assert.match(source,/authoriseEnkyronOperation\(principal,action/);
-  assert.match(source,/Object\.keys\(req\)\.sort\(\)/);
-  assert.match(source,/createMissionPlan\(pool,body,operator\)/);
-  assert.match(source,/createMissionWorkItem\(pool,body,operator\)/);
-  assert.match(source,/completeMissionWorkItem\(pool,body,operator\)/);
-  assert.match(source,/createMissionTimeEntry\(pool,body,operator\)/);
-  assert.match(source,/PSA schema is not installed/);
-  assert.doesNotMatch(main,/psa-create-mission' \? await/);
+  const owner=fs.readFileSync(
+    new URL('../desktop/enkyron-owner-login-bridge.mjs',import.meta.url),'utf8');
+  const window=fs.readFileSync(
+    new URL('../desktop/enkyron.py',import.meta.url),'utf8');
+  const view=fs.readFileSync(
+    new URL('../desktop/enkyron_mission_board.py',import.meta.url),'utf8');
+  assert.match(bridge,/const PSA_LOCAL_WRITES = new Set/);
+  assert.match(bridge,/host: socket, port: 5432, user: os\.userInfo\(\)\.username/);
+  assert.match(bridge,/identity\?\.actor!==os\.userInfo\(\)\.username/);
+  assert.match(bridge,/identity\?\.port!=='5432'/);
+  assert.match(bridge,/dbTarget\.uat\|\|dbTarget\.database!=='arl_local'/);
+  for(const [operation,fn] of [
+    ['psa-create-mission','createMissionPlan'],
+    ['psa-add-work-item','createMissionWorkItem'],
+    ['psa-complete-work-item','completeMissionWorkItem'],
+    ['psa-log-time','createMissionTimeEntry'],
+  ]){
+    assert.ok(bridge.includes("command === '"+operation+"' ? await "+fn+"(pool, payload, os.userInfo().username)"));
+    assert.ok(!owner.includes("'"+operation+"'"));
+  }
+  assert.doesNotMatch(window,/def unlock_mission_board\(/);
+  assert.doesNotMatch(window,/self\._psa_owner_token/);
+  assert.doesNotMatch(view,/ownerUnlockRequested|Owner MFA/);
+  assert.match(window,/self\.bridge\.call\(action, payload=details, callback=received\)/);
 });
+
 test('ENK-08 installer: one explicitly confirmed private backup, never a clone',()=>{
   const source=fs.readFileSync(
     new URL('../scripts/enkyron-enk08-install.mjs',import.meta.url),'utf8');
