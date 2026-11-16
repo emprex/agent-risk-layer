@@ -16343,8 +16343,11 @@ class EnkyronWindow(QMainWindow):
         state = draft.get("mail_state", "draft")
         reported = state == "external_send_reported"
         submitted = state == "provider_submitted"
-        read_only = reported or submitted
+        filed = (state == "draft" and
+                 draft.get("local_folder", "drafts") != "drafts")
+        read_only = reported or submitted or filed
         title = (
+            "ENKYRON · Filed draft (restore to edit)" if filed else
             "ENKYRON · Resend submission" if submitted else
             "ENKYRON · Reported external send" if reported else
             "ENKYRON · Edit draft" if existing else "ENKYRON · New draft"
@@ -16356,6 +16359,7 @@ class EnkyronWindow(QMainWindow):
         dialog.close_guard = self.confirm_mail_draft_close
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
+            "FILED DRAFT (READ ONLY)" if filed else
             "MESSAGE SUBMITTED THROUGH RESEND" if submitted else
             "EXTERNAL SEND (OPERATOR REPORTED)" if reported else
             "EDIT DRAFT" if existing else "NEW DRAFT"
@@ -16367,6 +16371,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_company_label = prospect
         layout.addWidget(prospect)
         warning = QLabel(
+            "This draft is filed outside Drafts. Restore it to Drafts before "
+            "editing or sending. No email has been transmitted." if filed else
             "The operator recorded an external send. ENKYRON has not verified "
             "provider transmission, delivery or reading. This saved revision "
             "is read-only." if reported else
