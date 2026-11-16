@@ -143,7 +143,7 @@ export async function listMovedOutboundMail(pool,operator,input={}){
     's.draft_id,d.recipient_email,d.subject,s.outcome,s.recorded_at AS updated_at '+
     'FROM enkyron_mail_outbound_locations l '+
     'JOIN enkyron_mail_send_attempts s ON s.workspace_key=l.workspace_key '+
-    "AND s.id=l.record_id AND l.record_kind='sent' "+
+    "AND s.id::text=l.record_id AND l.record_kind='sent' "+
     'JOIN enkyron_crm_mail_drafts d ON d.workspace_key=s.workspace_key AND d.id=s.draft_id '+
     "WHERE l.workspace_key=$1 AND ($2='all' OR l.folder_key=$2) "+
     "AND l.folder_key<>'purged' "+
