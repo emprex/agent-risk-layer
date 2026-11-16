@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import {
-  ENKYRON_ENK05_UAT_DATABASE as DB,
-  ENKYRON_ENK05_UAT_MARKER as MARKER,
+  ENKYRON_UAT_MARKER as MARKER,
   resolveEnkyronDatabase
 } from '../desktop/enkyron-uat-database.mjs';
 import {
   REQUIRED_RELATIONS,requireEnk05PreflightIdentity,inspectEnk05Preflight
 } from '../scripts/enkyron-enk05-uat-preflight.mjs';
+const DB='enkyron_uat_enk03';
 const target=resolveEnkyronDatabase({
   ENKYRON_UAT_DATABASE:DB,ENKYRON_UAT_GUARD:MARKER
 });
@@ -25,7 +25,7 @@ test('read-only ENK-05 preflight requires exact target, peer owner, read-only mo
     identity({read_only:'off'})
   ]) assert.throws(()=>requireEnk05PreflightIdentity(target,row),/Refusing/);
   assert.throws(()=>requireEnk05PreflightIdentity({
-    database:'enkyron_uat_enk03',uat:true},identity()),/Refusing/);
+    database:'arl_local',uat:false},identity()),/Refusing/);
 });
 test('read-only ENK-05 preflight verifies marker and only reads schema metadata',async()=>{
   let count=0;

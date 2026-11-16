@@ -42,6 +42,7 @@ function harness({dbRecipient=external,localSender=external,granted=true}={}){
   const client={
     async query(sql,args){
       if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};
+      if(sql.includes('FROM pg_catalog.pg_attribute'))return {rows:[{n:0}]};
       if(sql.startsWith('SELECT sender FROM enkyron_mail_local_messages'))
         return {rows:localSender?[{sender:localSender}]:[]};
       if(sql.startsWith('SELECT id,revision,mailbox_key'))

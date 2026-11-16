@@ -134,11 +134,11 @@ test('updating draft increments revision and hashes audit without leaking body',
   });
   assert.equal(result.revision,2);
   assert.deepEqual(statements.map(q=>q.sql.match(/^[A-Z]+/)[0]),
-    ['BEGIN','SELECT','UPDATE','INSERT','COMMIT']);
-  assert.equal(statements[2].params[5],2);
-  assert.equal(statements[2].params[7],1);
-  assert.match(statements[3].params[4],/^[a-f0-9]{64}$/);
-  assert.ok(!statements[3].params.includes(next.body_text));
+    ['BEGIN','SELECT','SELECT','UPDATE','INSERT','COMMIT']);
+  assert.equal(statements[3].params[5],2);
+  assert.equal(statements[3].params[7],1);
+  assert.match(statements[4].params[4],/^[a-f0-9]{64}$/);
+  assert.ok(!statements[4].params.includes(next.body_text));
 });
 
 

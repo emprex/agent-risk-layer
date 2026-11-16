@@ -120,6 +120,9 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
         subject:safeText(item.subject,400),
         from:safeText(item.from,254),
         to:Array.isArray(item.to)?item.to.slice(0,20).map(x=>safeText(x,254)):[],
+        cc:Array.isArray(item.cc)?item.cc.slice(0,20).map(x=>safeText(x,254)):[],
+        direction:item.direction==='inbound'?'inbound':
+          item.direction==='outbound'?'outbound':'unknown',
         // Envelope reply target is displayed to a human, never auto-trusted.
         reply_to:Array.isArray(item.reply_to)
           ?item.reply_to.slice(0,10).map(x=>safeText(x,254))

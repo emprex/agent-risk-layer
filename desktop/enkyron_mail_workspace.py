@@ -6,13 +6,13 @@ by the backend; this presentation creates no authenticated actions or sends.
 from datetime import datetime
 from html import escape
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice
+from PySide6.QtGui import QFont, QImageReader, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
     QStackedWidget, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QInputDialog,
-    QTextBrowser, QMessageBox,
+    QTextBrowser, QMessageBox, QScrollArea, QCheckBox,
 )
 
 
@@ -113,7 +113,7 @@ def format_mail_message_cards(messages):
         attachment_lines = []
         refs = item.get("attachment_previews")
         if isinstance(refs, list):
-            for detail in refs[:8]:
+            for ref_index, detail in enumerate(refs[:8]):
                 if not isinstance(detail, dict):
                     continue
                 filename = escape(str(detail.get("filename") or
@@ -129,9 +129,16 @@ def format_mail_message_cards(messages):
                                if stage == "quarantined_unscanned"
                                else "Blocked" if stage == "blocked"
                                else "Metadata only — file NOT downloaded")
+                display_name = filename
+                if filename.lower().endswith((".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg")):
+                    display_name = (
+                        '<a href="enkyron-attachment:{}:{}" '
+                        'style="color:#176e81;text-decoration:underline;">'
+                        .format(index-1, ref_index) + filename + '</a>'
+                    )
                 attachment_lines.append(
                     "<p style='margin:2px 0;color:#536c80;'>"
-                    + filename + escape(display_size, quote=True)
+                    + display_name + escape(display_size, quote=True)
                     + " · " + escape(state_label, quote=True) + "</p>")
         notes = "".join(
             "<p style='color:#785e28;background-color:#fff8e6;"
@@ -186,12 +193,21 @@ class MailInboxView(QWidget):
     localRecordRequested = Signal(str, int)
     localRecordOpenRequested = Signal(str, int)
     localRecordLinkRequested = Signal(int)
+    localRecordMoveRequested = Signal(str, int, str)
+    filedRecordMoveRequested = Signal(str, str, str)
+    filedRecordOpenRequested = Signal(str)
+    localTrashClearRequested = Signal()
     replyRequested = Signal(str, str)
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
     localCompanyLinkRequested = Signal(str, str)
     localTicketLinkRequested = Signal(str, str)
+    attachmentRequested = Signal(str, str)
+    attachmentOpenRequested = Signal(str, str, str, str, int)
+    attachmentSaveRequested = Signal(str, str, str, str, int)
     replySubmitRequested = Signal()
+    replyAddPeopleRequested = Signal()
+    replyPreviewRequested = Signal()
     sentFollowUpRequested = Signal(int)
 
     def __init__(self, parent=None):
@@ -200,6 +216,7 @@ class MailInboxView(QWidget):
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
+        self._filed_records = []
         self._has_more = False
         self._local_page = 0
         self._local_search_query = None
@@ -209,6 +226,7 @@ class MailInboxView(QWidget):
         self.local_mode = False
         self.local_folders = []
         self.local_labels = []
+        self._filed_records = []
         self._full_text_options = []
         self._accepted_mailbox = None
         self._build()
@@ -322,6 +340,14 @@ class MailInboxView(QWidget):
         self.count.setTextFormat(Qt.TextFormat.PlainText)
         self.count.setStyleSheet("color: #60768a;")
         list_heading.addWidget(self.count)
+        self.empty_trash_button = QPushButton("Empty Trash…")
+        self.empty_trash_button.setObjectName("enkyronMailEmptyTrash")
+        self.empty_trash_button.setToolTip(
+            "Clear local Trash after confirmation; retain provider and audit records"
+        )
+        self.empty_trash_button.clicked.connect(self.localTrashClearRequested.emit)
+        self.empty_trash_button.hide()
+        list_heading.addWidget(self.empty_trash_button)
         left_layout.addLayout(list_heading)
         self.thread_list = QListWidget()
         self.thread_list.setObjectName("enkyronMailThreadList")
@@ -395,9 +421,20 @@ class MailInboxView(QWidget):
         self.body.setAccessibleName("Read-only conversation; external links disabled")
         self.body.setOpenExternalLinks(False)
         self.body.setOpenLinks(False)
+        self.body.anchorClicked.connect(self._inline_attachment_clicked)
+        self.body.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.body.customContextMenuRequested.connect(
+            self._attachment_context_menu)
         self.body.setReadOnly(True)
         self.body.setPlainText("")
         right_layout.addWidget(self.body, 1)
+        self.attachment_image_scroll = QScrollArea()
+        self.attachment_image_scroll.setWidgetResizable(True)
+        self.attachment_image_label = QLabel()
+        self.attachment_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.attachment_image_scroll.setWidget(self.attachment_image_label)
+        right_layout.addWidget(self.attachment_image_scroll, 1)
+        self.attachment_image_scroll.hide()
         reply_toolbar = QHBoxLayout()
         self.reply_button = QPushButton("Reply")
         self.reply_button.setObjectName("enkyronMailReply")
@@ -433,6 +470,23 @@ class MailInboxView(QWidget):
         self.ticket_link_button.clicked.connect(self._request_ticket_link)
         self.ticket_link_button.hide()
         reply_toolbar.addWidget(self.ticket_link_button)
+        self.document_dossier_button = QPushButton("Save to dossier…")
+        self.document_dossier_button.setObjectName(
+            "enkyronMailSaveToDossier"
+        )
+        self.document_dossier_button.hide()
+        reply_toolbar.addWidget(self.document_dossier_button)
+        self.attachment_button = QPushButton("Attachments…")
+        self.attachment_button.setObjectName("enkyronMailAttachments")
+        self.attachment_button.clicked.connect(self._request_attachments)
+        self.attachment_button.hide()
+        reply_toolbar.addWidget(self.attachment_button)
+        self.attachment_button.hide()
+        self.attachment_back_button = QPushButton("← Back to email")
+        self.attachment_back_button.setObjectName("enkyronMailBackFromAttachment")
+        self.attachment_back_button.clicked.connect(self._back_from_attachment)
+        self.attachment_back_button.hide()
+        reply_toolbar.addWidget(self.attachment_back_button)
         reply_toolbar.addStretch()
         right_layout.addLayout(reply_toolbar)
         self.reply_editor = QFrame()
@@ -443,6 +497,31 @@ class MailInboxView(QWidget):
         self.reply_target.setWordWrap(True)
         self.reply_target.setTextFormat(Qt.TextFormat.PlainText)
         reply_layout.addWidget(self.reply_target)
+        self.reply_people_panel = QFrame()
+        people_layout = QVBoxLayout(self.reply_people_panel)
+        people_layout.setContentsMargins(0, 0, 0, 0)
+        cc_row = QHBoxLayout()
+        cc_row.addWidget(QLabel("CC"))
+        self.reply_cc = QLineEdit()
+        self.reply_cc.setObjectName("enkyronReplyExtraCc")
+        self.reply_cc.setMaxLength(12000)
+        self.reply_cc.setPlaceholderText(
+            "Additional CC addresses, separated by commas"
+        )
+        cc_row.addWidget(self.reply_cc, 1)
+        people_layout.addLayout(cc_row)
+        bcc_row = QHBoxLayout()
+        bcc_row.addWidget(QLabel("BCC"))
+        self.reply_bcc = QLineEdit()
+        self.reply_bcc.setObjectName("enkyronReplyExtraBcc")
+        self.reply_bcc.setMaxLength(12000)
+        self.reply_bcc.setPlaceholderText(
+            "Additional private BCC addresses"
+        )
+        bcc_row.addWidget(self.reply_bcc, 1)
+        people_layout.addLayout(bcc_row)
+        self.reply_people_panel.hide()
+        reply_layout.addWidget(self.reply_people_panel)
         self.reply_body = QPlainTextEdit()
         self.reply_body.setObjectName("enkyronMailReplyBody")
         self.reply_body.setPlaceholderText("Write your reply…")
@@ -452,6 +531,32 @@ class MailInboxView(QWidget):
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.cancel_reply_editor)
         reply_actions.addWidget(cancel)
+        self.reply_add_people = QPushButton("Add people…")
+        self.reply_add_people.setObjectName("enkyronReplyAddPeople")
+        self.reply_add_people.setToolTip(
+            "Prepare a separate unsent draft with more participants"
+        )
+        self.reply_add_people.clicked.connect(
+            self.toggle_reply_participants
+        )
+        self.reply_add_people.hide()
+        reply_actions.addWidget(self.reply_add_people)
+        self.reply_all_toggle = QCheckBox("Include visible participants")
+        self.reply_all_toggle.setObjectName("enkyronReplyAll")
+        self.reply_all_toggle.setToolTip(
+            "Include only participants visible in Resend To/CC. "
+            "Other original To recipients may not be available."
+        )
+        reply_actions.addWidget(self.reply_all_toggle)
+        self.reply_preview = QPushButton("Review recipients…")
+        self.reply_preview.setObjectName(
+            "enkyronReplyPreviewRecipients"
+        )
+        self.reply_preview.clicked.connect(
+            lambda _checked=False:
+            self.replyPreviewRequested.emit()
+        )
+        reply_actions.addWidget(self.reply_preview)
         reply_actions.addStretch()
         self.reply_send = QPushButton("Send reply…")
         self.reply_send.setObjectName("enkyronMailSendReply")
@@ -575,6 +680,13 @@ class MailInboxView(QWidget):
         key = item.data(0, Qt.ItemDataRole.UserRole)
         folder = next((f for f in self.local_folders
                        if isinstance(f, dict) and f.get("key") == key), None)
+        if folder and folder.get("key") == "trash":
+            menu = QMenu(self)
+            clear = menu.addAction("Empty Trash (local view; audit retained)…")
+            selected = menu.exec(self.folder_tree.viewport().mapToGlobal(pos))
+            if selected == clear:
+                self.localTrashClearRequested.emit()
+            return
         if not folder or folder.get("system") is not False:
             return
         menu = QMenu(self)
@@ -626,6 +738,7 @@ class MailInboxView(QWidget):
             self._restore_local_folder_selection()
             return
         self._folder = folder
+        self.empty_trash_button.setVisible(folder == "trash")
         for row in range(self.folder_tree.topLevelItemCount()):
             node = self.folder_tree.topLevelItem(row)
             if node.data(0, Qt.ItemDataRole.UserRole) == folder:
@@ -650,6 +763,54 @@ class MailInboxView(QWidget):
         if not isinstance(record, tuple) or len(record) != 2:
             return
         mailbox, thread_id = record
+        if mailbox == "filed-record":
+            records = self._filed_records
+            if not isinstance(thread_id, int) or not 0 <= thread_id < len(records):
+                return
+            entry = records[thread_id]
+            original = entry.get("original_kind")
+            draft_id = entry.get("draft_id")
+            if original not in ("sent", "drafts") or not isinstance(draft_id, str):
+                return
+            menu = QMenu(self)
+            open_action = menu.addAction("Open saved message")
+            open_action.triggered.connect(
+                lambda _checked=False: self.filedRecordOpenRequested.emit(draft_id)
+            )
+            menu.addSeparator()
+            if self._folder != original:
+                restore = menu.addAction("Restore to " + original.title())
+                restore.triggered.connect(
+                    lambda _checked=False:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, original)
+                )
+            if self._folder != "trash":
+                trash = menu.addAction("Move to Trash")
+                trash.triggered.connect(
+                    lambda _checked=False:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, "trash")
+                )
+            if self._folder not in ("archive", "trash"):
+                archive = menu.addAction("Archive")
+                archive.triggered.connect(
+                    lambda _checked=False:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, "archive")
+                )
+            move = menu.addMenu("Move to folder")
+            for target in ("archive", "spam", "trash"):
+                if target == self._folder:
+                    continue
+                action = move.addAction(target.title())
+                action.triggered.connect(
+                    lambda _checked=False, destination=target:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, destination)
+                )
+            if self._folder == "trash":
+                menu.addSeparator()
+                clear = menu.addAction("Empty Trash…")
+                clear.triggered.connect(self.localTrashClearRequested.emit)
+            menu.exec(self.thread_list.mapToGlobal(pos))
+            return
         if mailbox in ("local-sent", "local-drafts"):
             menu = QMenu(self)
             action = menu.addAction(
@@ -667,11 +828,45 @@ class MailInboxView(QWidget):
                     link.triggered.connect(
                         lambda _checked=False: self.localRecordLinkRequested.emit(thread_id)
                     )
+            menu.addSeparator()
+            trash = menu.addAction("Move to Trash")
+            trash.triggered.connect(
+                lambda _checked=False: self.localRecordMoveRequested.emit(
+                    mailbox.removeprefix("local-"), thread_id, "trash"
+                )
+            )
+            archive = menu.addAction("Archive")
+            archive.triggered.connect(
+                lambda _checked=False: self.localRecordMoveRequested.emit(
+                    mailbox.removeprefix("local-"), thread_id, "archive"
+                )
+            )
+            move = menu.addMenu("Move to folder")
+            for target in ("archive", "spam", "trash"):
+                action = move.addAction(target.title())
+                action.triggered.connect(
+                    lambda _checked=False, destination=target:
+                    self.localRecordMoveRequested.emit(
+                        mailbox.removeprefix("local-"), thread_id, destination
+                    )
+                )
             menu.exec(self.thread_list.mapToGlobal(pos))
             return
         if mailbox not in self._mailboxes:
             return
         menu = QMenu(self)
+        open_action = menu.addAction("Open message")
+        open_action.triggered.connect(
+            lambda _checked=False:
+            self.threadOpenRequested.emit(mailbox, thread_id)
+        )
+        if self._folder == "inbox":
+            reply_action = menu.addAction("Reply")
+            reply_action.triggered.connect(
+                lambda _checked=False:
+                self.replyRequested.emit(mailbox, thread_id)
+            )
+        menu.addSeparator()
         entry_index = self.thread_list.row(item)
         entry = self.items[entry_index] if 0 <= entry_index < len(self.items) else {}
         flagged = bool(isinstance(entry, dict) and entry.get("flagged") is True)
@@ -686,10 +881,34 @@ class MailInboxView(QWidget):
             lambda _checked=False: self.localFlagRequested.emit(
                 mailbox, thread_id, not flagged))
         menu.addSeparator()
+        if self._folder in ("trash", "archive", "spam"):
+            restore = menu.addAction("Restore to Inbox")
+            restore.triggered.connect(
+                lambda _checked=False:
+                self.localMoveRequested.emit(mailbox, thread_id, "inbox")
+            )
+        if self._folder == "trash":
+            clear = menu.addAction("Empty Trash…")
+            clear.triggered.connect(self.localTrashClearRequested.emit)
+        else:
+            trash = menu.addAction("Move to Trash")
+            trash.triggered.connect(
+                lambda _checked=False:
+                self.localMoveRequested.emit(mailbox, thread_id, "trash")
+            )
+            if self._folder != "archive":
+                archive = menu.addAction("Archive")
+                archive.triggered.connect(
+                    lambda _checked=False:
+                    self.localMoveRequested.emit(mailbox, thread_id, "archive")
+                )
         move = menu.addMenu("Move to folder")
+        actual_folder = (
+            entry.get("folder_key") if isinstance(entry, dict) else None
+        ) or self._folder
         for folder in self.local_folders:
             key = folder.get("key")
-            if key in ("sent","drafts",self._folder):
+            if key in ("sent", "drafts", actual_folder, "hidden"):
                 continue
             action = move.addAction(folder.get("name") or key)
             action.triggered.connect(
@@ -783,12 +1002,20 @@ class MailInboxView(QWidget):
         self.full_text_button.hide()
         self.crm_link_button.hide()
         self.ticket_link_button.hide()
+        self.attachment_button.hide()
+        self.attachment_back_button.hide()
+        self.attachment_image_label.clear()
+        self.attachment_image_scroll.hide()
+        self.body.show()
+        self._attachment_previous = None
+        self._attachment_snapshot = []
         self.crm_link_button.setEnabled(True)
         self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
+        self._filed_records = []
         self._has_more = False
         self._local_page = 0
         if not preserve_search:
@@ -987,7 +1214,9 @@ class MailInboxView(QWidget):
             return False
         if not isinstance(records, list):
             return False
-        self._clear_threads("No messages in this folder.")
+        self._clear_threads(
+            "No messages in this folder.",
+            preserve_search=bool(self.search.text().strip()))
         self.items = list(records[:200])
         self._has_more = bool(more or len(records) > 200)
         self.thread_list.blockSignals(True)
@@ -1016,6 +1245,36 @@ class MailInboxView(QWidget):
         self._filter(self.search.text())
         return True
 
+    def append_filed_records(self, folder, records):
+        """Show locally filed Sent/Drafts alongside cached conversations."""
+        if not self.local_mode or folder != self._folder or folder not in (
+                "archive", "spam", "trash"):
+            return False
+        if not isinstance(records, list):
+            return False
+        self._filed_records = list(records[:100])
+        self.thread_list.blockSignals(True)
+        for index, record in enumerate(self._filed_records):
+            if not isinstance(record, dict):
+                continue
+            if (self.selected_mailbox != "all"
+                    and record.get("mailbox_key") != self.selected_mailbox):
+                continue
+            label = "{} · {}\n{}\n{}".format(
+                (record.get("original_kind") or "Saved").title(),
+                str(record.get("recipient_email") or "Recipient not set")[:100],
+                str(record.get("subject") or "(No subject)")[:300],
+                "Locally filed record — provider unchanged"
+            )
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, ("filed-record", index))
+            item.setToolTip("Right-click to move or restore this saved record")
+            self.thread_list.addItem(item)
+        self.thread_list.blockSignals(False)
+        self.count.setText("{} conversation(s) / filed record(s)".format(
+            self.thread_list.count()))
+        return True
+
     def update_local_sent_delivery(self, index, status):
         """Expose verified provider state in the same Sent message list."""
         if not self.local_mode or self._folder != "sent":
@@ -1036,6 +1295,34 @@ class MailInboxView(QWidget):
                          + str(status)[:100] + (" · " + date if date else ""))
             return True
         return False
+
+    def show_local_sent_conversation(
+            self, index, mailbox, thread_id, messages):
+        """Complete Sent conversation without changing the selected folder."""
+        selected = self.thread_list.currentItem()
+        if (not self.local_mode or self.selected_folder != "sent"
+                or selected is None
+                or selected.data(Qt.ItemDataRole.UserRole) != ("local-sent", index)
+                or mailbox not in self._mailboxes
+                or not isinstance(thread_id, str) or len(thread_id) != 36
+                or not isinstance(messages, list) or len(messages) < 2):
+            return False
+
+        self.current_thread_mailbox = mailbox
+        self.current_thread_id = thread_id
+        self._attachment_snapshot = messages[:50]
+        self._attachment_previous = None
+        self.attachment_back_button.hide()
+        self.attachment_image_label.clear()
+        self.attachment_image_scroll.hide()
+        self.body.show()
+        self.body.setHtml(format_mail_message_cards(messages))
+        self.meta.setText(
+            "{} messages · Sent + Inbox · Verified conversation".format(
+                len(messages[:50]))
+        )
+        self.reader_stack.setCurrentIndex(1)
+        return True
 
     def show_local_record_preview(self, kind, index, body, metadata):
         """Render fetched CRM draft content as inert plain text only."""
@@ -1127,6 +1414,13 @@ class MailInboxView(QWidget):
         self.full_text_button.hide()
         self.crm_link_button.hide()
         self.ticket_link_button.hide()
+        self.attachment_button.hide()
+        self.attachment_back_button.hide()
+        self.attachment_image_label.clear()
+        self.attachment_image_scroll.hide()
+        self.body.show()
+        self._attachment_previous = None
+        self._attachment_snapshot = []
         self.crm_link_button.setEnabled(True)
         self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
@@ -1153,6 +1447,18 @@ class MailInboxView(QWidget):
             self.reader_stack.setCurrentIndex(1)
             self.localRecordRequested.emit(kind, thread_id)
             return
+        if self.local_mode and source == "filed-record":
+            if not isinstance(thread_id, int) or not 0 <= thread_id < len(self._filed_records):
+                return
+            record = self._filed_records[thread_id]
+            self.subject.setText(str(record.get("subject") or "(No subject)")[:300])
+            self.meta.setText("Locally filed " + str(record.get("original_kind") or "email"))
+            self.body.setPlainText(
+                "Open this saved message by double-clicking or right-clicking. "
+                "Moving it never changes provider delivery or CRM audit records."
+            )
+            self.reader_stack.setCurrentIndex(1)
+            return
         if source not in self._mailboxes:
             return
         self.current_thread_mailbox = source
@@ -1178,6 +1484,11 @@ class MailInboxView(QWidget):
         if self.local_mode and source in ("local-sent", "local-drafts"):
             if isinstance(thread_id, int):
                 self.localRecordOpenRequested.emit(source.removeprefix("local-"), thread_id)
+        elif self.local_mode and source == "filed-record":
+            if isinstance(thread_id, int) and 0 <= thread_id < len(self._filed_records):
+                draft_id = self._filed_records[thread_id].get("draft_id")
+                if isinstance(draft_id, str):
+                    self.filedRecordOpenRequested.emit(draft_id)
         elif source in self._mailboxes:
             self.threadOpenRequested.emit(source, thread_id)
 
@@ -1208,6 +1519,166 @@ class MailInboxView(QWidget):
             return
         self.localCompanyLinkRequested.emit(
             self.current_thread_mailbox, self.current_thread_id)
+
+    def _inline_attachment_clicked(self, url):
+        # Only internal generated references; never open external URLs.
+        parts = url.toString().split(":")
+        if (len(parts) != 3 or parts[0] != "enkyron-attachment"
+                or not parts[1].isdigit() or not parts[2].isdigit()):
+            return
+        midx, aidx = int(parts[1]), int(parts[2])
+        messages = getattr(self, "_attachment_snapshot", [])
+        if (not self.local_mode or not self.current_thread_id
+                or self.current_thread_mailbox not in self._mailboxes
+                or not 0 <= midx < len(messages) or not 0 <= aidx < 8):
+            return
+        message = messages[midx]
+        if not isinstance(message, dict):
+            return
+        refs = message.get("attachment_previews")
+        if not isinstance(refs, list) or aidx >= len(refs):
+            return
+        ref = refs[aidx]
+        if not isinstance(ref, dict):
+            return
+        filename = str(ref.get("filename") or "")
+        message_id = message.get("id")
+        try:
+            size = int(ref.get("size"))
+        except (ValueError, TypeError):
+            return
+        ext = filename.lower().rsplit(".", 1)[-1]
+        limit = (1048576 if ext in ("md", "txt") else
+                 10485760 if ext in ("pdf", "png", "jpg", "jpeg") else -1)
+        if (limit < 0 or not isinstance(message_id, str)
+                or len(message_id) != 36 or not 0 <= size <= limit):
+            return
+        self.attachmentOpenRequested.emit(
+            self.current_thread_mailbox, self.current_thread_id,
+            message_id, filename, size)
+
+    def _attachment_context_menu(self, pos):
+        """Ordinary text context menu, plus Save As on an attachment link."""
+        menu = self.body.createStandardContextMenu()
+        try:
+            parts = self.body.anchorAt(pos).split(":")
+            if (len(parts) == 3
+                    and parts[0] == "enkyron-attachment"
+                    and parts[1].isdigit() and parts[2].isdigit()
+                    and self.local_mode
+                    and self.current_thread_mailbox in self._mailboxes
+                    and self.current_thread_id):
+                midx, aidx = int(parts[1]), int(parts[2])
+                messages = getattr(self, "_attachment_snapshot", [])
+                if 0 <= midx < len(messages) and 0 <= aidx < 8:
+                    message = messages[midx]
+                    refs = message.get("attachment_previews", [])
+                    if isinstance(refs, list) and aidx < len(refs):
+                        ref = refs[aidx]
+                        name = str(ref.get("filename") or "")
+                        size = int(ref.get("size"))
+                        message_id = str(message.get("id") or "")
+                        if (name.lower().endswith((".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg"))
+                                and len(message_id) == 36
+                                and 0 <= size <= (1048576 if name.lower().endswith((".md", ".txt")) else 10485760)):
+                            menu.addSeparator()
+                            save = menu.addAction("Save As…")
+                            mailbox = self.current_thread_mailbox
+                            thread_id = self.current_thread_id
+                            save.triggered.connect(
+                                lambda checked=False:
+                                self.attachmentSaveRequested.emit(
+                                    mailbox, thread_id,
+                                    message_id, name, size))
+        except (TypeError, ValueError, KeyError, AttributeError):
+            pass
+        menu.exec(self.body.mapToGlobal(pos))
+
+    def show_attachment_image_inline(self, filename, raw):
+        """Display PNG/JPEG in the existing reading pane."""
+        if not isinstance(raw, bytes) or len(raw) > 10485760:
+            return False
+
+        buffer = QBuffer()
+        buffer.setData(QByteArray(raw))
+        if not buffer.open(QIODevice.OpenModeFlag.ReadOnly):
+            return False
+
+        reader = QImageReader(buffer)
+        reader.setAutoTransform(True)
+        dimensions = reader.size()
+
+        if (not dimensions.isValid()
+                or dimensions.width() > 10000
+                or dimensions.height() > 10000
+                or dimensions.width() * dimensions.height() > 25000000):
+            buffer.close()
+            return False
+
+        picture = reader.read()
+        buffer.close()
+
+        if picture.isNull():
+            return False
+
+        max_width = max(
+            320, self.attachment_image_scroll.viewport().width() - 25
+        )
+        if picture.width() > max_width:
+            picture = picture.scaledToWidth(
+                max_width, Qt.TransformationMode.SmoothTransformation
+            )
+
+        if not self.attachment_back_button.isVisible():
+            self._attachment_previous = (
+                self.body.toHtml(),
+                self.subject.text(),
+                self.meta.text()
+            )
+
+        self.subject.setText(str(filename)[:240])
+        self.meta.setText("Image attachment · read-only preview")
+        self.attachment_image_label.setPixmap(
+            QPixmap.fromImage(picture)
+        )
+        self.body.hide()
+        self.attachment_image_scroll.show()
+        self.attachment_back_button.show()
+        self.attachment_button.hide()
+        return True
+
+    def show_attachment_inline(self, filename, text):
+        if not self.attachment_back_button.isVisible():
+            self._attachment_previous = (
+                self.body.toHtml(), self.subject.text(), self.meta.text())
+        self.subject.setText(filename[:240])
+        self.meta.setText("Text attachment · read-only preview")
+        self.attachment_image_scroll.hide()
+        self.attachment_image_label.clear()
+        self.body.show()
+        self.body.setPlainText(text)
+        self.attachment_back_button.show()
+        self.attachment_button.hide()
+
+    def _back_from_attachment(self):
+        previous = getattr(self, "_attachment_previous", None)
+        if previous:
+            html, subject, meta = previous
+            self.body.setHtml(html)
+            self.subject.setText(subject)
+            self.meta.setText(meta)
+        self._attachment_previous = None
+        self.attachment_image_label.clear()
+        self.attachment_image_scroll.hide()
+        self.body.show()
+        self.attachment_back_button.hide()
+
+    def _request_attachments(self):
+        if (self.local_mode and self.current_thread_id
+                and self.current_thread_mailbox in self._mailboxes
+                and self.attachment_button.isVisible()):
+            self.attachmentRequested.emit(
+                self.current_thread_mailbox,self.current_thread_id)
 
     def _request_ticket_link(self):
         if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
@@ -1287,12 +1758,19 @@ class MailInboxView(QWidget):
         self.forwardRequested.emit(
             self.current_thread_mailbox, self.current_thread_id)
 
+    def toggle_reply_participants(self):
+        expanded = self.reply_people_panel.isHidden()
+        self.reply_people_panel.setVisible(expanded)
+        self.reply_add_people.setText(
+            "Hide Cc/Bcc" if expanded else "Add people…"
+        )
+
     def show_reply_editor(self, mailbox, thread_id, recipient):
         if (mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id
                 or not isinstance(recipient, str) or "@" not in recipient):
             return False
-        if self.reply_editor.isVisible():
+        if not self.reply_editor.isHidden():
             # Re-selecting Reply on the SAME conversation cannot erase
             # something the operator has already typed.
             self.reply_body.setFocus()
@@ -1301,6 +1779,9 @@ class MailInboxView(QWidget):
         self.reply_body.clear()
         self.reply_send.setText("Send reply…")
         self.reply_send.setEnabled(True)
+        self.reply_add_people.show()
+        self.reply_all_toggle.show()
+        self.reply_preview.show()
         self.reply_editor.show()
         self.reply_body.setFocus()
         return True
@@ -1313,13 +1794,17 @@ class MailInboxView(QWidget):
                 or reference != ("local-sent", index)
                 or not isinstance(recipient, str) or "@" not in recipient):
             return False
-        if self.reply_editor.isVisible():
+        if not self.reply_editor.isHidden():
             self.reply_body.setFocus()
             return True
         self.reply_target.setText("New follow-up to: " + recipient)
         self.reply_body.clear()
         self.reply_send.setText("Send follow-up…")
         self.reply_send.setEnabled(True)
+        self.reply_add_people.hide()
+        self.reply_all_toggle.hide()
+        self.reply_preview.hide()
+        self.reply_people_panel.hide()
         self.reply_editor.show()
         self.reply_body.setFocus()
         return True
@@ -1330,7 +1815,9 @@ class MailInboxView(QWidget):
         Inline text is not yet a saved PostgreSQL draft. A successful send
         uses hide_reply_editor() directly after the backend outcome is known.
         """
-        if not self.reply_editor.isVisible():
+        # A background Mail tab is not visible, but its reply still exists.
+        # Only an explicitly hidden editor has no active reply to protect.
+        if self.reply_editor.isHidden():
             return True
         if not self.reply_send.isEnabled():
             QMessageBox.information(
@@ -1338,7 +1825,10 @@ class MailInboxView(QWidget):
                 "Wait for the current reply outcome before changing conversations."
             )
             return False
-        if not self.reply_body.toPlainText().strip():
+        if (not self.reply_body.toPlainText().strip()
+                and not self.reply_cc.text().strip()
+                and not self.reply_bcc.text().strip()
+                and not self.reply_all_toggle.isChecked()):
             return True
         decision = QMessageBox.question(
             self, "Discard unsent reply?",
@@ -1358,6 +1848,11 @@ class MailInboxView(QWidget):
         self.reply_editor.hide()
         self.reply_body.clear()
         self.reply_send.setEnabled(True)
+        self.reply_people_panel.hide()
+        self.reply_cc.clear()
+        self.reply_bcc.clear()
+        self.reply_all_toggle.setChecked(False)
+        self.reply_add_people.setText("Add people…")
         self.reply_target.clear()
 
     def show_messages(self, mailbox, thread_id, messages):
@@ -1365,6 +1860,12 @@ class MailInboxView(QWidget):
         if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id or not isinstance(messages, list)):
             return False
+        self._attachment_snapshot = messages[:50]
+        self._attachment_previous = None
+        self.attachment_back_button.hide()
+        self.attachment_image_label.clear()
+        self.attachment_image_scroll.hide()
+        self.body.show()
         cards = format_mail_message_cards(messages)
         if cards:
             self.body.setHtml(cards)
@@ -1401,6 +1902,7 @@ class MailInboxView(QWidget):
         self.ticket_link_button.setVisible(
             self.local_mode and bool(messages)
             and self.selected_folder not in ("sent", "drafts", "spam", "trash"))
+        self.attachment_button.hide()
         # Opening a successfully rendered saved conversation marks it read.
         # Never mark unread items read on a failed/empty load or stale selection.
         if self.local_mode and messages and any(
@@ -1411,6 +1913,14 @@ class MailInboxView(QWidget):
             for record in self.items
         ):
             self.localReadRequested.emit(mailbox, thread_id, False)
+        self.document_dossier_button.setVisible(
+            self.local_mode and bool(messages)
+            and self.selected_folder not in ('sent', 'drafts')
+            and any(isinstance(m, dict) and
+                    (m.get('attachment_count') or
+                     m.get('attachment_previews'))
+                    for m in messages)
+        )
         return True
 
     def apply_local_read_status(self, mailbox, thread_id, unread):

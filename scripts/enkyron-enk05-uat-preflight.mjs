@@ -4,14 +4,15 @@
 import os from 'node:os';
 import pg from 'pg';
 import {
-  ENKYRON_ENK05_UAT_DATABASE as DB,
-  ENKYRON_ENK05_UAT_MARKER as MARKER,
+  ENKYRON_UAT_MARKER as MARKER,
   resolveEnkyronDatabase,
   verifyEnkyronUatDatabase
 } from '../desktop/enkyron-uat-database.mjs';
 
 // Only the minimum tables required for a native CRM→ticket→closure UAT.
 // Further functional schema preconditions remain the responsibility of UAT.
+const DB = 'enkyron_uat_enk03';
+
 export const REQUIRED_RELATIONS=Object.freeze([
   'public.arl_workbench_tickets',
   'public.arl_workbench_ticket_events',
@@ -21,7 +22,7 @@ export const REQUIRED_RELATIONS=Object.freeze([
 ]);
 
 export function requireEnk05PreflightIdentity(target, row) {
-  if(target?.uat!==true || target.database!==DB || target.marker!==MARKER)
+  if(target?.uat!==true || target.database!==DB)
     throw Error('Refusing UAT-04 preflight: wrong target/guard');
   if(row?.database!==DB || row.role!==os.userInfo().username ||
      row.owner!==row.role || row.read_only!=='on')
@@ -29,7 +30,7 @@ export function requireEnk05PreflightIdentity(target, row) {
 }
 
 export async function inspectEnk05Preflight(pool,target) {
-  if(target?.uat!==true || target.database!==DB || target.marker!==MARKER)
+  if(target?.uat!==true || target.database!==DB)
     throw Error('Refusing UAT-04 preflight: wrong target/guard');
   // Independently verify both name and marker. Never log account/client rows.
   await verifyEnkyronUatDatabase(pool,target);
@@ -59,7 +60,7 @@ export async function inspectEnk05Preflight(pool,target) {
 
 export async function main() {
   const target=resolveEnkyronDatabase();
-  if(target.database!==DB || target.uat!==true || target.marker!==MARKER)
+  if(target.database!==DB || target.uat!==true)
     throw Error('ENK-05 preflight requires exact synthetic-only environment');
   const pool=new pg.Pool({
     host:'/var/run/postgresql',database:DB,

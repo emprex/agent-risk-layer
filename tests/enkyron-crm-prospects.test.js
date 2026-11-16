@@ -13,7 +13,7 @@ test('read-only pages return exactly one chunk and a stable total', async()=>{
     seen.push({sql,params});
     return {rows:[{total:344,items:rows}]};
   }};
-  const data=await listSalesProspectsPage(pool,{search:'  Example  ',page:2});
+  const data=await listSalesProspectsPage(pool,{search:'  Example  ',page:2},'ci-operator');
   assert.equal(data.available,true);
   assert.equal(data.kind,'unverified_sales_prospects');
   assert.equal(data.total,344);
@@ -21,14 +21,17 @@ test('read-only pages return exactly one chunk and a stable total', async()=>{
   assert.equal(data.page_size,100);
   assert.equal(data.items.length,100);
   assert.equal(data.more,true);
-  assert.deepEqual(seen[0].params,['Example',100]);
+  assert.deepEqual(seen[0].params,['Example',100,'local:ci-operator']);
   assert.match(seen[0].sql,/LIMIT 100 OFFSET \$2/);
   assert.match(seen[0].sql,/COUNT\(\*\)::integer/);
   assert.match(seen[0].sql,/ORDER BY updated_at DESC, id/);
   assert.match(seen[0].sql,/^WITH filtered AS/);
+  assert.match(seen[0].sql,/NOT EXISTS/);
+  assert.match(seen[0].sql,/enkyron_crm_prospect_links/);
+  assert.match(seen[0].sql,/linked.workspace_key=\$3/);
   assert.doesNotMatch(seen[0].sql,/\b(?:INSERT|UPDATE|DELETE|MERGE)\s/i);
-  const fourth=await listSalesProspectsPage(pool,{search:'Example',page:4});
-  assert.deepEqual(seen[1].params,['Example',300]);
+  const fourth=await listSalesProspectsPage(pool,{search:'Example',page:4},'ci-operator');
+  assert.deepEqual(seen[1].params,['Example',300,'local:ci-operator']);
   assert.equal(fourth.more,false);
 });
 
@@ -42,8 +45,8 @@ test('search is bounded and page cannot inject SQL or overflow',async()=>{
   let values;
   const pool={query:async(sql,params)=>{values=params;return {rows:[{total:0,items:[]}]} }};
   const candidate="O'Reilly_%";
-  assert.equal((await listSalesProspects(pool,candidate)).items.length,0);
-  assert.deepEqual(values,[candidate,0]);
+  assert.equal((await listSalesProspects(pool,candidate,'ci-operator')).items.length,0);
+  assert.deepEqual(values,[candidate,0,'local:ci-operator']);
 });
 
 test('page four ends at 344 without modifying the source',async()=>{
@@ -51,7 +54,7 @@ test('page four ends at 344 without modifying the source',async()=>{
     total:344,
     items:Array.from({length:44},(_,i)=>({id:'P'+(301+i)}))
   }]})};
-  const data=await listSalesProspectsPage(pool,{search:'',page:4});
+  const data=await listSalesProspectsPage(pool,{search:'',page:4},'ci-operator');
   assert.equal(data.items.length,44);
   assert.equal(data.total,344);
   assert.equal(data.more,false);
@@ -60,12 +63,17 @@ test('page four ends at 344 without modifying the source',async()=>{
 test('absent table is explicit and unrelated SQL errors propagate',async()=>{
   const missing=await listSalesProspectsPage({
     query:async()=>{const error=new Error('not found');error.code='42P01';throw error;}
-  },{search:'',page:1});
+  },{search:'',page:1},'ci-operator');
   assert.equal(missing.available,false);
   assert.equal(missing.total,0);
   assert.deepEqual(missing.items,[]);
   assert.match(missing.notice,/not installed/);
   await assert.rejects(()=>listSalesProspectsPage({
     query:async()=>{throw new Error('access denied');}
-  },{search:'',page:1}),/access denied/);
+  },{search:'',page:1},'ci-operator'),/access denied/);
+});
+
+test('Research requires a scoped local operator',async()=>{
+  await assert.rejects(()=>listSalesProspectsPage({query:async()=>({rows:[]})},
+    {search:'',page:1}),/CRM invalid operator/);
 });

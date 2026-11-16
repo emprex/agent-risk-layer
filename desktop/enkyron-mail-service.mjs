@@ -4,14 +4,28 @@
 // No mail is sent unless a saved draft, explicit human confirmation, mailbox
 // grant, and private Resend key all pass independently.
 import {createHash,randomUUID} from 'node:crypto';
+import {outgoingAttachmentsForDraft} from './enkyron-mail-outgoing.mjs';
 import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
 import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
 import {OWNER_MAILBOXES} from './enkyron-owner-mail-access.mjs';
 import {uniqueCompanyForRecipient,verifiedContactForCompany} from './enkyron-crm-mail-recipients.mjs';
+import {planThreadReply} from './enkyron-mail-thread-recipients.mjs';
+import {verifyThreadReplySnapshot} from './enkyron-mail-thread-review-guard.mjs';
+import {optionallyReadProfessionalRecipients,assertLegacySingleRecipientSnapshot}
+  from './enkyron-mail-draft-recipient-storage.mjs';
 
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const EMAIL=/^[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+$/;
+import {
+  prepareProfessionalMailPayload,
+  professionalPayloadFingerprint
+} from './enkyron-mail-professional-payload.mjs';
+
 const MAILBOXES=new Map(OWNER_MAILBOXES.map(x=>[x.key,x.address]));
+async function rejectLegacyMultiRecipientSend(client,workspaceKey,draft){
+  const groups=await optionallyReadProfessionalRecipients(client,workspaceKey,draft.id);
+  assertLegacySingleRecipientSnapshot(draft.recipient_email,groups);
+}
 function workspace(operator){
   if(typeof operator!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(operator))
     throw new Error('CRM invalid local operator');
@@ -164,7 +178,10 @@ export async function mailSent(pool,operator){
     'ON d.workspace_key=s.workspace_key AND d.id=s.draft_id '+
     'LEFT JOIN enkyron_crm_companies co '+
     'ON co.workspace_key=d.workspace_key AND co.id=d.company_id '+
-    'WHERE s.workspace_key=$1 ORDER BY s.recorded_at DESC LIMIT 100',
+    'LEFT JOIN enkyron_mail_record_filing f '+
+    'ON f.workspace_key=d.workspace_key AND f.draft_id=d.id '+
+    "WHERE s.workspace_key=$1 AND COALESCE(f.folder_key,'sent')='sent' "+
+    'ORDER BY s.recorded_at DESC LIMIT 100',
     [key]
   )).rows;
   return {available:true,items:rows};
@@ -291,11 +308,22 @@ export function validateMailSendRequest(input){
       ||!Number.isSafeInteger(input.expected_revision)||input.expected_revision<1
       ||input.recipient_verified!==true||input.confirmed!==true)
     throw new Error('CRM explicit recipient and send confirmation required');
-  return {draftId:input.draft_id,revision:input.expected_revision};
+  const confirmationSha256=input.confirmation_sha256??null;
+  if(confirmationSha256!==null &&
+      (typeof confirmationSha256!=='string' ||
+       !/^[a-f0-9]{64}$/.test(confirmationSha256)))
+    throw new Error('CRM invalid professional confirmation fingerprint');
+
+  return {
+    draftId:input.draft_id,
+    revision:input.expected_revision,
+    ...(confirmationSha256!==null?{confirmationSha256}:{})
+  };
 }
 export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch,
   credentialsLoader=loadPrivateResendConfig}={}){
-  const {draftId,revision}=validateMailSendRequest(input);
+  const {draftId,revision,confirmationSha256}=
+    validateMailSendRequest(input);
   const scope=workspace(actor),client=await pool.connect();
   let prepared;
   try{
@@ -313,6 +341,10 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
         ||typeof draft.subject!=='string'||!draft.subject.trim()
         ||typeof draft.body_text!=='string'||!draft.body_text.trim())
       throw new Error('CRM complete recipient, subject and body before sending');
+    // Legacy sends remain protected. Professional sends instead
+    // require an exact fingerprint of the saved recipient snapshot.
+    if(!confirmationSha256)
+      await rejectLegacyMultiRecipientSend(client,scope,draft);
     const permission=(await client.query(
       'SELECT can_send FROM enkyron_local_mail_access '+
       'WHERE workspace_key=$1 AND mailbox_key=$2 AND role=$3',
@@ -338,8 +370,40 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
     if(!cfg.mailboxes?.[draft.mailbox_key]||!apiKey)
       throw new Error('CRM mail provider not configured');
     const from=MAILBOXES.get(draft.mailbox_key);
-    const request={from,to:[draft.recipient_email],subject:draft.subject,text:draft.body_text};
+    let request={
+      from,
+      to:[draft.recipient_email],
+      subject:draft.subject,
+      text:draft.body_text
+    };
+
+    if(confirmationSha256){
+      // The draft row is already locked FOR UPDATE.
+      // Re-read all recipient groups inside the same transaction.
+      const stored=(await client.query(
+        'SELECT to_recipients,cc_recipients,bcc_recipients '+
+        'FROM enkyron_crm_mail_drafts '+
+        'WHERE workspace_key=$1 AND id=$2',
+        [scope,draftId]
+      )).rows[0];
+
+      if(!stored)
+        throw new Error('CRM recipient snapshot unavailable');
+
+      request=prepareProfessionalMailPayload({
+        ...draft,
+        ...stored
+      });
+
+      if(request.from!==from ||
+         professionalPayloadFingerprint(request)!==confirmationSha256)
+        throw new Error(
+          'CRM reviewed content or recipients changed; review again'
+        );
+    }
     const attemptId=randomUUID(),idempotency=randomUUID();
+    const attachedFiles=await outgoingAttachmentsForDraft(draftId);
+    if(attachedFiles.length)request.attachments=attachedFiles;
     const hash=createHash('sha256').update(JSON.stringify(request)).digest('hex');
     await client.query(
       'INSERT INTO enkyron_mail_send_attempts '+
@@ -392,6 +456,37 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
  * compared to the exact saved draft before sending; Qt cannot specify the
  * actual reply target, privilege, credential, or provider mailbox ID.
  */
+/** Read-only verified reply-recipient review; no draft or provider POST. */
+export async function mailThreadSendReview(pool,actor,input,{
+  getDetails=mailEmailDetails
+}={}){
+  if(!input||Array.isArray(input)||typeof input!=='object'
+    ||!MAILBOXES.has(input.mailbox)
+    ||!UUID.test(input.thread_id||'')||!UUID.test(input.email_id||'')
+    ||typeof input.reply_all!=='boolean'
+    ||!Array.isArray(input.additional_cc)||!Array.isArray(input.additional_bcc))
+    throw new Error('M03-J invalid thread review request');
+  const mailbox=input.mailbox, threadId=input.thread_id, emailId=input.email_id;
+  await canAccess(pool,actor,mailbox,'read');
+  await canAccess(pool,actor,mailbox,'send');
+  const source=await getDetails(pool,actor,mailbox,threadId,emailId);
+  if(!source||source.id!==emailId||source.direction!=='inbound')
+    throw new Error('M03-J original inbound message unavailable');
+  const local=(await pool.query(
+    'SELECT sender FROM enkyron_mail_local_messages '+
+    'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 AND message_id=$4',
+    [workspace(actor),mailbox,threadId,emailId]
+  )).rows[0];
+  if(!local||local.sender!==source.from)
+    throw new Error('M03-J message not verified against saved conversation');
+  const plan=planThreadReply({...source,thread_id:threadId},{
+    threadId,emailId,replyAll:input.reply_all,
+    additionalCc:input.additional_cc,additionalBcc:input.additional_bcc,
+    text:input.text
+  });
+  return {mailbox,...plan};
+}
+
 export function validateMailReplyRequest(input){
   const base=validateMailSendRequest(input);
   if(typeof input.mailbox!=='string'||!MAILBOXES.has(input.mailbox)
@@ -427,14 +522,27 @@ export function replyRecipientFromMessage(message,ownAddress){
 
 export async function mailReplyDraft(pool,actor,input,{
   fetchImpl=globalThis.fetch,credentialsLoader=loadPrivateResendConfig,
-  listMessages=mailMessages,uuid=randomUUID}={}){
-  const {draftId,revision,mailbox,threadId,emailId}=
+  listMessages=mailMessages,getDetails=mailEmailDetails,uuid=randomUUID}={}){
+  const {draftId,revision,mailbox,threadId,emailId,confirmationSha256}=
     validateMailReplyRequest(input);
+  const professional=input.reply_review!==undefined;
+  if(professional){
+    if(!input.reply_review||typeof input.reply_review!=='object'
+       ||Array.isArray(input.reply_review)
+       ||typeof confirmationSha256!=='string'
+       ||input.reply_review.confirmation_sha256!==confirmationSha256
+       ||typeof input.reply_all!=='boolean'
+       ||!Array.isArray(input.additional_cc)
+       ||!Array.isArray(input.additional_bcc))
+      throw new Error('M03-J exact reviewed reply required');
+  }
   // Re-check both rights at execution time, including the read scope.
   await canAccess(pool,actor,mailbox,'read');
   await canAccess(pool,actor,mailbox,'send');
-  const current=await listMessages(pool,actor,mailbox,threadId);
-  const original=(current?.items||[]).find(x=>x.id===emailId);
+  const current=professional?null:await listMessages(pool,actor,mailbox,threadId);
+  const original=professional
+    ?await getDetails(pool,actor,mailbox,threadId,emailId)
+    :(current?.items||[]).find(x=>x.id===emailId);
   if(!original)
     throw new Error('CRM reply message unavailable in current provider thread');
   const recipient=replyRecipientFromMessage(original,MAILBOXES.get(mailbox));
@@ -455,6 +563,7 @@ export async function mailReplyDraft(pool,actor,input,{
       throw new Error('CRM reply message is not verified against the saved conversation');
     const draft=(await client.query(
       'SELECT id,revision,mailbox_key,recipient_email,subject,body_text '+
+      (professional?' ,to_recipients,cc_recipients,bcc_recipients ':'')+
       'FROM enkyron_crm_mail_drafts WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
       [scope,draftId])).rows[0];
     if(!draft||draft.revision!==revision||draft.mailbox_key!==mailbox
@@ -462,6 +571,23 @@ export async function mailReplyDraft(pool,actor,input,{
       ||typeof draft.subject!=='string'||!draft.subject.trim()
       ||String(draft.recipient_email||'').toLowerCase()!==recipient)
       throw new Error('CRM reply draft or recipient changed; review before sending');
+    let verified=null;
+    if(professional){
+      verified=verifyThreadReplySnapshot({
+        mailbox,source:{...original,thread_id:threadId},
+        reviewed:input.reply_review,replyAll:input.reply_all,
+        additionalCc:input.additional_cc,
+        additionalBcc:input.additional_bcc,text:draft.body_text
+      });
+      if(verified.confirmation_sha256!==confirmationSha256
+        ||verified.to.length!==1||verified.to[0]!==recipient
+        ||JSON.stringify(draft.to_recipients)!==JSON.stringify(verified.to)
+        ||JSON.stringify(draft.cc_recipients)!==JSON.stringify(verified.cc)
+        ||JSON.stringify(draft.bcc_recipients)!==JSON.stringify(verified.bcc))
+        throw new Error('M03-J saved recipients changed; review again');
+    }else{
+      await rejectLegacyMultiRecipientSend(client,scope,draft);
+    }
     const access=(await client.query(
       'SELECT can_send,can_read FROM enkyron_local_mail_access '+
       'WHERE workspace_key=$1 AND mailbox_key=$2 AND role=$3',
@@ -477,7 +603,16 @@ export async function mailReplyDraft(pool,actor,input,{
       'WHERE workspace_key=$1 AND draft_id=$2',[scope,draftId])).rows[0];
     if(reported)throw new Error('CRM draft has an external send record');
     const idempotency=uuid(),attemptId=uuid();
-    const request={text:draft.body_text};
+    const request=professional
+      ?{text:verified.provider_request.text,
+         cc:[...verified.provider_request.cc],
+         bcc:[...verified.provider_request.bcc]}
+      :{text:draft.body_text};
+    // Never set reply_all=true: it could copy undisclosed original recipients.
+    if(Object.hasOwn(request,'reply_all'))
+      throw new Error('M03-J unsafe automatic reply_all');
+    const attachedFiles=await outgoingAttachmentsForDraft(draftId);
+    if(attachedFiles.length)request.attachments=attachedFiles;
     const hash=createHash('sha256').update(JSON.stringify({
       mailbox,threadId,emailId,recipient,request
     })).digest('hex');

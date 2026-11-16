@@ -16,8 +16,11 @@ export function validateProspectPage(request) {
   return { search, page, offset: (page - 1) * PAGE_SIZE };
 }
 
-export async function listSalesProspectsPage(pool, request) {
+export async function listSalesProspectsPage(pool, request, actor) {
   const { search, page, offset } = validateProspectPage(request);
+  if (typeof actor !== 'string' || !/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
+    throw new Error('CRM invalid operator');
+  const workspace = 'local:' + actor;
   try {
     const result = await pool.query(
       `WITH filtered AS (
@@ -28,6 +31,11 @@ export async function listSalesProspectsPage(pool, request) {
            OR POSITION(LOWER($1) IN LOWER(company_name)) > 0
            OR POSITION(LOWER($1) IN LOWER(COALESCE(buyer_name,''))) > 0
            OR POSITION(LOWER($1) IN LOWER(COALESCE(website,''))) > 0)
+           AND NOT EXISTS (
+             SELECT 1 FROM enkyron_crm_prospect_links linked
+             WHERE linked.workspace_key=$3
+               AND linked.prospect_id=sales_prospects.id
+           )
        ),
        selected AS (
          SELECT * FROM filtered ORDER BY updated_at DESC, id LIMIT 100 OFFSET $2
@@ -38,7 +46,7 @@ export async function listSalesProspectsPage(pool, request) {
            (SELECT json_agg(selected ORDER BY updated_at DESC, id) FROM selected),
            '[]'::json
          ) AS items`,
-      [search, offset]
+      [search, offset, workspace]
     );
     const record = result.rows[0];
     const total = Number(record?.total ?? 0);
@@ -51,7 +59,7 @@ export async function listSalesProspectsPage(pool, request) {
       kind: 'unverified_sales_prospects',
       items, total, page, page_size: PAGE_SIZE,
       more: page * PAGE_SIZE < total,
-      notice: 'Legacy research candidates, not verified client or contact records.'
+      notice: 'Unlinked research candidates only; linked sources are retained for audit.'
     };
   } catch (error) {
     if (error?.code === '42P01') {
@@ -66,6 +74,6 @@ export async function listSalesProspectsPage(pool, request) {
 }
 
 // Compatibility for callers of the original first-page discovery interface.
-export function listSalesProspects(pool, search) {
-  return listSalesProspectsPage(pool, { search, page: 1 });
+export function listSalesProspects(pool, search, actor) {
+  return listSalesProspectsPage(pool, { search, page: 1 }, actor);
 }

@@ -6,6 +6,9 @@ import {boundedSearch} from './enkyron-contract.mjs';
 import {requireOpportunityId} from './enkyron-crm-activities.mjs';
 import {requireCompanyId} from './enkyron-crm-tickets.mjs';
 import {uniqueCompanyForRecipient,verifiedContactForCompany} from './enkyron-crm-mail-recipients.mjs';
+import {professionalRecipientPayload,persistProfessionalRecipients,
+  previousProfessionalRecipients,optionallyReadProfessionalRecipients}
+  from './enkyron-mail-draft-recipient-storage.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function scope(actor){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
@@ -22,7 +25,11 @@ function plain(input,label,max,allowNewline){
 function contentFields(input){
   if(!input||typeof input!=='object'||Array.isArray(input))
     throw new Error('CRM invalid draft request');
-  const recipient_email=plain(input.recipient_email??'','recipient',254,false);
+  // M03-C: accept only complete recipient snapshots. If migration 117 is
+  // absent, the SQL write fails and the whole transaction rolls back.
+  const professional=professionalRecipientPayload(input);
+  const recipient_email=professional?.recipient_email??
+    plain(input.recipient_email??'','recipient',254,false);
   if(recipient_email && (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(recipient_email)
       ||recipient_email.includes(',')||recipient_email.includes(';'))){
     throw new Error('CRM invalid recipient email');
@@ -30,7 +37,8 @@ function contentFields(input){
   const subject=plain(input.subject??'','subject',200,false);
   const body_text=plain(input.body_text??'','body',20000,true);
   if(!subject&&!body_text)throw new Error('CRM draft requires a subject or body');
-  return {recipient_email,subject,body_text};
+  return {recipient_email,subject,body_text,
+    ...(professional??{})};
 }
 export function validateDraftCreate(input){
   const content=contentFields(input);
@@ -63,9 +71,11 @@ export function validateDraftUpdate(input){
   return {id:input.id,expected_revision:input.expected_revision,mailbox_key,...content};
 }
 function fingerprint(item){
-  return createHash('sha256').update(JSON.stringify([
-    item.mailbox_key||'direction',item.recipient_email||'',item.subject,item.body_text
-  ])).digest('hex');
+  const fields=[item.mailbox_key||'direction',item.recipient_email||'',
+    item.subject,item.body_text];
+  // Hash only: never copy raw BCC/body into the audit event table.
+  if(item.to_recipients)fields.push(item.to_recipients,item.cc_recipients,item.bcc_recipients);
+  return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
 }
 export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
   if(typeof unsentOnly!=='boolean')throw new Error('CRM invalid draft list mode');
@@ -78,6 +88,7 @@ export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
       +'WHEN s.id IS NOT NULL THEN \'external_send_reported\' ELSE \'draft\' END AS mail_state, '
       +'s.sent_at AS external_sent_at,a.outcome AS provider_outcome '
       +'FROM enkyron_crm_mail_drafts d '
+      +'LEFT JOIN enkyron_mail_record_filing f ON f.workspace_key=d.workspace_key AND f.draft_id=d.id '
       +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
       +'LEFT JOIN enkyron_crm_companies c '
@@ -87,7 +98,7 @@ export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
       +'LEFT JOIN enkyron_mail_send_attempts a '
       +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
-      +(unsentOnly?'AND a.id IS NULL AND s.id IS NULL ':'')
+      +(unsentOnly?"AND a.id IS NULL AND s.id IS NULL AND COALESCE(f.folder_key,'drafts')='drafts' ":'')
       +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
       +"OR POSITION(lower($2) IN lower(coalesce(d.recipient_email,'')))>0) "
@@ -130,6 +141,8 @@ export async function readMailDraft(pool,id,actor){
       [owner.key,id]
     )).rows[0];
     if(!row)throw new Error('CRM draft not found in local workspace');
+    const recipients=await optionallyReadProfessionalRecipients(pool,owner.key,id);
+    if(recipients)Object.assign(row,recipients);
     return {available:true,draft:row};
   }catch(e){
     if(e?.code==='42P01')return {available:false,
@@ -155,7 +168,7 @@ export async function createMailDraft(pool,input,actor,options={}){
     // Exact, unique address match on a standalone message is the only
     // automatic company association. Never infer from a domain or name.
     const linkedCompany = (data.company_id===null&&data.opportunity_id===null
-      &&data.recipient_email)
+      &&data.recipient_email&&!data.to_recipients)
       ? await uniqueCompanyForRecipient(client,data.recipient_email,actor)
       : data.company_id;
     if(data.recipient_contact_id)
@@ -181,6 +194,8 @@ export async function createMailDraft(pool,input,actor,options={}){
       [id,owner.key,data.opportunity_id,linkedCompany,data.mailbox_key,
         data.recipient_email||null,data.subject,data.body_text,owner.name]
     );
+    if(data.to_recipients)
+      await persistProfessionalRecipients(client,owner.key,id,data);
     await client.query(
       'INSERT INTO enkyron_crm_mail_draft_events '
       +'(id,workspace_key,draft_id,revision,event_type,content_sha256,actor_local) '
@@ -214,10 +229,41 @@ export async function updateMailDraft(pool,input,actor,options={}){
     if(previous.provider_submitted)
       throw new Error('CRM draft was submitted to Resend and cannot be edited');
     const mailboxKey=data.mailbox_key??previous.mailbox_key;
+    const existing=await optionallyReadProfessionalRecipients(
+      client,owner.key,data.id);
+    let recipientGroupsChanged=false;
+    let legacyToSync=null;
+
+    if(data.to_recipients){
+      if(!existing)
+        throw new Error('CRM M03 migration 117 required before professional editing');
+      recipientGroupsChanged=['to_recipients','cc_recipients','bcc_recipients']
+        .some(key=>JSON.stringify(existing[key])!==JSON.stringify(data[key]));
+    }else if(existing){
+      // Old Qt shows only one recipient. It must never silently edit
+      // a professional draft containing additional or hidden recipients.
+      const {to_recipients:to,cc_recipients:cc,bcc_recipients:bcc}=existing;
+      if(!Array.isArray(to)||!Array.isArray(cc)||!Array.isArray(bcc)
+          ||to.length>1||cc.length>0||bcc.length>0
+          ||(to.length===1&&String(to[0]).toLowerCase()
+            !==String(previous.recipient_email||'').toLowerCase()))
+        throw new Error(
+          'CRM M03 professional recipients require the full editor; draft unchanged'
+        );
+
+      // A single-recipient legacy edit remains compatible after migration.
+      // Keep the new To array synchronized with the legacy recipient.
+      const nextTo=data.recipient_email
+        ?[data.recipient_email.toLowerCase()]:[];
+      if(JSON.stringify(to)!==JSON.stringify(nextTo))
+        legacyToSync={
+          to_recipients:nextTo,cc_recipients:[],bcc_recipients:[]
+        };
+    }
     if((previous.recipient_email||'')===data.recipient_email
         && previous.mailbox_key===mailboxKey
         && previous.subject===data.subject
-        && previous.body_text===data.body_text)
+        && previous.body_text===data.body_text&&!recipientGroupsChanged)
       throw new Error('CRM draft has no changes to save');
     const version=data.expected_revision+1;
     const updated=(await client.query(
@@ -229,6 +275,9 @@ export async function updateMailDraft(pool,input,actor,options={}){
         version,owner.name,data.expected_revision,mailboxKey]
     )).rows[0];
     if(!updated)throw new Error('CRM draft revision conflict');
+    if(data.to_recipients||legacyToSync)
+      await persistProfessionalRecipients(client,owner.key,data.id,
+        data.to_recipients?data:legacyToSync);
     await client.query(
       'INSERT INTO enkyron_crm_mail_draft_events '
       +'(id,workspace_key,draft_id,revision,event_type,content_sha256,actor_local) '

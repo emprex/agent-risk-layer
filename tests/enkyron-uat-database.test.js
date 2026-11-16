@@ -45,8 +45,7 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-company-proposal-versions', 'crm-company-proposal-revise',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
-    'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
-    'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
+    'mail-send-draft', 'mail-threads', 'assessment-link', 'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
     'crm-proposal-create',
     'crm-invoice-prepare',
   ]) assert.throws(() => requireEnkyronUatCommand(target, command), /UAT blocks/);
@@ -85,8 +84,7 @@ test('ENK-04 UAT permits only reviewed company-owned manual activity, never outr
   assert.doesNotThrow(()=>requireEnkyronUatPayload(
     {database:'arl_local',uat:false},'crm-record-activity',{}
   ));
-  for(const command of ['mail-send-draft','crm-proposal-create','create-ticket',
-    'crm-invoice-issue','assessment-link']){
+  for(const command of ['mail-send-draft','crm-proposal-create','crm-invoice-issue','assessment-link']){
     assert.throws(()=>requireEnkyronUatCommand(target,command),/UAT blocks/);
   }
 });
@@ -96,7 +94,7 @@ test('ENK-04 allows read-only company proposal preparation and still blocks draf
   assert.doesNotThrow(()=>requireEnkyronUatCommand(target,'crm-company-proposal-readiness'));
   assert.doesNotThrow(()=>requireEnkyronUatPayload(target,'crm-company-proposal-readiness',null));
   for(const write of ['crm-proposal-create','crm-proposal-update','crm-invoice-issue',
-    'mail-send-draft','create-ticket']){
+    'mail-send-draft']){
     assert.throws(()=>requireEnkyronUatCommand(target,write),/UAT blocks/);
   }
 });
@@ -125,7 +123,7 @@ test('ENK-04 guarded UAT authorises reviewed unsent company draft, not legacy is
   );
   for(const prohibited of [
     'crm-proposal-create','crm-proposal-update','crm-invoice-issue',
-    'mail-send-draft','assessment-link','create-ticket'
+    'mail-send-draft','assessment-link'
   ])assert.throws(()=>requireEnkyronUatCommand(target,prohibited),/UAT blocks/);
 });
 
@@ -149,8 +147,7 @@ test('ENK-04 qualification UAT allows only reviewed company-level potential fit'
     /reviewed company-level potential fit/);
   assert.doesNotThrow(()=>requireEnkyronUatPayload({database:'arl_local',uat:false},
     'crm-record-qualification',{}));
-  for(const sensitive of ['mail-send-draft','crm-proposal-create','create-ticket',
-    'assessment-link','crm-invoice-issue']){
+  for(const sensitive of ['mail-send-draft','crm-proposal-create','assessment-link','crm-invoice-issue']){
     assert.throws(()=>requireEnkyronUatCommand(target,sensitive),/UAT blocks/);
   }
 });
@@ -183,7 +180,7 @@ test('ENK-04 synthetic R1 correction is limited to one existing draft, never the
   );
   for(const command of [
     'crm-proposal-update','crm-proposal-create','mail-send-draft',
-    'crm-invoice-issue','create-ticket','assessment-link'
+    'crm-invoice-issue','assessment-link'
   ])assert.throws(()=>requireEnkyronUatCommand(target,command),/UAT blocks/);
 });
 

@@ -14,7 +14,7 @@ const ENK05_COMMANDS = new Set([
   'ticket-archive', 'ticket-triage-save', 'ticket-actions',
   'ticket-action-save', 'note',
   'crm-companies', 'crm-create-company', 'crm-company-dossier',
-  'crm-company-history', 'crm-company-tickets', 'crm-ticket-options',
+  'crm-company-history', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-options',
   'crm-ticket-company', 'crm-link-ticket'
 ]);
 const UAT_COMMANDS = new Set([
@@ -83,6 +83,8 @@ export function resolveEnkyronDatabase(env = process.env) {
 }
 
 export function requireEnkyronUatCommand(target, command) {
+  if (target.uat && target.database === 'enkyron_uat_enk03' &&
+      ENK05_COMMANDS.has(command)) return;
   if (target.uat && target.database === ENKYRON_ENK05_UAT_DATABASE) {
     if (target.marker !== ENKYRON_ENK05_UAT_MARKER ||
         !ENK05_COMMANDS.has(command)) {

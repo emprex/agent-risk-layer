@@ -209,7 +209,16 @@ const LISTS={
     +'SELECT 1 FROM enkyron_crm_contacts c WHERE c.workspace_key=r.workspace_key '
     +'AND c.id=r.resource_id AND c.company_id=$2))) '
     +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21',
-  company_history: COMPANY_HISTORY_SQL
+  company_history: COMPANY_HISTORY_SQL,
+  linked_mail:
+    'SELECT t.mailbox_key AS mailbox,t.thread_id,t.subject,t.last_message_at,'+
+    't.folder_key,count(*) OVER() AS total_rows '+
+    'FROM enkyron_mail_local_threads t '+
+    'WHERE t.workspace_key=$1 AND t.crm_company_id::text=$2 '+
+    'AND EXISTS (SELECT 1 FROM enkyron_local_mail_access a '+
+    'WHERE a.workspace_key=t.workspace_key AND a.mailbox_key=t.mailbox_key '+
+    "AND a.role='organization_owner_l5' AND a.can_read=true) "+
+    'ORDER BY t.last_message_at DESC NULLS LAST,t.thread_id LIMIT 21'
 };
 export async function getCompanyDossier(pool,id,operator){
   const companyId=requireCompanyId(id),key=ownerKey(operator);

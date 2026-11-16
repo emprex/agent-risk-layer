@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 
 const company='11111111-2222-4333-8444-555555555555';
-const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','commercial_docs','ticket_history','audit_events','audit_changes','company_history'];
+const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','commercial_docs','ticket_history','audit_events','audit_changes','company_history','linked_mail'];
 function mockDatabase({total='1',badSection='',missing=false,notFound=false}={}){
   const statements=[];
   let releases=0;
@@ -31,12 +31,13 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   const result=await getCompanyDossier(m.db,company,'ci-operator');
   assert.equal(result.company.name,'Synthetic Ltd');
   assert.deepEqual(Object.keys(result.sections),names);
+  assert.deepEqual(result.sections.linked_mail,{total:0,items:[],more:false});
   assert.equal(result.sections.contacts.total,1);
   assert.equal(result.sections.contacts.items.length,1);
   assert.equal(result.sections.tickets.total,0);
   assert.equal(result.sections.prospects.total,0);
   assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','WITH','SELECT','SELECT','WITH','COMMIT'
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','WITH','SELECT','SELECT','WITH','SELECT','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
   assert.match(m.statements[1].sql,/country,record_version,relationship_state/);

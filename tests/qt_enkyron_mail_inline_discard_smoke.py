@@ -217,6 +217,40 @@ class InlineReplyUnknownOutcomeSmoke(unittest.TestCase):
         self.patch_bridge.stop()
         self.app.processEvents()
 
+    def test_refresh_preserves_unsent_reply(self):
+        self.calls.clear()
+        self.window.load_local_mail("all")
+
+        self.assertEqual(self.inbox.current_thread_id, THREAD_1)
+        self.assertEqual(
+            self.inbox.reply_body.toPlainText(),
+            "A locally saved synthetic reply."
+        )
+        self.assertFalse(self.inbox.reply_editor.isHidden())
+        self.assertFalse(any(
+            action == "mail-local-list" for action, _ in self.calls
+        ))
+        self.assertIn(
+            "postponed", self.inbox.connection_label.text()
+        )
+        self.inbox.hide_reply_editor()
+
+    def test_background_refresh_preserves_unsent_reply(self):
+        self.window.navigation.setCurrentRow(0)
+        self.calls.clear()
+        self.window.load_local_mail("all")
+
+        self.assertEqual(self.inbox.current_thread_id, THREAD_1)
+        self.assertEqual(
+            self.inbox.reply_body.toPlainText(),
+            "A locally saved synthetic reply."
+        )
+        self.assertFalse(self.inbox.reply_editor.isHidden())
+        self.assertFalse(any(
+            action == "mail-local-list" for action, _ in self.calls
+        ))
+        self.inbox.hide_reply_editor()
+
     def test_missing_reply_outcome_unblocks_without_retransmission(self):
         with patch.object(QMessageBox,"question",
                           return_value=QMessageBox.StandardButton.Yes), \
@@ -228,6 +262,50 @@ class InlineReplyUnknownOutcomeSmoke(unittest.TestCase):
         self.assertIsNone(self.window._reply_context)
         self.assertIn("Do not retry",warning.call_args.args[2])
         self.assertEqual(self.inbox.reply_body.toPlainText(),"")
+
+    def test_main_close_no_keeps_unsent_reply(self):
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.No
+        ):
+            self.window.close()
+
+        self.assertTrue(self.window.isVisible())
+        self.assertEqual(
+            self.inbox.reply_body.toPlainText(),
+            "A locally saved synthetic reply."
+        )
+        self.inbox.hide_reply_editor()
+
+    def test_main_close_guards_reply_in_background_tab(self):
+        self.window.navigation.setCurrentRow(0)
+
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.No
+        ):
+            self.window.close()
+
+        self.assertTrue(self.window.isVisible())
+        self.assertEqual(
+            self.inbox.reply_body.toPlainText(),
+            "A locally saved synthetic reply."
+        )
+        self.inbox.hide_reply_editor()
+
+    def test_main_close_blocks_pending_reply(self):
+        self.inbox.reply_send.setEnabled(False)
+
+        with patch.object(QMessageBox, "information") as notice:
+            self.window.close()
+
+        self.assertTrue(self.window.isVisible())
+        self.assertEqual(
+            self.inbox.reply_body.toPlainText(),
+            "A locally saved synthetic reply."
+        )
+        notice.assert_called_once()
+        self.inbox.hide_reply_editor()
 
     def test_uncertain_reply_outcome_is_warning_not_success(self):
         self.outcome="uncertain"

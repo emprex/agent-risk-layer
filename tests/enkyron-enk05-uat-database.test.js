@@ -59,15 +59,20 @@ test('ENK-05 permits bounded Service Desk and canonical company link only',()=>{
     {database:ENKYRON_ENK05_UAT_DATABASE,uat:true},'create-ticket'),/blocks/);
 });
 
-test('ENK-03 accepted R1/R2 remains write-blocked for ENK-05 commands',()=>{
+test('UAT-03 accepts ENK-05 without widening external operations',()=>{
   const old=resolveEnkyronDatabase({
     ENKYRON_UAT_DATABASE:'enkyron_uat_enk03',
     ENKYRON_UAT_GUARD:ENKYRON_UAT_MARKER
   });
-  for(const command of ['create-ticket','ticket-status','ticket-assignment',
-    'ticket-triage-save','ticket-action-save','crm-link-ticket','note']){
-    assert.throws(()=>requireEnkyronUatCommand(old,command),/UAT blocks/);
-  }
+  for(const command of [
+    'create-ticket','ticket-status','ticket-assignment',
+    'ticket-triage-save','ticket-action-save','crm-link-ticket','note',
+    'tickets-archived','ticket-archive','crm-company-tickets'
+  ]) assert.doesNotThrow(()=>requireEnkyronUatCommand(old,command),command);
+  for(const command of [
+    'mail-send-draft','calendar-create','assessment-link',
+    'crm-invoice-issue','unknown-future-command'
+  ]) assert.throws(()=>requireEnkyronUatCommand(old,command),/blocks/);
 });
 
 test('ENK-05 marker is checked on exact database before any operation',async()=>{
