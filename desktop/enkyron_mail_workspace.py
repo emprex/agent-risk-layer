@@ -699,6 +699,12 @@ class MailInboxView(QWidget):
                     lambda _checked=False:
                     self.filedRecordMoveRequested.emit(draft_id, self._folder, "trash")
                 )
+            if self._folder not in ("archive", "trash"):
+                archive = menu.addAction("Archive")
+                archive.triggered.connect(
+                    lambda _checked=False:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, "archive")
+                )
             move = menu.addMenu("Move to folder")
             for target in ("archive", "spam", "trash"):
                 if target == self._folder:
@@ -738,6 +744,12 @@ class MailInboxView(QWidget):
                     mailbox.removeprefix("local-"), thread_id, "trash"
                 )
             )
+            archive = menu.addAction("Archive")
+            archive.triggered.connect(
+                lambda _checked=False: self.localRecordMoveRequested.emit(
+                    mailbox.removeprefix("local-"), thread_id, "archive"
+                )
+            )
             move = menu.addMenu("Move to folder")
             for target in ("archive", "spam", "trash"):
                 action = move.addAction(target.title())
@@ -752,6 +764,18 @@ class MailInboxView(QWidget):
         if mailbox not in self._mailboxes:
             return
         menu = QMenu(self)
+        open_action = menu.addAction("Open message")
+        open_action.triggered.connect(
+            lambda _checked=False:
+            self.threadOpenRequested.emit(mailbox, thread_id)
+        )
+        if self._folder == "inbox":
+            reply_action = menu.addAction("Reply")
+            reply_action.triggered.connect(
+                lambda _checked=False:
+                self.replyRequested.emit(mailbox, thread_id)
+            )
+        menu.addSeparator()
         entry_index = self.thread_list.row(item)
         entry = self.items[entry_index] if 0 <= entry_index < len(self.items) else {}
         flagged = bool(isinstance(entry, dict) and entry.get("flagged") is True)
@@ -766,12 +790,13 @@ class MailInboxView(QWidget):
             lambda _checked=False: self.localFlagRequested.emit(
                 mailbox, thread_id, not flagged))
         menu.addSeparator()
-        if self._folder == "trash":
+        if self._folder in ("trash", "archive", "spam"):
             restore = menu.addAction("Restore to Inbox")
             restore.triggered.connect(
                 lambda _checked=False:
                 self.localMoveRequested.emit(mailbox, thread_id, "inbox")
             )
+        if self._folder == "trash":
             clear = menu.addAction("Empty Trash…")
             clear.triggered.connect(self.localTrashClearRequested.emit)
         else:
@@ -780,6 +805,12 @@ class MailInboxView(QWidget):
                 lambda _checked=False:
                 self.localMoveRequested.emit(mailbox, thread_id, "trash")
             )
+            if self._folder != "archive":
+                archive = menu.addAction("Archive")
+                archive.triggered.connect(
+                    lambda _checked=False:
+                    self.localMoveRequested.emit(mailbox, thread_id, "archive")
+                )
         move = menu.addMenu("Move to folder")
         for folder in self.local_folders:
             key = folder.get("key")
