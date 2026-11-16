@@ -188,6 +188,7 @@ class MailInboxView(QWidget):
     localRecordLinkRequested = Signal(int)
     localRecordMoveRequested = Signal(str, int, str)
     filedRecordMoveRequested = Signal(str, str, str)
+    filedRecordOpenRequested = Signal(str)
     localTrashClearRequested = Signal()
     replyRequested = Signal(str, str)
     forwardRequested = Signal(str, str)
@@ -203,6 +204,7 @@ class MailInboxView(QWidget):
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
+        self._filed_records = []
         self._has_more = False
         self._local_page = 0
         self._local_search_query = None
@@ -671,6 +673,11 @@ class MailInboxView(QWidget):
             if original not in ("sent", "drafts") or not isinstance(draft_id, str):
                 return
             menu = QMenu(self)
+            open_action = menu.addAction("Open saved message")
+            open_action.triggered.connect(
+                lambda _checked=False: self.filedRecordOpenRequested.emit(draft_id)
+            )
+            menu.addSeparator()
             destinations = [original] + [x for x in ("archive", "spam", "trash")
                                          if x != self._folder]
             for target in destinations:
