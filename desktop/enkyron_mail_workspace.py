@@ -174,6 +174,8 @@ class MailInboxView(QWidget):
     deskRequested = Signal()
     newEmailRequested = Signal()
     localMoveRequested = Signal(str, str, str)
+    localOutboundMoveRequested = Signal(str, str, str, str, str)
+    localEmptyTrashRequested = Signal()
     localCreateFolderRequested = Signal(str)
     localRenameFolderRequested = Signal(str, str)
     localDeleteFolderRequested = Signal(str)
@@ -575,6 +577,12 @@ class MailInboxView(QWidget):
         key = item.data(0, Qt.ItemDataRole.UserRole)
         folder = next((f for f in self.local_folders
                        if isinstance(f, dict) and f.get("key") == key), None)
+        if key == "trash":
+            menu = QMenu(self)
+            empty = menu.addAction("Empty Trash…")
+            if menu.exec(self.folder_tree.viewport().mapToGlobal(pos)) == empty:
+                self.localEmptyTrashRequested.emit()
+            return
         if not folder or folder.get("system") is not False:
             return
         menu = QMenu(self)
@@ -667,6 +675,35 @@ class MailInboxView(QWidget):
                     link.triggered.connect(
                         lambda _checked=False: self.localRecordLinkRequested.emit(thread_id)
                     )
+            record_item = self.items[thread_id] if 0 <= thread_id < len(self.items) else {}
+            if isinstance(record_item, dict) and record_item.get("id"):
+                folder_menu = menu.addMenu("Move to folder")
+                for destination in self.local_folders:
+                    target = destination.get("key")
+                    if not isinstance(target, str) or target in (
+                            "inbox", "sent", "drafts", "purged", self._folder):
+                        continue
+                    move_action = folder_menu.addAction(destination.get("name") or target)
+                    move_action.triggered.connect(
+                        lambda _checked=False, dest=target, current=record_item:
+                        self.localOutboundMoveRequested.emit(
+                            mailbox.removeprefix("local-"), str(current["id"]),
+                            str(current.get("mailbox_key") or ""), self._folder, dest))
+                if self._folder == "trash":
+                    restore = menu.addAction("Restore to previous folder")
+                    restore.triggered.connect(
+                        lambda _checked=False, current=record_item:
+                        self.localOutboundMoveRequested.emit(
+                            mailbox.removeprefix("local-"), str(current["id"]),
+                            str(current.get("mailbox_key") or ""), "trash", "previous"))
+                elif self._folder != mailbox.removeprefix("local-"):
+                    original = menu.addAction("Restore to " + mailbox.removeprefix("local-").title())
+                    original.triggered.connect(
+                        lambda _checked=False, current=record_item:
+                        self.localOutboundMoveRequested.emit(
+                            mailbox.removeprefix("local-"), str(current["id"]),
+                            str(current.get("mailbox_key") or ""), self._folder,
+                            mailbox.removeprefix("local-")))
             menu.exec(self.thread_list.mapToGlobal(pos))
             return
         if mailbox not in self._mailboxes:
@@ -932,13 +969,26 @@ class MailInboxView(QWidget):
         self.items = list(items)
         self._has_more = bool(has_more)
         self.thread_list.blockSignals(True)
-        for item in items:
+        for item_index, item in enumerate(items):
             if not isinstance(item, dict):
                 continue
             thread_id = str(item.get("id") or "")
             if not thread_id or len(thread_id) > 100:
                 continue
             source = str(item.get("mailbox") or mailbox)
+            if self.local_mode and source in ("local-sent", "local-drafts"):
+                subject = str(item.get("subject") or "(No subject)")[:300]
+                recipient = str(item.get("recipient_email") or "Recipient unknown")[:120]
+                date = _display_date(item.get("updated_at") or item.get("last_message_at"))
+                prefix = "Sent" if source == "local-sent" else "Draft"
+                label = recipient + "\n" + subject + "   [" + prefix + "]"
+                if date:
+                    label += "\n" + date
+                entry = QListWidgetItem(label)
+                entry.setData(Qt.ItemDataRole.UserRole, (source, item_index))
+                entry.setToolTip(label)
+                self.thread_list.addItem(entry)
+                continue
             if source not in self._mailboxes:
                 continue
             subject = str(item.get("subject") or "(No subject)")[:300]
@@ -1041,7 +1091,7 @@ class MailInboxView(QWidget):
         """Render fetched CRM draft content as inert plain text only."""
         selected = self.thread_list.currentItem()
         if (selected is None or selected.data(Qt.ItemDataRole.UserRole)
-                != ("local-" + kind, index) or kind != self._folder):
+                != ("local-" + kind, index)):
             return False
         self.body.setPlainText(str(body or "")[:20000])
         self.meta.setText(str(metadata or "")[:500])
@@ -1050,7 +1100,7 @@ class MailInboxView(QWidget):
         # human-approved follow-up, not a reply to a received email.
         record = self.items[index] if 0 <= index < len(self.items) else {}
         follow_up_ready = (
-            kind == "sent" and isinstance(record, dict)
+            kind == "sent" and self._folder == "sent" and isinstance(record, dict)
             and record.get("outcome") == "accepted"
             and bool(record.get("draft_id"))
             and bool(record.get("recipient_email"))
