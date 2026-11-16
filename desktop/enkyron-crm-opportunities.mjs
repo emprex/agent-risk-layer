@@ -23,7 +23,7 @@ function textField(value,label,min,max){
   return value.trim();
 }
 function nextActionField(value){
-  if(typeof value!=='string'||/[\x00-\x09\x0b-\x1f\x7f]/.test(value))
+  if(typeof value!=='string'||/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/.test(value))
     throw new Error('CRM invalid next action');
   // The Qt editor is multiline. Preserve paragraphs while normalising CRLF.
   const action=value.replace(/\r\n?/g,'\n').trim();
