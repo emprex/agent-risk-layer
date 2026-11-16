@@ -8,7 +8,7 @@ One local, manually confirmed mission-planning record belongs to **one existing 
 
 ## Changes
 
-- `migrations/118_enkyron_psa_mission_planning.sql`: review-only additive schema for missions and immutable creation events; composite foreign keys enforce same workspace/company for directly linked opportunities; unique request ID prevents duplicate creations; **not applied**.
+- `docs/enkyron/sql/118_enkyron_psa_mission_planning.sql`: review-only additive schema for missions and immutable creation events; composite foreign keys enforce same workspace/company for directly linked opportunities; unique request ID prevents duplicate creations; **not applied**.
 - `desktop/enkyron-psa-missions.mjs`: narrow `createMissionPlan`/`listMissionPlans` functions, with validated requests, server-side actor parameter, parameterized queries, bounded list, transactional audit and idempotent retries.
 - `tests/enkyron-psa-missions.test.js`: mocked database tests for successful creation, cross-scope rejection, retry/different payload, conflict, audit failure/rollback, list scoping and static schema invariants.
 

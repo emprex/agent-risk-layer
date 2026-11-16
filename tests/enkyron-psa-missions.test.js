@@ -143,11 +143,13 @@ test('ENK-08: list SQL is workspace-scoped and bounded', async () => {
 });
 
 test('ENK-08: migration declares matching composite FKs and immutable event history', () => {
-  const sql = fs.readFileSync(new URL('../migrations/118_enkyron_psa_mission_planning.sql', import.meta.url), 'utf8');
+  const sql = fs.readFileSync(new URL('../docs/enkyron/sql/118_enkyron_psa_mission_planning.sql', import.meta.url), 'utf8');
   assert.match(sql, /FOREIGN KEY\(workspace_key, company_id\)/);
   assert.match(sql, /FOREIGN KEY\(workspace_key, company_id, opportunity_id\)/);
   assert.match(sql, /UNIQUE\(workspace_key, request_id\)/);
   assert.match(sql, /enkyron_psa_mission_events_immutable/);
   assert.match(sql, /CHECK\(status = 'planning'\)/);
+  assert.equal(fs.existsSync(new URL('../migrations/118_enkyron_psa_mission_planning.sql', import.meta.url)), false,
+    'REVIEW SQL must never be auto-discoverable by runMigrations');
   assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN)\b|\bTRUNCATE\b|\bDELETE\s+FROM\b/i);
 });
