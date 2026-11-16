@@ -54,8 +54,8 @@ test('ENK-08: multiline mission descriptions work, while hidden controls still f
   const description = 'Prepare an internal planning checklist.\nReview the scope with the operator.';
   assert.equal(validateMissionPlanCreate({...plan, description}).description, description);
   for (const badDescription of [
-    description + '\\t', description + '\\r', description + '\\u200b',
-    description + '\\u202e',
+    description + '\t', description + '\r', description + '\u200b',
+    description + '\u202e',
   ]) {
     assert.throws(
       () => validateMissionPlanCreate({...plan, description: badDescription}),
@@ -63,7 +63,7 @@ test('ENK-08: multiline mission descriptions work, while hidden controls still f
     );
   }
   assert.throws(
-    () => validateMissionPlanCreate({...plan, title: 'Invalid\\ntitle'}),
+    () => validateMissionPlanCreate({...plan, title: 'Invalid\ntitle'}),
     /PSA invalid mission title/
   );
 });
