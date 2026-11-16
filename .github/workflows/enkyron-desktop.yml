@@ -177,6 +177,15 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_crm_sales_mail_smoke.py' -v
 
+      - name: Native Mail folder filing regression (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_folder_smoke.py' -v
+          node --check scripts/enkyron-mail-record-filing-schema.mjs
+          node --check desktop/enkyron-mail-record-filing.mjs
+          node --test tests/enkyron-mail-record-filing.test.js
+
       - name: Business lab-case selection and verified artefact integrity (offline)
         env:
           QT_QPA_PLATFORM: offscreen
