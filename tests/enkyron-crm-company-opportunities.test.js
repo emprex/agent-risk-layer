@@ -11,6 +11,7 @@ const valid={
   due_date:null,confirmed:true
 };
 test('company-first sales opportunity is explicit and source-linked',()=>{
+  assert.equal(validateCompanyOpportunityCreate({...valid,next_action:'First step\nSecond step'}).next_action,'First step\nSecond step');
   assert.deepEqual(validateCompanyOpportunityCreate(valid),{
     company_id:valid.company_id,ticket_id:valid.ticket_id,
     company_name_at_review:valid.company_name_at_review,
@@ -22,6 +23,6 @@ test('company-first sales opportunity is explicit and source-linked',()=>{
     {...valid,ticket_id:'wrong'}, {...valid,company_name_at_review:' '},
     {...valid,ticket_number_at_review:'x'},{...valid,next_action:'hi'},
     {...valid,due_date:'2026-02-30'},{...valid,unknown:'yes'},
-    {...valid,prospect_id:'fake-prospect'}, {...valid,next_action:'bad\nline'}
+    {...valid,prospect_id:'fake-prospect'}, {...valid,next_action:'bad\tline'}
   ])assert.throws(()=>validateCompanyOpportunityCreate(broken),/CRM|ticket/i);
 });
