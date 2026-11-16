@@ -1737,6 +1737,9 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox = MailInboxView()
         self.mail_inbox.set_local_mode()
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
+        self.mail_inbox.localRecordMoveRequested.connect(self.move_saved_mail_record)
+        self.mail_inbox.filedRecordMoveRequested.connect(self.move_filed_mail_record)
+        self.mail_inbox.localTrashClearRequested.connect(self.clear_local_mail_trash)
         self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
         self.mail_inbox.localRenameFolderRequested.connect(self.rename_local_folder)
         self.mail_inbox.localDeleteFolderRequested.connect(self.delete_empty_local_folder)
@@ -2389,6 +2392,19 @@ class EnkyronWindow(QMainWindow):
                 bool(data.get("has_more")), folder,
                 search_query=query if query else None, page=page
             )
+            if folder in ("archive", "spam", "trash") and not query and page == 0:
+                def filed(records, problem):
+                    if (self.mail_inbox.selected_folder != folder
+                            or self.mail_inbox.selected_mailbox != mailbox):
+                        return
+                    if problem or not isinstance(records, dict):
+                        self.mail_inbox.connection_label.setText(
+                            "Filed Sent/Drafts unavailable; check local Mail migration.")
+                        self.mail_inbox.connection_label.setVisible(True)
+                        return
+                    self.mail_inbox.append_filed_records(folder, records.get("items") or [])
+                self.bridge.call("mail-filed-records",
+                    payload={"folder":folder,"mailbox":mailbox},callback=filed)
         self.bridge.call("mail-local-list",
             payload={"mailbox":mailbox,"folder":request_folder,
                      "search":query,"page":page},callback=received)
@@ -2636,6 +2652,60 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
             callback=received)
+
+    def move_saved_mail_record(self, kind, index, destination):
+        if kind not in ("sent", "drafts") or not isinstance(index, int):
+            return
+        records = self.mail_sent_items if kind == "sent" else self.mail_unsent_items
+        if not 0 <= index < len(records):
+            return
+        record = records[index]
+        draft_id = record.get("draft_id") if kind == "sent" else record.get("id")
+        self.move_filed_mail_record(draft_id, kind, destination)
+
+    def move_filed_mail_record(self, draft_id, source, destination):
+        if (not isinstance(draft_id, str) or len(draft_id) != 36
+                or source not in ("sent", "drafts", "archive", "spam", "trash")
+                or destination not in ("sent", "drafts", "archive", "spam", "trash")
+                or source == destination):
+            return
+        answer = QMessageBox.question(
+            self, "Confirm local Mail filing",
+            "Move this saved email from {} to {} in ENKYRON?\\n\\n"
+            "This does not change Resend, erase the CRM history or send email.".format(
+                source.title(), destination.title()),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        def saved(data, error):
+            if error or not isinstance(data, dict) or not data.get("moved"):
+                QMessageBox.warning(self, "Local Mail filing",
+                    str(error or "Move not verified. Refresh and review.")[:350])
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-record-move", payload={
+            "draft_id":draft_id,"from":source,"to":destination,"confirmed":True
+        },callback=saved)
+
+    def clear_local_mail_trash(self):
+        # This clears the local user-facing Trash, not audited mail or Resend.
+        if self.mail_inbox.selected_folder != "trash":
+            return
+        keyword, accepted = QInputDialog.getText(
+            self, "Empty local Trash", "Type CLEAR to hide all local Trash items.\\n"
+            "CRM audit and provider copies will be retained.")
+        if not accepted or keyword != "CLEAR":
+            return
+        def cleared(data, error):
+            if error or not isinstance(data, dict) or not data.get("cleared"):
+                QMessageBox.warning(self, "Trash unchanged",
+                    str(error or "Local Trash clearance not verified.")[:350])
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            QMessageBox.information(self, "Local Trash cleared",
+                "The local Trash view is empty. Audit records and provider mail remain.")
+        self.bridge.call("mail-trash-clear",payload={"confirmed":True},callback=cleared)
 
     def set_local_mail_read(self, mailbox, thread_id, unread):
         """Persist confirmed read status in NEMORYTH; keep reader/draft intact."""
