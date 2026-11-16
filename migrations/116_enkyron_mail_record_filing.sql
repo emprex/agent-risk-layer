@@ -15,7 +15,7 @@ CREATE TABLE enkyron_mail_record_filing (
 );
 CREATE INDEX idx_enkyron_mail_record_filing_folder
   ON enkyron_mail_record_filing(workspace_key,folder_key,updated_at DESC);
-CREATE TABLE enkyron_mail_filing_events (
+CREATE TABLE enkyron_mail_record_filing_events (
   event_id UUID PRIMARY KEY,
   workspace_key TEXT NOT NULL,
   draft_id TEXT,
@@ -24,6 +24,6 @@ CREATE TABLE enkyron_mail_filing_events (
   actor_local TEXT NOT NULL,
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE TRIGGER enkyron_mail_filing_events_immutable
-  BEFORE UPDATE OR DELETE ON enkyron_mail_filing_events
+CREATE TRIGGER enkyron_mail_record_filing_events_immutable
+  BEFORE UPDATE OR DELETE ON enkyron_mail_record_filing_events
   FOR EACH ROW EXECUTE FUNCTION enkyron_crm_events_immutable();
