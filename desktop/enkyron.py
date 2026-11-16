@@ -60,6 +60,15 @@ CRM_SECTORS = (
 )
 
 
+class MailRecipientCompleter(QCompleter):
+    """Show the CRM identity, but insert only the actual email address."""
+
+    def pathFromIndex(self, index):
+        label = super().pathFromIndex(index)
+        match = re.search(r"<([^<>\s]+@[^<>\s]+)>$", label)
+        return match.group(1) if match else label
+
+
 def crm_sector_selector(current=""):
     selector = QComboBox()
     selector.setEditable(False)
@@ -9687,7 +9696,7 @@ class EnkyronWindow(QMainWindow):
         name = company.get("name") or ""
         action, accepted = QInputDialog.getMultiLineText(
             self, "ENKYRON · Commercial opportunity",
-            "Company: {}\\n\\nNext commercial action (5–1000 characters):".format(name),
+            "Company: {}\n\nNext commercial action (5–1000 characters):".format(name),
             "Prepare a written introduction and record replies in the CRM."
         )
         if not accepted:
@@ -9699,7 +9708,7 @@ class EnkyronWindow(QMainWindow):
             return
         if QMessageBox.question(
             self, "Confirm commercial opportunity",
-            ("Create a CRM-only opportunity for {}?\\n\\n"
+            ("Create a CRM-only opportunity for {}?\n\n"
              "No service ticket, customer acceptance, email, contract, "
              "testing authorisation or assessment is created.").format(name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -16250,7 +16259,7 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
         self.crm_mail_to.setReadOnly(read_only)
-        self.crm_mail_to_completer = QCompleter([], self.crm_mail_to)
+        self.crm_mail_to_completer = MailRecipientCompleter([], self.crm_mail_to)
         self.crm_mail_to_completer.setCompletionMode(
             QCompleter.CompletionMode.UnfilteredPopupCompletion
         )
@@ -16420,8 +16429,14 @@ class EnkyronWindow(QMainWindow):
     def choose_mail_recipient(self, label):
         item = self.crm_mail_recipient_matches.get(label)
         if not item:
+            # pathFromIndex inserts an email rather than a display label.
+            item = next((
+                entry for entry in self.crm_mail_recipient_matches.values()
+                if str(entry.get("email") or "").casefold() == str(label).casefold()
+            ), None)
+        if not item:
             return
-        # Qt inserts address only, never a display name into the To field.
+        # Keep the To field machine-valid; the contact identity stays in CRM.
         self.crm_mail_to.blockSignals(True)
         self.crm_mail_to.setText(str(item["email"]))
         self.crm_mail_to.blockSignals(False)
