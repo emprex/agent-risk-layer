@@ -14,7 +14,9 @@ On Debian 13, run **as the regular operator, never with sudo**:
 pg_virtualenv -v 17 bash scripts/enkyron-psa-virtualenv-rehearsal.sh
 ```
 
-The launcher refuses port 5432, root execution, and any server whose actual config/data paths do not belong to the `pg_virtualenv` cluster. Only **after** checking the server, it creates synthetic `arl_ci` credentials inside the throw-away cluster. The test uses the dynamically assigned port, refuses unexpected URL overrides and cross-checks server paths before creating any fixture schema. The temporary PostgreSQL cluster is destroyed by `pg_virtualenv` at command exit. No changes to `arl_local` are intended.
+The launcher refuses port 5432, root execution, and any server whose actual config/data paths do not belong to the `pg_virtualenv` cluster. Only **after** checking the server, it creates synthetic `arl_ci` credentials inside the throw-away cluster. The **launcher** checks the privileged `config_file` and `data_directory` settings with the ephemeral cluster's administrative account; the unprivileged Node.js test checks only database, role, address and dynamic port. We deliberately do **not** grant `pg_read_all_settings` to `arl_ci`. The test also refuses unexpected URL overrides. The temporary PostgreSQL cluster is destroyed by `pg_virtualenv` at command exit. No changes to `arl_local` are intended.
+
+The initial real PostgreSQL rehearsal on 16 November 2026 stopped safely with SQLSTATE `42501` because the unprivileged `arl_ci` role tried to inspect `config_file`; 14 mock/contract tests passed, while the database test failed before any synthetic fixture schema was created. This corrective commit removes that inappropriate privilege request; PostgreSQL integration must still be rerun.
 
 The launcher requires an installed Node.js `pg` dependency. Do not use `npm install`, `sudo`, a production connection URL or direct migration commands to work around a failed guard.
 
