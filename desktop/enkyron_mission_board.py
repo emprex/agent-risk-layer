@@ -16,9 +16,9 @@ from PySide6.QtWidgets import (
 )
 
 if __package__:
-    from .enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary, normalize_crm_companies
+    from .enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary, normalize_missions, normalize_crm_companies
 else:
-    from enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary, normalize_crm_companies
+    from enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary, normalize_missions, normalize_crm_companies
 
 
 def _label(text="", *, muted=False, bold=False):

@@ -41,6 +41,8 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn('self.detail_tabs.addTab(crm_page, "CRM companies")', text)
         self.assertIn("normalize_crm_companies", text)
         self.assertIn("show_live_board", text)
+        self.assertEqual(text.count('import demo_missions, filter_missions, progress, totals, time_summary, normalize_missions, normalize_crm_companies'), 2)
+        self.assertIn('self._live_missions = normalize_missions(data.get("items"))', text)
         self.assertNotIn("ownerUnlockRequested = Signal()", text)
         self.assertNotIn("owner_unlock_button", text)
         self.assertIn("writeRequested = Signal(str, dict)", text)
