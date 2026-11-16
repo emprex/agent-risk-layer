@@ -71,6 +71,18 @@ python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_
 
 These are code and contract tests, **not** a live PostgreSQL integration test. Real login/peer authentication, master history, ticket persistence and user experience must be verified on the intended Debian machine before acceptance.
 
+## Desktop launcher EK icon (Debian)
+
+The version-controlled EK logo is in `desktop/assets/enkyron.svg` (transparent background, navy/teal colourway). The icon is a visual identity asset only; it does not affect security controls or business data.
+
+For an **existing** user-level `~/.local/share/applications/enkyron.desktop` launcher, run this from the checked-out repository:
+
+```bash
+bash scripts/install-enkyron-icon.sh
+```
+
+The script copies the icon to `${XDG_DATA_HOME:-$HOME/.local/share}/icons/enkyron.svg` and changes only the `Icon=` field of the existing `[Desktop Entry]` section. It deliberately **does not** rewrite `Exec=`, install dependencies, edit the database or create a launcher. A normal Git update does not delete the user-level installed icon. If a later installer *replaces* the `.desktop` shortcut, rerun the script. This step is not automatic and is not a deployment action.
+
 ## Security design notes
 
 - The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, `note`, the read-only `evidence-register`, local `create-ticket`, and audited `ticket-status`. Ticket writes are transactional, parameterised and do not touch any assessment or master record. Separate one-shot Python IPC commands `desktop.enkyron_operator_state` and `desktop.enkyron_evidence` delegate only to existing read-only ARL inspection/evidence adapters, not to arbitrary commands.
