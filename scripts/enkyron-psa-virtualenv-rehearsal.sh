@@ -65,4 +65,5 @@ node --test \
   tests/enkyron-psa-work-items.test.js \
   tests/enkyron-psa-time.test.js \
   tests/enkyron-enk08-catalog-preflight.test.js \
+  tests/enkyron-enk08-history-021-audit.test.js \
   tests/enkyron-psa-missions-postgres.test.js

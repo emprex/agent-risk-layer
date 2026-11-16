@@ -49,3 +49,20 @@ A compatible catalog is not proof that all data obeys the planned constraints, n
 5. Integrate real Company 360/Mission Board operations, My Work assignments, time review/corrections, and final Debian UAT.
 
 **Release decision now: STOP.** Catalog checks only reduce uncertainty; they do not authorize live writes.
+
+
+## Forensic verification of applied historical 021 (read-only)
+
+GitHub commit `e644d51cfdf256e04989dafc45b4cea4a4e23aa4` from 20 August 2026 contains the original `migrations/021_paid_assessment_remediation_scope.sql`. The SHA-256 of its **exact bytes** is `673d3ce1373cf5dcde3414fee08c3dba15cadb0ca2f32afd7c50316fe5b1d7f6`.
+
+The new tool `scripts/enkyron-enk08-history-021-audit.mjs` takes this fixed archived source with `git show` (no checkout), compares SHA-256 to the fixed historical reference and to the exact **recorded** `schema_migrations` entry in a PostgreSQL **READ ONLY** transaction. It never copies the source into `migrations/` or changes the ledger.
+
+On Debian (normal user, this feature branch):
+
+```bash
+cd ~/agent-risk-layer
+node --test tests/enkyron-enk08-history-021-audit.test.js
+node scripts/enkyron-enk08-history-021-audit.mjs --check
+```
+
+If the Git object is unavailable, its bytes differ, the ledger differs, or the historical 021 reappears under active migrations, the audit reports **STOP**, without changing anything. Success proves **historical byte/checksum provenance only**, not migration compatibility or permission to deploy. Follow the pending migration, backup/restore and authorization release gates above.
