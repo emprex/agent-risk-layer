@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {auditMigrationContinuity} from '../scripts/enkyron-business-migration-preflight.mjs';
 
 const a='a'.repeat(64), b='b'.repeat(64), c='c'.repeat(64);
@@ -52,4 +53,18 @@ test('Business migration manifest: malformed/duplicate migration names and check
   assert.throws(()=>auditMigrationContinuity([],[
     ticket,ticket
   ]),/Invalid/);
+});
+
+test('Business preflight: pins 5432 against inherited pg_virtualenv PGPORT',()=>{
+  const script=readFileSync(
+    new URL('../scripts/enkyron-business-migration-preflight.mjs',import.meta.url),'utf8'
+  );
+  assert.ok(script.includes("host:'/var/run/postgresql',\n    port:5432,"));
+  assert.ok(script.includes("database:'arl_local'"));
+  assert.ok(script.includes("current_setting('port') AS server_port"));
+  assert.ok(script.includes("identity?.server_port!=='5432'"));
+  assert.ok(script.includes("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"));
+  assert.ok(script.includes("default_transaction_read_only=on"));
+  assert.ok(!script.includes('process.env.PGPORT'));
+  assert.ok(!script.includes('process.env.DATABASE_URL'));
 });

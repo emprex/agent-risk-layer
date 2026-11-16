@@ -76,6 +76,7 @@ export async function preflightBusinessDatabase(dir=MIGRATION_DIR) {
   const user=os.userInfo().username;
   const client=new pg.Client({
     host:'/var/run/postgresql',
+    port:5432, // explicit: pg_virtualenv sets PGPORT=5433 in child processes
     database:'arl_local',
     user,
     connectionTimeoutMillis:5000,
@@ -88,9 +89,10 @@ export async function preflightBusinessDatabase(dir=MIGRATION_DIR) {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     started=true;
     const identity=(await client.query(
-      'SELECT current_database() AS database,current_user AS actor'
+      'SELECT current_database() AS database,current_user AS actor,'+
+      "current_setting('port') AS server_port"
     )).rows[0];
-    if(identity?.database!=='arl_local'||identity?.actor!==user)
+    if(identity?.database!=='arl_local'||identity?.actor!==user||identity?.server_port!=='5432')
       throw new Error('STOP: unexpected database or local operator');
     const appliedRows=(await client.query(
       'SELECT version,checksum FROM schema_migrations ORDER BY version'
