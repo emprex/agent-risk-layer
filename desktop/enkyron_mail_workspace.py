@@ -328,6 +328,14 @@ class MailInboxView(QWidget):
         self.count.setTextFormat(Qt.TextFormat.PlainText)
         self.count.setStyleSheet("color: #60768a;")
         list_heading.addWidget(self.count)
+        self.empty_trash_button = QPushButton("Empty Trash…")
+        self.empty_trash_button.setObjectName("enkyronMailEmptyTrash")
+        self.empty_trash_button.setToolTip(
+            "Clear local Trash after confirmation; retain provider and audit records"
+        )
+        self.empty_trash_button.clicked.connect(self.localTrashClearRequested.emit)
+        self.empty_trash_button.hide()
+        list_heading.addWidget(self.empty_trash_button)
         left_layout.addLayout(list_heading)
         self.thread_list = QListWidget()
         self.thread_list.setObjectName("enkyronMailThreadList")
@@ -639,6 +647,7 @@ class MailInboxView(QWidget):
             self._restore_local_folder_selection()
             return
         self._folder = folder
+        self.empty_trash_button.setVisible(folder == "trash")
         for row in range(self.folder_tree.topLevelItemCount()):
             node = self.folder_tree.topLevelItem(row)
             if node.data(0, Qt.ItemDataRole.UserRole) == folder:
@@ -678,15 +687,31 @@ class MailInboxView(QWidget):
                 lambda _checked=False: self.filedRecordOpenRequested.emit(draft_id)
             )
             menu.addSeparator()
-            destinations = [original] + [x for x in ("archive", "spam", "trash")
-                                         if x != self._folder]
-            for target in destinations:
-                action = menu.addAction("Restore to " + original.title() if target == original
-                                        else "Move to " + target.title())
+            if self._folder != original:
+                restore = menu.addAction("Restore to " + original.title())
+                restore.triggered.connect(
+                    lambda _checked=False:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, original)
+                )
+            if self._folder != "trash":
+                trash = menu.addAction("Move to Trash")
+                trash.triggered.connect(
+                    lambda _checked=False:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, "trash")
+                )
+            move = menu.addMenu("Move to folder")
+            for target in ("archive", "spam", "trash"):
+                if target == self._folder:
+                    continue
+                action = move.addAction(target.title())
                 action.triggered.connect(
                     lambda _checked=False, destination=target:
                     self.filedRecordMoveRequested.emit(draft_id, self._folder, destination)
                 )
+            if self._folder == "trash":
+                menu.addSeparator()
+                clear = menu.addAction("Empty Trash…")
+                clear.triggered.connect(self.localTrashClearRequested.emit)
             menu.exec(self.thread_list.mapToGlobal(pos))
             return
         if mailbox in ("local-sent", "local-drafts"):
@@ -706,6 +731,13 @@ class MailInboxView(QWidget):
                     link.triggered.connect(
                         lambda _checked=False: self.localRecordLinkRequested.emit(thread_id)
                     )
+            menu.addSeparator()
+            trash = menu.addAction("Move to Trash")
+            trash.triggered.connect(
+                lambda _checked=False: self.localRecordMoveRequested.emit(
+                    mailbox.removeprefix("local-"), thread_id, "trash"
+                )
+            )
             move = menu.addMenu("Move to folder")
             for target in ("archive", "spam", "trash"):
                 action = move.addAction(target.title())
@@ -734,10 +766,24 @@ class MailInboxView(QWidget):
             lambda _checked=False: self.localFlagRequested.emit(
                 mailbox, thread_id, not flagged))
         menu.addSeparator()
+        if self._folder == "trash":
+            restore = menu.addAction("Restore to Inbox")
+            restore.triggered.connect(
+                lambda _checked=False:
+                self.localMoveRequested.emit(mailbox, thread_id, "inbox")
+            )
+            clear = menu.addAction("Empty Trash…")
+            clear.triggered.connect(self.localTrashClearRequested.emit)
+        else:
+            trash = menu.addAction("Move to Trash")
+            trash.triggered.connect(
+                lambda _checked=False:
+                self.localMoveRequested.emit(mailbox, thread_id, "trash")
+            )
         move = menu.addMenu("Move to folder")
         for folder in self.local_folders:
             key = folder.get("key")
-            if key in ("sent","drafts",self._folder):
+            if key in ("sent", "drafts", self._folder, "hidden"):
                 continue
             action = move.addAction(folder.get("name") or key)
             action.triggered.connect(
@@ -837,6 +883,7 @@ class MailInboxView(QWidget):
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
+        self._filed_records = []
         self._has_more = False
         self._local_page = 0
         if not preserve_search:
