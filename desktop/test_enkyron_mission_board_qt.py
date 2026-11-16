@@ -30,9 +30,12 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.complete_button.isEnabled())
         self.assertFalse(self.view.log_time_button.isEnabled())
         self.assertIn('NOT CONNECTED', self.view.notice.text())
+        self.assertEqual(self.view.detail_tabs.currentIndex(), 2)
+        self.assertEqual(self.view.crm_table.rowCount(), 0)
 
     def test_demo_selection_search_progress(self):
         self.view.example_button.click()
+        self.assertEqual(self.view.detail_tabs.currentIndex(), 0)
         self.assertEqual(self.view.mission_table.rowCount(), 2)
         self.assertIn('DEMONSTRATION', self.view.notice.text())
         self.assertEqual(self.view.detail_progress.value(), 40)
@@ -49,6 +52,7 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertEqual(self.view.detail_progress.value(), 0)
         self.view.example_button.click()
         self.assertEqual(self.view.mission_table.rowCount(), 0)
+        self.assertEqual(self.view.detail_tabs.currentIndex(), 2)
         self.assertIn('NOT CONNECTED', self.view.notice.text())
 
     def test_every_write_control_stays_disabled_in_demo(self):
@@ -56,6 +60,21 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.new_button.isEnabled())
         self.assertFalse(self.view.add_task_button.isEnabled())
         self.assertFalse(self.view.complete_button.isEnabled())
+
+    def test_real_crm_company_rows_are_read_only_and_never_fake_missions(self):
+        data = {"available": True, "more": False, "items": [
+            {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+             "name": "Existing CRM customer", "relationship_state": "client",
+             "city": "London", "country": "United Kingdom"}]}
+        self.view.show_crm_companies(data)
+        self.assertEqual(self.view.crm_table.rowCount(), 1)
+        self.assertEqual(self.view.mission_table.rowCount(), 0)
+        self.assertIn("Not missions", self.view.crm_notice.text())
+        self.assertFalse(self.view.crm_table.editTriggers())
+        self.assertFalse(self.view.new_button.isEnabled())
+        self.view.show_crm_companies(None, "read error")
+        self.assertEqual(self.view.crm_table.rowCount(), 0)
+
 
 
 if __name__ == '__main__':

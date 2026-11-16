@@ -2281,6 +2281,7 @@ class EnkyronWindow(QMainWindow):
         self.pages.addWidget(self.calendar_view)
         # ENK-08: display-only Mission Board. No bridge, database or write path.
         self.mission_board = MissionBoardView()
+        self.mission_board.crmRefreshRequested.connect(self.load_mission_board_companies)
         self.pages.addWidget(self.mission_board)
 
         self.crm_search_timer = QTimer(self)
@@ -6228,13 +6229,26 @@ class EnkyronWindow(QMainWindow):
             return
         super().closeEvent(event)
 
+    def load_mission_board_companies(self):
+        """Reuse the existing scoped CRM read route. Never infer a Mission record."""
+        if not hasattr(self, "mission_board"):
+            return
+        self._mission_board_crm_seq = getattr(self, "_mission_board_crm_seq", 0) + 1
+        sequence = self._mission_board_crm_seq
+        def received(data, error):
+            if sequence != self._mission_board_crm_seq:
+                return
+            self.mission_board.show_crm_companies(data, error)
+        self.bridge.call("crm-companies", "", callback=received)
+
     def module_changed(self, index):
         # Reuse the CRM data pages without surrounding Mail in CRM controls.
         self.crm_header_panel.setVisible(index != 3)
         self.crm_tabs.tabBar().setVisible(index != 3)
         if index == 5:
-            # Projects is a UI-only preview; never invokes the PostgreSQL bridge.
+            # Projects reuses the existing scoped CRM READ route; PSA writes remain disabled.
             self.pages.setCurrentIndex(4)
+            self.load_mission_board_companies()
             return
         if index == 4:
             self.pages.setCurrentIndex(3)

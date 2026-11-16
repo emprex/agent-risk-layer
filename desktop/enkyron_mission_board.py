@@ -5,7 +5,7 @@ All preview data is explicitly fictional and user-initiated.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QProgressBar, QPushButton, QSplitter, QTabWidget, QTableWidget, QTableWidgetItem,
@@ -13,9 +13,9 @@ from PySide6.QtWidgets import (
 )
 
 if __package__:
-    from .enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary
+    from .enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary, normalize_crm_companies
 else:
-    from enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary
+    from enkyron_mission_board_model import demo_missions, filter_missions, progress, totals, time_summary, normalize_crm_companies
 
 
 def _label(text="", *, muted=False, bold=False):
@@ -36,7 +36,9 @@ def _cell(text):
 
 
 class MissionBoardView(QWidget):
-    """Accessible mission dossier preview; cannot send or change live records."""
+    """Read-only CRM visibility and fictional mission dossier preview."""
+
+    crmRefreshRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,6 +47,7 @@ class MissionBoardView(QWidget):
         self._visible = []
         self._selected_id = None
         self._demo = False
+        self._crm_companies = []
         self._setup()
         self._refresh()
 
@@ -174,6 +177,27 @@ class MissionBoardView(QWidget):
         self.time_table.setAccessibleName("Read-only unapproved internal time entries")
         time_layout.addWidget(self.time_table, 1)
         self.detail_tabs.addTab(time_page, "Time entries")
+        crm_page = QWidget()
+        crm_layout = QVBoxLayout(crm_page)
+        self.crm_notice = _label("CRM companies not loaded. No mission data is inferred.", muted=True)
+        self.crm_notice.setObjectName("enkyronMissionCrmNotice")
+        crm_layout.addWidget(self.crm_notice)
+        self.crm_table = QTableWidget(0, 3)
+        self.crm_table.setObjectName("enkyronMissionCrmCompanies")
+        self.crm_table.setHorizontalHeaderLabels(["Company", "Relationship", "Location"])
+        self.crm_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch)
+        self.crm_table.verticalHeader().setVisible(False)
+        self.crm_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.crm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.crm_table.setAccessibleName("Existing CRM companies, read only, not Mission records")
+        crm_layout.addWidget(self.crm_table, 1)
+        self.crm_reload_button = QPushButton("Refresh existing CRM companies")
+        self.crm_reload_button.setObjectName("enkyronMissionCrmRefresh")
+        self.crm_reload_button.clicked.connect(lambda: self.crmRefreshRequested.emit())
+        crm_layout.addWidget(self.crm_reload_button)
+        self.detail_tabs.addTab(crm_page, "CRM companies")
+        self.detail_tabs.setCurrentIndex(2)
         rl.addWidget(self.detail_tabs, 1)
         editor_actions = QHBoxLayout()
         self.add_task_button = QPushButton("Add work item")
@@ -203,9 +227,30 @@ class MissionBoardView(QWidget):
         self.footer.setObjectName("enkyronMissionFooter")
         root.addWidget(self.footer)
 
+    def show_crm_companies(self, data=None, error=None):
+        """Display trusted local bridge results, never convert companies to missions."""
+        if error or not isinstance(data, dict) or data.get("available") is not True:
+            self._crm_companies = []
+            self.crm_notice.setText(
+                "CRM list unavailable (read only). No Mission Board data changed.")
+        else:
+            self._crm_companies = normalize_crm_companies(data.get("items"))
+            suffix = " · More companies available in CRM" if data.get("more") else ""
+            self.crm_notice.setText(
+                f"{len(self._crm_companies)} existing CRM companies · read-only"
+                f" · Not missions{suffix}")
+        self.crm_table.setRowCount(len(self._crm_companies))
+        for row, company in enumerate(self._crm_companies):
+            location = ", ".join(
+                part for part in (company["city"], company["country"]) if part)
+            values = (company["name"], company["relationship_state"], location)
+            for col, value in enumerate(values):
+                self.crm_table.setItem(row, col, _cell(value))
+
     def toggle_example(self):
         self._demo = not self._demo
         self._missions = demo_missions() if self._demo else []
+        self.detail_tabs.setCurrentIndex(0 if self._demo else 2)
         self._selected_id = None
         self.search_input.clear()
         self._refresh()

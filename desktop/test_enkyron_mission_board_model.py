@@ -1,6 +1,7 @@
 import unittest
 from enkyron_mission_board_model import (
     normalize_missions, demo_missions, progress, totals, filter_missions, time_summary,
+    normalize_crm_companies,
 )
 
 
@@ -81,6 +82,21 @@ class MissionBoardModelTests(unittest.TestCase):
                      work_item_id="33333333-3333-4333-8333-333333333333")
         m["time_entries"] = [other]
         self.assertEqual(normalize_missions([m])[0]["time_entries"], [])
+
+    def test_crm_companies_are_not_missions_and_invalid_rows_disappear(self):
+        row = {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+               "name": "Acme Ltd", "relationship_state": "prospect",
+               "city": "London", "country": "UK"}
+        self.assertEqual(normalize_crm_companies([row])[0]["name"], "Acme Ltd")
+        self.assertEqual(normalize_crm_companies([row, row]), normalize_crm_companies([row]))
+        self.assertEqual(normalize_crm_companies([
+            {**row, "id": "invalid"}, {**row, "relationship_state": "active"}
+        ]), [])
+        self.assertEqual(normalize_crm_companies([row])[0].keys(),
+            {"id", "name", "relationship_state", "city", "country"})
+        self.assertEqual(normalize_crm_companies(None), [])
+        self.assertEqual(len(demo_missions()), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

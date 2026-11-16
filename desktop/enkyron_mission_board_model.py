@@ -111,6 +111,32 @@ def normalize_missions(rows):
     return result
 
 
+
+def normalize_crm_companies(rows):
+    """Display-only CRM records. These records are NOT Mission Board missions."""
+    if not isinstance(rows, list):
+        return []
+    result = []
+    seen = set()
+    for raw in rows[:101]:
+        if not isinstance(raw, dict):
+            continue
+        company_id = _id(raw.get("id"))
+        name = _text(raw.get("name"), 160)
+        relation = raw.get("relationship_state")
+        if (not company_id or company_id in seen or not name or
+                relation not in ("prospect", "client", "former_client", "inactive")):
+            continue
+        seen.add(company_id)
+        result.append({"id": company_id, "name": name,
+                       "relationship_state": relation,
+                       "city": _text(raw.get("city"), 120),
+                       "country": _text(raw.get("country"), 90)})
+        if len(result) >= 100:
+            break
+    return result
+
+
 def progress(mission):
     items = mission.get("work_items") or []
     completed = sum(1 for item in items if item.get("status") == "completed")
