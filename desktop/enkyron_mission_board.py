@@ -86,12 +86,10 @@ class MissionBoardView(QWidget):
         heading.addWidget(self.mission_reload_button)
         root.addLayout(heading)
 
-        self.notice = _label("", bold=True)
+        # Quiet status line: hidden during normal use; shown only for demo/errors.
+        self.notice = _label("", muted=True)
         self.notice.setObjectName("enkyronMissionSafetyNotice")
-        self.notice.setStyleSheet(
-            "background: #fff4d9; border: 1px solid #e8ce91;"
-            " border-radius: 6px; padding: 10px; color: #4a3c20; font-weight: 650;"
-        )
+        self.notice.hide()
         root.addWidget(self.notice)
 
         metrics = QHBoxLayout()
@@ -311,13 +309,17 @@ class MissionBoardView(QWidget):
         self.open_label.setText(f"Open tasks: {counts['open_tasks']}")
         self.milestone_label.setText(f"Milestones: {counts['milestones']}")
         if self._demo:
-            self.notice.setText(
-                "DEMONSTRATION · Fictional records only. No database access, contract approval or test authorization.")
+            self.notice.setText("Example data only · Not saved")
+            self.notice.show()
             self.example_button.setText("Close example")
+        elif not self._live_available:
+            # Do not mask a real read error, but never show connection banners.
+            self.notice.setText("Mission data unavailable · " + self._live_notice)
+            self.notice.show()
+            self.example_button.setText("Explore example")
         else:
-            self.notice.setText(
-                ("CONNECTED · LOCAL PLANNING · " if self._live_available else
-                 "NOT CONNECTED · ") + self._live_notice)
+            self.notice.clear()
+            self.notice.hide()
             self.example_button.setText("Explore example")
         self.mission_table.blockSignals(True)
         self.mission_table.setRowCount(len(self._visible))

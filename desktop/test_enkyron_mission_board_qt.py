@@ -30,7 +30,8 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.add_task_button.isEnabled())
         self.assertFalse(self.view.complete_button.isEnabled())
         self.assertFalse(self.view.log_time_button.isEnabled())
-        self.assertIn('NOT CONNECTED', self.view.notice.text())
+        self.assertIn('Mission data unavailable', self.view.notice.text())
+        self.assertFalse(self.view.notice.isHidden())
         self.assertEqual(self.view.detail_tabs.currentIndex(), 2)
         self.assertEqual(self.view.crm_table.rowCount(), 0)
 
@@ -38,7 +39,8 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.view.example_button.click()
         self.assertEqual(self.view.detail_tabs.currentIndex(), 0)
         self.assertEqual(self.view.mission_table.rowCount(), 2)
-        self.assertIn('DEMONSTRATION', self.view.notice.text())
+        self.assertIn('Example data only', self.view.notice.text())
+        self.assertFalse(self.view.notice.isHidden())
         self.assertEqual(self.view.detail_progress.value(), 40)
         self.assertEqual(self.view.task_table.rowCount(), 5)
         self.assertEqual(self.view.mission_table.columnCount(), 3)
@@ -54,7 +56,8 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.view.example_button.click()
         self.assertEqual(self.view.mission_table.rowCount(), 0)
         self.assertEqual(self.view.detail_tabs.currentIndex(), 2)
-        self.assertIn('NOT CONNECTED', self.view.notice.text())
+        self.assertIn('Mission data unavailable', self.view.notice.text())
+        self.assertFalse(self.view.notice.isHidden())
 
     def test_every_write_control_stays_disabled_in_demo(self):
         self.view.example_button.click()
@@ -82,8 +85,8 @@ class MissionBoardWidgetTests(unittest.TestCase):
             {"available": True, "items": [row], "more": False, "can_write": False})
         self.assertEqual(self.view.mission_table.rowCount(), 1)
         self.assertEqual(self.view.detail_tabs.currentIndex(), 0)
-        self.assertIn("CONNECTED", self.view.notice.text())
-        self.assertIn("LOCAL PLANNING", self.view.notice.text())
+        self.assertTrue(self.view.notice.isHidden())
+        self.assertEqual(self.view.notice.text(), "")
         self.assertEqual(self.view.task_table.rowCount(), 5)
         self.assertEqual(self.view.time_table.rowCount(), 2)
         for button in (self.view.new_button, self.view.add_task_button,
