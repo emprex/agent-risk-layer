@@ -87,7 +87,10 @@ export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
       +'LEFT JOIN enkyron_mail_send_attempts a '
       +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
-      +(unsentOnly?'AND a.id IS NULL AND s.id IS NULL ':'')
+      +(unsentOnly?'AND a.id IS NULL AND s.id IS NULL '+
+      "AND NOT EXISTS (SELECT 1 FROM enkyron_mail_outbound_locations loc "+
+      "WHERE loc.workspace_key=d.workspace_key AND loc.record_kind='drafts' "+
+      "AND loc.record_id=d.id AND loc.folder_key<>'drafts') " : '')
       +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
       +"OR POSITION(lower($2) IN lower(coalesce(d.recipient_email,'')))>0) "
