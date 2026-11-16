@@ -10,7 +10,10 @@ const mail={record_kind:'sent',record_id:UUID,mailbox_key:'direction',
   from_folder:'sent',to_folder:'trash',confirmed:true};
 
 test('Sent/Drafts moving is operator-confirmed and never crosses system folders',()=>{
-  assert.deepEqual(validateOutboundMove(mail),mail);
+  assert.deepEqual(validateOutboundMove(mail),{
+    record_kind:mail.record_kind,record_id:mail.record_id,mailbox_key:mail.mailbox_key,
+    from_folder:mail.from_folder,to_folder:mail.to_folder
+  });
   for(const bad of [
     {...mail,confirmed:false},{...mail,to_folder:'inbox'},
     {...mail,to_folder:'drafts'},{...mail,to_folder:'purged'},
