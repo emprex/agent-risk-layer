@@ -66,3 +66,24 @@ node scripts/enkyron-enk08-history-021-audit.mjs --check
 ```
 
 If the Git object is unavailable, its bytes differ, the ledger differs, or the historical 021 reappears under active migrations, the audit reports **STOP**, without changing anything. Success proves **historical byte/checksum provenance only**, not migration compatibility or permission to deploy. Follow the pending migration, backup/restore and authorization release gates above.
+
+## ENK-08 single-database activation (Owner MFA, no clones)
+
+This slice uses the **existing** ARL desktop, CRM database and private local Owner MFA bridge. The four PSA mutation commands require a valid short-lived password+TOTP Owner session on **every** write, validated again server-side. No caller-supplied actor/role/workspace is accepted. Planning mission creation, work-item creation and completion, and draft time entry each retain their idempotency and immutable event audit.
+
+The explicit installer is `scripts/enkyron-enk08-install.mjs`. It never invokes the shared migration runner, Mail 114/115/117, pg_dump, PostgreSQL clusters, backups or filesystem deletion. It uses the exact previously reviewed SQL 118/119/120 from `docs/enkyron/sql/`, pins their Git blob IDs and applies them only as one transaction to **arl_local on port 5432**, with the shared migration advisory lock and matching SHA-256 receipt in `schema_migrations`. The business migration preflight recognizes these receipts against the canonical draft files when applied, without copying them to the autoscanned `migrations/` directory.
+
+As a conservative recovery prerequisite, `--apply` accepts only an existing owner-owned, private, intact PostgreSQL custom archive under `data/backups/`, with SHA-256 matching its manifest, source DB `arl_local`, archive listing accepted by pg_restore, and created in the last **24 hours**. It never creates, copies, restores, rotates or deletes an archive. This is an integrity gate, **not a tested restore**; an actual restore test is still recommended before relying on the archive.
+
+Commands on the normal Debian operator account:
+
+```bash
+node scripts/enkyron-enk08-install.mjs --check
+node scripts/enkyron-enk08-install.mjs --apply
+```
+
+The second command requires an interactive exact confirmation `INSTALL ENK08` before touching any schema. It aborts without writes if backup, ledger, table state, SQL hashes, database/user identity or prerequisites are wrong. PSA tables and migration receipts commit or roll back together. Existing CRM/Mail/Tickets data are not rewritten.
+
+After installation, close and reopen ENKYRON, navigate to Projects, authenticate with the existing **Owner MFA**, then create a planning mission from an existing CRM company. Add work items, complete a task and log internal draft time. Confirm that the persisted record survives a desktop restart. A planning mission is not an accepted SOW and these actions never authorize testing.
+
+**Current status:** GitHub code prepared; live database installation and Debian end-to-end acceptance are not asserted until the operator runs the guarded command successfully.

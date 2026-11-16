@@ -30,6 +30,7 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertFalse(self.view.add_task_button.isEnabled())
         self.assertFalse(self.view.complete_button.isEnabled())
         self.assertFalse(self.view.log_time_button.isEnabled())
+        self.assertFalse(self.view.owner_unlock_button.isEnabled())
         self.assertIn('NOT CONNECTED', self.view.notice.text())
         self.assertEqual(self.view.detail_tabs.currentIndex(), 2)
         self.assertEqual(self.view.crm_table.rowCount(), 0)
@@ -102,6 +103,31 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertIn("NOT CONNECTED", self.view.notice.text())
         self.assertIn("not installed", self.view.notice.text())
         self.assertFalse(self.view.new_button.isEnabled())
+
+
+    def test_owner_gate_only_unlocked_on_real_schema_and_never_demo(self):
+        from enkyron_mission_board_model import demo_missions
+        self.view.show_crm_companies({"available": True, "more": False, "items": [
+            {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+             "name": "Verified test CRM company",
+             "relationship_state": "prospect", "city": "", "country": ""}]})
+        self.view.show_live_board({"available": True, "items": demo_missions(),
+                                   "more": False, "can_write": False})
+        self.assertTrue(self.view.owner_unlock_button.isEnabled())
+        self.assertFalse(self.view.new_button.isEnabled())
+        self.view.set_owner_authenticated(True)
+        self.assertTrue(self.view.new_button.isEnabled())
+        self.assertTrue(self.view.add_task_button.isEnabled())
+        self.assertTrue(self.view.log_time_button.isEnabled())
+        self.view.set_write_busy(True)
+        self.assertFalse(self.view.new_button.isEnabled())
+        self.view.set_write_busy(False)
+        self.view.example_button.click()
+        self.assertFalse(self.view.new_button.isEnabled())
+        self.assertFalse(self.view.add_task_button.isEnabled())
+        self.assertFalse(self.view.log_time_button.isEnabled())
+        self.view.example_button.click()
+        self.assertTrue(self.view.new_button.isEnabled())
 
 
 

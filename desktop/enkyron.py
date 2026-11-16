@@ -272,7 +272,9 @@ class DesktopBridge:
             process.setProgram("node")
             target = (OWNER_LOGIN_BRIDGE if action in (
                 "owner-setup-status", "owner-login", "owner-session-status", "owner-logout",
-                "owner-mail-status", "owner-mail-threads", "owner-mail-messages"
+                "owner-mail-status", "owner-mail-threads", "owner-mail-messages",
+                "psa-create-mission", "psa-add-work-item",
+                "psa-complete-work-item", "psa-log-time"
             ) else BRIDGE)
             args = [str(target), action]
             if arg:
@@ -384,6 +386,8 @@ class EnkyronWindow(QMainWindow):
         self.resize(1360, 840)
         self.setMinimumSize(920, 620)
         self.bridge = DesktopBridge(self)
+        # Memory-only Owner MFA token; never written to the profile, argv or disk.
+        self._psa_owner_token = None
         self.current_id = None
         self.current_ticket = None
         self.ticket_local_operator = None
@@ -2283,6 +2287,8 @@ class EnkyronWindow(QMainWindow):
         self.mission_board = MissionBoardView()
         self.mission_board.crmRefreshRequested.connect(self.load_mission_board_companies)
         self.mission_board.missionRefreshRequested.connect(self.load_mission_board)
+        self.mission_board.ownerUnlockRequested.connect(self.unlock_mission_board)
+        self.mission_board.writeRequested.connect(self.save_mission_board_action)
         self.pages.addWidget(self.mission_board)
 
         self.crm_search_timer = QTimer(self)
@@ -6228,7 +6234,63 @@ class EnkyronWindow(QMainWindow):
         if not self.bridge.shutdown():
             event.ignore()
             return
+        self._psa_owner_token = None
         super().closeEvent(event)
+
+    def unlock_mission_board(self):
+        """Owner password + TOTP are sent privately to the existing auth bridge."""
+        if self.ux_preview_read_only or os.environ.get("ENKYRON_UAT_DATABASE"):
+            return
+        if not getattr(self.mission_board, "_live_available", False):
+            return
+        password, accepted = QInputDialog.getText(
+            self, "Mission Board · Owner MFA", "Owner password:",
+            QLineEdit.EchoMode.Password)
+        if not accepted or not password:
+            return
+        totp, accepted = QInputDialog.getText(
+            self, "Mission Board · Owner MFA", "Six-digit authenticator code:",
+            QLineEdit.EchoMode.Normal)
+        if not accepted or not re.fullmatch(r"\d{6}", totp):
+            return
+        def received(data, error):
+            if (error or not isinstance(data, dict)
+                    or data.get("role") != "organization_owner_l5"
+                    or not isinstance(data.get("session_token"), str)):
+                self._psa_owner_token = None
+                self.mission_board.set_owner_authenticated(False)
+                QMessageBox.warning(
+                    self, "Mission Board", "Owner MFA unavailable. Editing remains locked.")
+                return
+            self._psa_owner_token = data["session_token"]
+            self.mission_board.set_owner_authenticated(True)
+        self.bridge.call(
+            "owner-login", payload={"password": password, "totp_code": totp},
+            callback=received)
+
+    def save_mission_board_action(self, action, details):
+        """Only private Owner bridge can commit a validated planning operation."""
+        allow = {"psa-create-mission", "psa-add-work-item",
+                 "psa-complete-work-item", "psa-log-time"}
+        if (action not in allow or not isinstance(details, dict)
+                or not self._psa_owner_token or self.mission_board._demo
+                or self.ux_preview_read_only or os.environ.get("ENKYRON_UAT_DATABASE")):
+            return
+        self.mission_board.set_write_busy(True)
+        def received(data, error):
+            self.mission_board.set_write_busy(False)
+            if error or not isinstance(data, dict):
+                self._psa_owner_token = None
+                self.mission_board.set_owner_authenticated(False)
+                QMessageBox.warning(
+                    self, "Mission Board",
+                    "Change not confirmed. Reauthenticate Owner MFA and refresh; "
+                    "the transaction may have succeeded.")
+                return
+            self.load_mission_board()
+        self.bridge.call(
+            action, payload={"session_token": self._psa_owner_token,
+                             "psa_payload": details}, callback=received)
 
     def load_mission_board(self):
         """Read existing planning missions using the current ARL local bridge."""

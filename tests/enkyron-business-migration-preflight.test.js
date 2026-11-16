@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {auditMigrationContinuity} from '../scripts/enkyron-business-migration-preflight.mjs';
+import {auditMigrationContinuity,readAppliedPsaSources} from '../scripts/enkyron-business-migration-preflight.mjs';
 
 const a='a'.repeat(64), b='b'.repeat(64), c='c'.repeat(64);
 const ticket={version:'114_enkyron_ticket_scope_reviews.sql',checksum:a};
@@ -67,4 +67,20 @@ test('Business preflight: pins 5432 against inherited pg_virtualenv PGPORT',()=>
   assert.ok(script.includes("default_transaction_read_only=on"));
   assert.ok(!script.includes('process.env.PGPORT'));
   assert.ok(!script.includes('process.env.DATABASE_URL'));
+});
+
+test('Business audit: applied PSA drafts retain exact canonical source checksums',async()=>{
+  const ids=[
+    '118_enkyron_psa_mission_planning.sql',
+    '119_enkyron_psa_work_items.sql',
+    '120_enkyron_psa_time_entries.sql',
+  ];
+  const source=await readAppliedPsaSources(ids.map(version=>({version})));
+  assert.deepEqual(source.map(x=>x.version),ids);
+  assert.ok(source.every(x=>/^[a-f0-9]{64}$/.test(x.checksum)));
+  const audit=auditMigrationContinuity(source,source);
+  assert.deepEqual(audit.missing_source,[]);
+  assert.deepEqual(audit.checksum_mismatch,[]);
+  assert.deepEqual(audit.pending,[]);
+  assert.deepEqual(await readAppliedPsaSources([]),[]);
 });

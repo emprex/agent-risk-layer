@@ -68,7 +68,10 @@ def normalize_missions(rows):
             items.append({"id": tid, "mission_id": mission_id,
                           "kind": task["kind"], "title": task_title,
                           "due_date": _date(task.get("due_date")),
-                          "status": task["status"]})
+                          "status": task["status"],
+                          "version": (task.get("version")
+                                      if type(task.get("version")) is int
+                                      and task.get("version") in (1, 2) else 1)})
             if len(items) >= 100:
                 break
         time_entries = []

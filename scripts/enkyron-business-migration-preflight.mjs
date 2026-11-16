@@ -21,6 +21,23 @@ export async function readMigrationManifest(dir=MIGRATION_DIR) {
   })));
 }
 
+// ENK-08: drafts are deliberately kept OUT of auto-discovered migrations.
+// Once a reviewed, explicitly installed PSA version is recorded in the normal
+// ledger, audit its canonical source under docs so no false missing-source drift.
+const PSA_DIR=path.resolve(path.dirname(THIS),'..','docs','enkyron','sql');
+const PSA_MANAGED=new Set([
+  '118_enkyron_psa_mission_planning.sql',
+  '119_enkyron_psa_work_items.sql',
+  '120_enkyron_psa_time_entries.sql',
+]);
+export async function readAppliedPsaSources(appliedRows) {
+  if(!Array.isArray(appliedRows))throw new Error('Applied PSA migration rows required');
+  const names=new Set(appliedRows.map(row=>row.version).filter(x=>PSA_MANAGED.has(x)));
+  return Promise.all([...names].sort().map(async version=>({
+    version,checksum:digest(await readFile(path.join(PSA_DIR,version)))
+  })));
+}
+
 export function auditMigrationContinuity(sourceRows, appliedRows) {
   if (!Array.isArray(sourceRows)||!Array.isArray(appliedRows))
     throw new Error('Migration manifests must be arrays');
@@ -97,7 +114,8 @@ export async function preflightBusinessDatabase(dir=MIGRATION_DIR) {
     const appliedRows=(await client.query(
       'SELECT version,checksum FROM schema_migrations ORDER BY version'
     )).rows;
-    const report=auditMigrationContinuity(sourceRows,appliedRows);
+    const managed=await readAppliedPsaSources(appliedRows);
+    const report=auditMigrationContinuity([...sourceRows,...managed],appliedRows);
     await client.query('COMMIT');
     started=false;
     return {database:'arl_local',actor:user,...report};

@@ -12,13 +12,24 @@ import { resolveEnkyronDatabase } from './enkyron-uat-database.mjs';
 import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
 import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
 import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
+import {createMissionPlan} from './enkyron-psa-missions.mjs';
+import {createMissionWorkItem,completeMissionWorkItem} from './enkyron-psa-work-items.mjs';
+import {createMissionTimeEntry} from './enkyron-psa-time.mjs';
+import {authoriseEnkyronOperation} from './enkyron-access-policy.mjs';
 import {
   loginLocalOwner, resolveLocalOwnerSession, logoutLocalOwner,
 } from './enkyron-owner-session.mjs';
 
+const PSA_OPERATIONS=new Map([
+  ['psa-create-mission','psa:plan'],
+  ['psa-add-work-item','psa:task'],
+  ['psa-complete-work-item','psa:task'],
+  ['psa-log-time','psa:time'],
+]);
 const OPERATIONS=new Set([
   'owner-setup-status','owner-login','owner-session-status','owner-logout',
   'owner-mail-status','owner-mail-threads','owner-mail-messages',
+  ...PSA_OPERATIONS.keys(),
 ]);
 const KEY_DIRECTORY=path.join(os.homedir(),'.local','share','enkyron','auth');
 const KEY_FILE=path.join(KEY_DIRECTORY,'local-key-v1.bin');
@@ -27,13 +38,13 @@ async function readPayload(){
   let raw='',length=0;
   for await(const chunk of process.stdin){
     length+=chunk.length;
-    if(length>4096)throw new Error('Invalid Owner request');
+    if(length>8192)throw new Error('Invalid Owner request');
     raw+=chunk.toString('utf8');
   }
   const value=JSON.parse(raw);
   if(!value||Array.isArray(value)||typeof value!=='object')
     throw new Error('Invalid Owner request');
-  const allowed=['password','totp_code','session_token','mailbox','thread_id'];
+  const allowed=['password','totp_code','session_token','mailbox','thread_id','psa_payload'];
   if(Object.keys(value).some(x=>!allowed.includes(x)))
     throw new Error('Invalid Owner request');
   return value;
@@ -92,7 +103,7 @@ async function main(){
   if(dbTarget.uat) throw new Error('ENKYRON UAT blocks Owner login and mail');
   const operator=os.userInfo().username;
   const pool=new pg.Pool({
-    host:'/var/run/postgresql',database:dbTarget.database,user:operator,
+    host:'/var/run/postgresql',port:5432,database:dbTarget.database,user:operator,
     connectionTimeoutMillis:5000,max:1,
     options:"-c statement_timeout=10000 -c lock_timeout=4000"
   });
@@ -123,6 +134,40 @@ async function main(){
         operator,sessionToken:req.session_token,key,
       });
       emit({ok:true,result:done});
+    }else if(PSA_OPERATIONS.has(operation)){
+      // Owner MFA and role are resolved from the signed session on EVERY write.
+      // Caller cannot supply actor, workspace, principal, role or permissions.
+      const permittedKeys=Object.keys(req).sort();
+      if(permittedKeys.join(',')!=='psa_payload,session_token')
+        throw new Error('PSA request requires only owner session and validated payload');
+      const principal=await resolveLocalOwnerSession(pool,{
+        operator,sessionToken:req.session_token,key,
+      });
+      const action=PSA_OPERATIONS.get(operation);
+      const authorization=authoriseEnkyronOperation(principal,action,{
+        organizationId:principal.organizationId,
+      });
+      if(!authorization.allowed)throw new Error('PSA Owner authorization denied');
+      const schema=(await pool.query(
+        "SELECT to_regclass('public.enkyron_psa_missions') AS missions,"
+        +"to_regclass('public.enkyron_psa_mission_events') AS mission_events,"
+        +"to_regclass('public.enkyron_psa_work_items') AS work_items,"
+        +"to_regclass('public.enkyron_psa_work_item_events') AS work_events,"
+        +"to_regclass('public.enkyron_psa_time_entries') AS time_entries,"
+        +"to_regclass('public.enkyron_psa_time_events') AS time_events"
+      )).rows[0];
+      if(!schema||Object.values(schema).some(value=>!value))
+        throw new Error('PSA schema is not installed; operation refused');
+      const body=req.psa_payload;
+      const operationResult=
+        operation==='psa-create-mission'?
+          await createMissionPlan(pool,body,operator):
+        operation==='psa-add-work-item'?
+          await createMissionWorkItem(pool,body,operator):
+        operation==='psa-complete-work-item'?
+          await completeMissionWorkItem(pool,body,operator):
+          await createMissionTimeEntry(pool,body,operator);
+      emit({ok:true,result:operationResult});
     }else{
       const principal=await resolveLocalOwnerSession(pool,{
         operator,sessionToken:req.session_token,key,
@@ -170,7 +215,10 @@ main().catch(()=>{
   // Never serialize SQL errors, passwords, tokens, encryption details or stack traces.
   const action=process.argv[2];
   const mail=action?.startsWith('owner-mail-');
-  emit({ok:false,error:action==='owner-setup-status'
+  const psa=PSA_OPERATIONS.has(action);
+  emit({ok:false,error:psa
+    ?'Mission change refused. Verify Owner MFA, local permissions and PSA schema.'
+    :action==='owner-setup-status'
     ?'CEO account status unavailable'
     :mail
     ?'Mail unavailable; check Owner session and Resend configuration'

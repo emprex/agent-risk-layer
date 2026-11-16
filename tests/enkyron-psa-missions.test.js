@@ -204,3 +204,36 @@ test('ENK-08 board: existing scoped missions, work items and time are read only'
   assert.ok(calls.every(x=>x.sql.startsWith('SELECT ')));
   assert.ok(calls.every(x=>!(/INSERT|UPDATE|DELETE|CREATE TABLE/i).test(x.sql)));
 });
+
+test('ENK-08 Owner write IPC: verified MFA on every action, not local-user-only writes',()=>{
+  const source=fs.readFileSync(
+    new URL('../desktop/enkyron-owner-login-bridge.mjs',import.meta.url),'utf8');
+  const main=fs.readFileSync(
+    new URL('../desktop/enkyron-bridge.mjs',import.meta.url),'utf8');
+  assert.match(source,/PSA_OPERATIONS=new Map/);
+  assert.match(source,/resolveLocalOwnerSession\(pool/);
+  assert.match(source,/authoriseEnkyronOperation\(principal,action/);
+  assert.match(source,/Object\.keys\(req\)\.sort\(\)/);
+  assert.match(source,/createMissionPlan\(pool,body,operator\)/);
+  assert.match(source,/createMissionWorkItem\(pool,body,operator\)/);
+  assert.match(source,/completeMissionWorkItem\(pool,body,operator\)/);
+  assert.match(source,/createMissionTimeEntry\(pool,body,operator\)/);
+  assert.match(source,/PSA schema is not installed/);
+  assert.doesNotMatch(main,/psa-create-mission' \? await/);
+});
+test('ENK-08 installer: explicit live confirmation, no clone or automatic backup',()=>{
+  const source=fs.readFileSync(
+    new URL('../scripts/enkyron-enk08-install.mjs',import.meta.url),'utf8');
+  assert.match(source,/pg_advisory_xact_lock\(814720260\)/);
+  assert.match(source,/BEGIN/);
+  assert.match(source,/ROLLBACK/);
+  assert.match(source,/COMMIT/);
+  assert.match(source,/schema_migrations\(version,checksum\)/);
+  assert.match(source,/INSTALL ENK08/);
+  assert.match(source,/data','backups/);
+  assert.match(source,/backupCandidate\(\)/);
+  assert.match(source,/default_transaction_read_only=on/);
+  assert.match(source,/port:5432,database:'arl_local'/);
+  assert.doesNotMatch(source,/pg_virtualenv|pg_dump|CREATE DATABASE|runMigrations\(/);
+  assert.doesNotMatch(source,/rmSync|unlinkSync|rotateBackups/);
+});

@@ -21,6 +21,11 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn("self.bridge.call(\"crm-companies\", \"\", callback=received)", text)
         self.assertIn("self.mission_board.crmRefreshRequested.connect", text)
         self.assertIn("self.mission_board.missionRefreshRequested.connect", text)
+        self.assertIn("self.mission_board.ownerUnlockRequested.connect", text)
+        self.assertIn("self.mission_board.writeRequested.connect", text)
+        self.assertIn("def unlock_mission_board", text)
+        self.assertIn("def save_mission_board_action", text)
+        self.assertIn('payload={"session_token": self._psa_owner_token,', text)
         self.assertIn('self.bridge.call("psa-board", "", callback=received)', text)
         self.assertIn("go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))", text)
 
@@ -36,6 +41,12 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn('self.detail_tabs.addTab(crm_page, "CRM companies")', text)
         self.assertIn("normalize_crm_companies", text)
         self.assertIn("show_live_board", text)
+        self.assertIn("ownerUnlockRequested = Signal()", text)
+        self.assertIn("writeRequested = Signal(str, dict)", text)
+        self.assertIn("def _create_mission", text)
+        self.assertIn("def _add_work_item", text)
+        self.assertIn("def _complete_work_item", text)
+        self.assertIn("def _log_time", text)
         for item in ("new_button", "add_task_button", "complete_button", "log_time_button"):
             self.assertIn("self." + item + ".setEnabled(False)", text)
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import pg from 'pg';
 import {
-  readMigrationManifest, auditMigrationContinuity
+  readMigrationManifest, readAppliedPsaSources, auditMigrationContinuity
 } from './enkyron-business-migration-preflight.mjs';
 
 const THIS = fileURLToPath(import.meta.url);
@@ -119,7 +119,8 @@ export async function auditEnk08ProductionCatalog() {
     const appliedRows = (await client.query(
       'SELECT version,checksum FROM schema_migrations ORDER BY version'
     )).rows;
-    const migration = auditMigrationContinuity(sourceRows, appliedRows);
+    const managed = await readAppliedPsaSources(appliedRows);
+    const migration = auditMigrationContinuity([...sourceRows,...managed], appliedRows);
     const tables = (await client.query(
       "SELECT c.relname AS table_name FROM pg_catalog.pg_class c "
       + "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "

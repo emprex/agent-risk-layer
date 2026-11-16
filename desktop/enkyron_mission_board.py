@@ -5,11 +5,14 @@ All preview data is explicitly fictional and user-initiated.
 """
 from __future__ import annotations
 
+from uuid import uuid4
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QProgressBar, QPushButton, QSplitter, QTabWidget, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
+    QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QTabWidget,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 if __package__:
@@ -40,6 +43,8 @@ class MissionBoardView(QWidget):
 
     crmRefreshRequested = Signal()
     missionRefreshRequested = Signal()
+    ownerUnlockRequested = Signal()
+    writeRequested = Signal(str, dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,6 +55,8 @@ class MissionBoardView(QWidget):
         self._demo = False
         self._crm_companies = []
         self._live_missions = []
+        self._owner_authenticated = False
+        self._write_busy = False
         self._live_available = False
         self._live_notice = 'Mission Board tables are not installed.'
         self._setup()
@@ -78,6 +85,9 @@ class MissionBoardView(QWidget):
         self.mission_reload_button.clicked.connect(
             lambda: self.missionRefreshRequested.emit())
         heading.addWidget(self.mission_reload_button)
+        self.owner_unlock_button = QPushButton("Owner MFA · Unlock edits")
+        self.owner_unlock_button.clicked.connect(lambda: self.ownerUnlockRequested.emit())
+        heading.addWidget(self.owner_unlock_button)
         root.addLayout(heading)
 
         self.notice = _label("", bold=True)
@@ -115,7 +125,8 @@ class MissionBoardView(QWidget):
         self.new_button = QPushButton("New mission")
         self.new_button.setObjectName("enkyronMissionCreate")
         self.new_button.setEnabled(False)
-        self.new_button.setToolTip("Unavailable: backend authorization and migrations not approved")
+        self.new_button.setToolTip("Requires installed schema and Owner MFA")
+        self.new_button.clicked.connect(self._create_mission)
         actions.addWidget(self.new_button)
         root.addLayout(actions)
 
@@ -168,6 +179,7 @@ class MissionBoardView(QWidget):
         self.task_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.task_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.task_table.setAccessibleName("Read-only tasks and milestones")
+        self.task_table.itemSelectionChanged.connect(self._update_write_controls)
         self.detail_tabs.addTab(self.task_table, "Tasks & milestones")
         time_page = QWidget()
         time_layout = QVBoxLayout(time_page)
@@ -211,21 +223,24 @@ class MissionBoardView(QWidget):
         editor_actions = QHBoxLayout()
         self.add_task_button = QPushButton("Add work item")
         self.add_task_button.setEnabled(False)
-        self.add_task_button.setToolTip("No write access in demonstration")
+        self.add_task_button.setToolTip("Requires Owner MFA and a real mission")
+        self.add_task_button.clicked.connect(self._add_work_item)
         self.complete_button = QPushButton("Complete task")
         self.complete_button.setEnabled(False)
-        self.complete_button.setToolTip("No write access in demonstration")
+        self.complete_button.setToolTip("Requires Owner MFA and an open work item")
+        self.complete_button.clicked.connect(self._complete_work_item)
         editor_actions.addWidget(self.add_task_button)
         editor_actions.addWidget(self.complete_button)
         self.log_time_button = QPushButton("Log time")
         self.log_time_button.setObjectName("enkyronMissionLogTime")
         self.log_time_button.setEnabled(False)
-        self.log_time_button.setToolTip("Awaiting approved persistence and permission checks")
+        self.log_time_button.setToolTip("Requires Owner MFA and the internal time schema")
+        self.log_time_button.clicked.connect(self._log_time)
         editor_actions.addWidget(self.log_time_button)
         editor_actions.addStretch()
         rl.addLayout(editor_actions)
         self.hours_notice = _label(
-            "TIME TRACKING · Not enabled — requires approved persistence and permissions.", muted=True)
+            "TIME TRACKING · Internal draft only · Not billable or approved.", muted=True)
         self.hours_notice.setObjectName("enkyronMissionTimeGate")
         rl.addWidget(self.hours_notice)
         splitter.addWidget(right_pane)
@@ -255,6 +270,7 @@ class MissionBoardView(QWidget):
             values = (company["name"], company["relationship_state"], location)
             for col, value in enumerate(values):
                 self.crm_table.setItem(row, col, _cell(value))
+        self._update_write_controls()
 
     def show_live_board(self, data=None, error=None):
         """Trusted read-only PSA records; never impersonate signed engagements."""
@@ -278,6 +294,7 @@ class MissionBoardView(QWidget):
             self._refresh()
             if self._missions:
                 self.detail_tabs.setCurrentIndex(0)
+        self._update_write_controls()
 
     def toggle_example(self):
         self._demo = not self._demo
@@ -287,6 +304,7 @@ class MissionBoardView(QWidget):
         self._selected_id = None
         self.search_input.clear()
         self._refresh()
+        self._update_write_controls()
 
     def _refresh(self, *_):
         self._visible = filter_missions(self._missions, self.search_input.text())
@@ -329,6 +347,7 @@ class MissionBoardView(QWidget):
             self.mission_table.clearSelection()
             self._selected_id = None
             self._clear_detail()
+        self._update_write_controls()
 
     def _select_mission(self):
         row = self.mission_table.currentRow()
@@ -361,6 +380,165 @@ class MissionBoardView(QWidget):
             values = (entry['work_date'], duration_text, entry['note'])
             for col, value in enumerate(values):
                 self.time_table.setItem(row, col, _cell(value))
+        self._update_write_controls()
+
+    def set_owner_authenticated(self, yes):
+        self._owner_authenticated = bool(yes)
+        self._update_write_controls()
+
+    def set_write_busy(self, yes):
+        self._write_busy = bool(yes)
+        self._update_write_controls()
+
+    def _selected_real_mission(self):
+        if self._demo or not self._live_available:
+            return None
+        row = self.mission_table.currentRow()
+        return self._visible[row] if 0 <= row < len(self._visible) else None
+
+    def _update_write_controls(self):
+        if not hasattr(self, "owner_unlock_button"):
+            return
+        available = self._live_available and not self._demo
+        enabled = available and self._owner_authenticated and not self._write_busy
+        selected = self._selected_real_mission()
+        self.owner_unlock_button.setEnabled(
+            available and not self._write_busy and not self._owner_authenticated)
+        self.owner_unlock_button.setText(
+            "Owner MFA verified" if self._owner_authenticated
+            else "Owner MFA · Unlock edits")
+        self.new_button.setEnabled(enabled and bool(self._crm_companies))
+        self.add_task_button.setEnabled(enabled and selected is not None)
+        self.log_time_button.setEnabled(enabled and selected is not None)
+        row = self.task_table.currentRow()
+        tasks = selected.get("work_items", []) if selected else []
+        task = tasks[row] if 0 <= row < len(tasks) else None
+        self.complete_button.setEnabled(
+            enabled and task is not None and task.get("status") == "open")
+
+    def _form(self, title, fields):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setMinimumWidth(460)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(_label(
+            "Internal planning only. No contract or security-test approval.", muted=True))
+        form = QFormLayout()
+        for label, widget in fields:
+            form.addRow(label, widget)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Confirm & save")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def _create_mission(self):
+        if not self.new_button.isEnabled():
+            return
+        companies = QComboBox()
+        for company in self._crm_companies:
+            if company["relationship_state"] != "inactive":
+                companies.addItem(company["name"], company["id"])
+        if not companies.count():
+            return
+        title = QLineEdit()
+        title.setMaxLength(160)
+        description = QPlainTextEdit()
+        description.setPlaceholderText("Internal scope, minimum 20 characters")
+        description.setMaximumHeight(100)
+        due = QLineEdit()
+        due.setPlaceholderText("YYYY-MM-DD (optional)")
+        due.setMaxLength(10)
+        if not self._form("New planning mission", [
+            ("CRM company", companies), ("Mission title", title),
+            ("Description", description), ("Due date", due)]):
+            return
+        if len(title.text().strip()) < 5 or len(description.toPlainText().strip()) < 20:
+            QMessageBox.warning(self, "Mission", "Title needs 5 characters and description 20.")
+            return
+        self.writeRequested.emit("psa-create-mission", {
+            "company_id": companies.currentData(), "opportunity_id": None,
+            "title": title.text().strip(),
+            "description": description.toPlainText().strip(),
+            "due_date": due.text().strip() or None,
+            "request_id": str(uuid4()), "confirmed": True})
+
+    def _add_work_item(self):
+        mission = self._selected_real_mission()
+        if not self.add_task_button.isEnabled() or not mission:
+            return
+        kind = QComboBox()
+        kind.addItem("Task", "task")
+        kind.addItem("Milestone", "milestone")
+        title = QLineEdit()
+        title.setMaxLength(200)
+        due = QLineEdit()
+        due.setPlaceholderText("YYYY-MM-DD (optional)")
+        due.setMaxLength(10)
+        if not self._form("Add work item", [
+            ("Type", kind), ("Title", title), ("Due date", due)]):
+            return
+        if len(title.text().strip()) < 5:
+            QMessageBox.warning(self, "Work item", "Title needs at least 5 characters.")
+            return
+        self.writeRequested.emit("psa-add-work-item", {
+            "mission_id": mission["id"], "kind": kind.currentData(),
+            "title": title.text().strip(), "due_date": due.text().strip() or None,
+            "request_id": str(uuid4()), "confirmed": True})
+
+    def _complete_work_item(self):
+        mission = self._selected_real_mission()
+        row = self.task_table.currentRow()
+        tasks = mission["work_items"] if mission else []
+        if not self.complete_button.isEnabled() or not 0 <= row < len(tasks):
+            return
+        task = tasks[row]
+        answer = QMessageBox.question(
+            self, "Complete internal work item",
+            "Complete this internal work item? No contract is approved.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.writeRequested.emit("psa-complete-work-item", {
+            "mission_id": mission["id"], "task_id": task["id"],
+            "expected_version": task["version"], "completed": True,
+            "request_id": str(uuid4()), "confirmed": True})
+
+    def _log_time(self):
+        mission = self._selected_real_mission()
+        if not self.log_time_button.isEnabled() or not mission:
+            return
+        item = QComboBox()
+        item.addItem("Mission (no specific task)", None)
+        for task in mission["work_items"]:
+            item.addItem(task["title"], task["id"])
+        day = QLineEdit()
+        from datetime import date
+        day.setText(date.today().isoformat())
+        day.setMaxLength(10)
+        minutes = QSpinBox()
+        minutes.setRange(1, 720)
+        minutes.setValue(30)
+        note = QPlainTextEdit()
+        note.setPlaceholderText("Internal work description, min. 10 characters")
+        note.setMaximumHeight(100)
+        if not self._form("Log internal draft time", [
+            ("Work item", item), ("Work date", day),
+            ("Minutes", minutes), ("Internal note", note)]):
+            return
+        if len(note.toPlainText().strip()) < 10:
+            QMessageBox.warning(self, "Time entry", "Note needs at least 10 characters.")
+            return
+        self.writeRequested.emit("psa-log-time", {
+            "mission_id": mission["id"], "work_item_id": item.currentData(),
+            "work_date": day.text().strip(), "minutes": minutes.value(),
+            "note": note.toPlainText().strip(), "request_id": str(uuid4()),
+            "confirmed": True})
 
     def _clear_detail(self):
         self.detail_title.setText(
