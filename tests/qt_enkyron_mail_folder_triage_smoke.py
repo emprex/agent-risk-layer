@@ -47,14 +47,33 @@ class MailFolderTriageSmoke(unittest.TestCase):
         self.view.localOutboundMoveRequested.connect(
             lambda *args: saved.append(args))
 
-        def select_trash(menu, _point):
-            folder = next(a.menu() for a in menu.actions()
-                          if a.menu() and a.text() == "Move to folder")
-            target = next(a for a in folder.actions() if a.text() == "Trash")
-            target.trigger()
-            return None
+        # Replace the modal QMenu factory, not the Qt C++ exec method.
+        # This tests the real context-menu construction without a popup/event loop.
+        class SignalStub:
+            def __init__(self):
+                self.callback = None
+            def connect(self, callback):
+                self.callback = callback
+        class ActionStub:
+            def __init__(self, title):
+                self.title = title
+                self.triggered = SignalStub()
+        class MenuStub:
+            def __init__(self, *_args):
+                self.actions = {}
+                self.menus = {}
+            def addAction(self, title):
+                action = ActionStub(title)
+                self.actions[title] = action
+                return action
+            def addMenu(self, title):
+                nested = MenuStub()
+                self.menus[title] = nested
+                return nested
+            def exec(self, _pos):
+                self.menus["Move to folder"].actions["Trash"].triggered.callback(False)
 
-        with patch.object(QMenu, "exec", select_trash):
+        with patch("desktop.enkyron_mail_workspace.QMenu", MenuStub):
             self.view._local_context_menu(selected, QPoint(0, 0))
         self.assertEqual(saved, [("sent", UID, "direction", "sent", "trash")])
 
