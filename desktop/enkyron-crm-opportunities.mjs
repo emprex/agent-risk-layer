@@ -22,6 +22,15 @@ function textField(value,label,min,max){
   }
   return value.trim();
 }
+function nextActionField(value){
+  if(typeof value!=='string'||/[\x00-\x09\x0b-\x1f\x7f]/.test(value))
+    throw new Error('CRM invalid next action');
+  // The Qt editor is multiline. Preserve paragraphs while normalising CRLF.
+  const action=value.replace(/\r\n?/g,'\n').trim();
+  if(action.length<5||action.length>1000)
+    throw new Error('CRM invalid next action');
+  return action;
+}
 function dateField(value){
   if(value===null||value===undefined||value==='')return null;
   if(typeof value!=='string'||! /^\d{4}-\d{2}-\d{2}$/.test(value))
@@ -44,7 +53,7 @@ export function validateOpportunityCreate(data){
     prospect_id:requireProspectId(data.prospect_id),
     company_name_at_review:textField(data.company_name_at_review,
       'reviewed prospect name',1,300),
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:nextActionField(data.next_action),
     due_date:dateField(data.due_date)
   };
 }
@@ -60,7 +69,7 @@ export function validateCompanyOpportunityCreate(data){
     ticket_id:requireTicketId(data.ticket_id),
     company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
     ticket_number_at_review:textField(data.ticket_number_at_review,'ticket number',8,40),
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:nextActionField(data.next_action),
     due_date:dateField(data.due_date)
   };
 }
@@ -75,7 +84,7 @@ export function validateDirectCompanyOpportunityCreate(data){
   return {
     company_id:requireCompanyId(data.company_id),
     company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:nextActionField(data.next_action),
     due_date:dateField(data.due_date)
   };
 }
@@ -117,7 +126,7 @@ export function validateOpportunityUpdate(data){
     id:data.id,
     expected_version:data.expected_version,
     stage:data.stage,
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:nextActionField(data.next_action),
     due_date:dateField(data.due_date),
     ...(Object.hasOwn(data,'company_id')?
       {company_id:requireCompanyId(data.company_id)}:{}),
