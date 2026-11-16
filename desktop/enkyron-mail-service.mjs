@@ -311,6 +311,13 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
     if(rows.length!==1||rows[0].revision!==revision)
       throw new Error('CRM draft revision changed; reopen it before sending');
     const draft=rows[0];
+    const location=(await client.query(
+      'SELECT folder_key FROM enkyron_mail_outbound_locations '+
+      "WHERE workspace_key=$1 AND record_kind='drafts' AND record_id=$2 FOR SHARE",
+      [scope,draftId]
+    )).rows[0];
+    if(location && location.folder_key!=='drafts')
+      throw new Error('CRM filed draft must be restored to Drafts before sending');
     mailboxKey(draft.mailbox_key);
     if(typeof draft.recipient_email!=='string'||!EMAIL.test(draft.recipient_email)
         ||typeof draft.subject!=='string'||!draft.subject.trim()
