@@ -145,7 +145,8 @@ export async function listMovedOutboundMail(pool,operator,input={}){
     'JOIN enkyron_mail_send_attempts s ON s.workspace_key=l.workspace_key '+
     "AND s.id=l.record_id AND l.record_kind='sent' "+
     'JOIN enkyron_crm_mail_drafts d ON d.workspace_key=s.workspace_key AND d.id=s.draft_id '+
-    'WHERE l.workspace_key=$1 AND l.folder_key=$2 '+
+    "WHERE l.workspace_key=$1 AND ($2='all' OR l.folder_key=$2) "+
+    "AND l.folder_key<>'purged' "+
     "AND ($3='all' OR l.mailbox_key=$3) "+
     "AND ($4='' OR POSITION(lower($4) IN lower(d.subject))>0 "+
     'OR POSITION(lower($4) IN lower(coalesce(d.recipient_email,\'\')))>0) '+
@@ -156,7 +157,8 @@ export async function listMovedOutboundMail(pool,operator,input={}){
     'd.updated_at FROM enkyron_mail_outbound_locations l '+
     'JOIN enkyron_crm_mail_drafts d ON d.workspace_key=l.workspace_key '+
     "AND d.id=l.record_id AND l.record_kind='drafts' "+
-    'WHERE l.workspace_key=$1 AND l.folder_key=$2 '+
+    "WHERE l.workspace_key=$1 AND ($2='all' OR l.folder_key=$2) "+
+    "AND l.folder_key<>'purged' "+
     "AND ($3='all' OR l.mailbox_key=$3) "+
     'AND NOT EXISTS (SELECT 1 FROM enkyron_mail_send_attempts s '+
     'WHERE s.workspace_key=d.workspace_key AND s.draft_id=d.id) '+
