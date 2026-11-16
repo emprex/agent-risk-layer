@@ -3,7 +3,7 @@
 CREATE TABLE enkyron_mail_outbound_locations (
   workspace_key TEXT NOT NULL CHECK(workspace_key ~ '^local:[A-Za-z0-9_.-]{1,80}$'),
   record_kind TEXT NOT NULL CHECK(record_kind IN ('sent','drafts')),
-  record_id TEXT NOT NULL CHECK(record_id ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}
+  record_id TEXT NOT NULL CHECK(record_id ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'),
   mailbox_key TEXT NOT NULL CHECK(mailbox_key IN ('direction','support')),
   folder_key TEXT NOT NULL CHECK(folder_key ~ '^[a-z0-9_-]{1,64}$'),
   previous_folder TEXT NOT NULL CHECK(previous_folder ~ '^[a-z0-9_-]{1,64}$'),
