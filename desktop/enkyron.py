@@ -39,6 +39,7 @@ if __package__:
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
     from .enkyron_calendar_view import MailCalendarView
+    from .enkyron_mission_board import MissionBoardView
     from .enkyron_pilot_lab import PilotLabPanel
     from .enkyron_control_review import ControlReviewDialog
     from .enkyron_scope_review import ScopeReviewDialog
@@ -51,6 +52,7 @@ else:
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
     from enkyron_calendar_view import MailCalendarView
+    from enkyron_mission_board import MissionBoardView
     from enkyron_pilot_lab import PilotLabPanel
     from enkyron_control_review import ControlReviewDialog
     from enkyron_scope_review import ScopeReviewDialog
@@ -604,7 +606,7 @@ class EnkyronWindow(QMainWindow):
         nav_l.addWidget(QLabel("WORKSPACE"))
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
-        self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
+        self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar", "Projects"])
         if self.ux_preview_read_only or self.enk05_uat_ui:
             # Never lead a UAT operator into blocked mail/calendar screens.
             # CRM and Tickets stay available for the synthetic Service Desk.
@@ -616,7 +618,7 @@ class EnkyronWindow(QMainWindow):
                     if self.ux_preview_read_only
                     else "Outside UAT-04 Service Desk scope"
                 )
-        self.navigation.setMaximumHeight(255)
+        self.navigation.setMaximumHeight(320)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
         workspace.addWidget(navigation)
@@ -663,6 +665,11 @@ class EnkyronWindow(QMainWindow):
         go_calendar.setMinimumHeight(44)
         go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
         quick_actions_bottom.addWidget(go_calendar, 1)
+        go_projects = QPushButton("Projects · Mission Board")
+        go_projects.setObjectName("enkyronHomeOpenProjects")
+        go_projects.setMinimumHeight(44)
+        go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))
+        quick_actions_bottom.addWidget(go_projects, 1)
         if self.ux_preview_read_only or self.enk05_uat_ui:
             go_mail.setEnabled(False)
             go_calendar.setEnabled(False)
@@ -2272,6 +2279,9 @@ class EnkyronWindow(QMainWindow):
         self.calendar_view.taskCreateRequested.connect(self.create_calendar_task)
         self.calendar_view.taskCompleteRequested.connect(self.complete_calendar_task)
         self.pages.addWidget(self.calendar_view)
+        # ENK-08: display-only Mission Board. No bridge, database or write path.
+        self.mission_board = MissionBoardView()
+        self.pages.addWidget(self.mission_board)
 
         self.crm_search_timer = QTimer(self)
         self.crm_search_timer.setSingleShot(True)
@@ -6222,6 +6232,10 @@ class EnkyronWindow(QMainWindow):
         # Reuse the CRM data pages without surrounding Mail in CRM controls.
         self.crm_header_panel.setVisible(index != 3)
         self.crm_tabs.tabBar().setVisible(index != 3)
+        if index == 5:
+            # Projects is a UI-only preview; never invokes the PostgreSQL bridge.
+            self.pages.setCurrentIndex(4)
+            return
         if index == 4:
             self.pages.setCurrentIndex(3)
             # Do not raise or minimise another window. Desktop users decide
