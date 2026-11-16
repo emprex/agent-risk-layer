@@ -23,7 +23,7 @@ export async function moveSavedMailRecord(pool,actor,input){
    if((saved?.folder_key||original)!==req.from)throw Error('Mail folder changed; refresh first');
    if((req.to==='sent'&&!sent)||(req.to==='drafts'&&sent))throw Error('Cannot change an email send state by moving folders');
    await c.query('INSERT INTO enkyron_mail_record_filing(workspace_key,draft_id,folder_key,previous_folder) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_key,draft_id) DO UPDATE SET folder_key=EXCLUDED.folder_key,previous_folder=EXCLUDED.previous_folder,updated_at=NOW()',[key,req.draft_id,req.to,req.to==='trash'?req.from:null]);
-   await c.query("INSERT INTO enkyron_mail_filing_events(event_id,workspace_key,draft_id,operation,details,actor_local) VALUES($1,$2,$3,'move',$4::jsonb,$5)",[randomUUID(),key,req.draft_id,JSON.stringify({from:req.from,to:req.to}),actor]);
+   await c.query("INSERT INTO enkyron_mail_record_filing_events(event_id,workspace_key,draft_id,operation,details,actor_local) VALUES($1,$2,$3,'move',$4::jsonb,$5)",[randomUUID(),key,req.draft_id,JSON.stringify({from:req.from,to:req.to}),actor]);
    return {moved:true,folder:req.to,draft_id:req.draft_id,provider_unchanged:true};
  });
 }
@@ -41,7 +41,7 @@ export async function clearTrashedLocalMail(pool,actor,input){
   const records=await c.query("UPDATE enkyron_mail_record_filing SET folder_key='hidden',updated_at=NOW() WHERE workspace_key=$1 AND folder_key='trash' RETURNING draft_id",[key]);
   const threads=await c.query("UPDATE enkyron_mail_local_threads SET folder_key='hidden' WHERE workspace_key=$1 AND folder_key='trash' RETURNING thread_id",[key]);
   const count=(result)=>result.rowCount??result.rows.length;
-  await c.query("INSERT INTO enkyron_mail_filing_events(event_id,workspace_key,operation,details,actor_local) VALUES($1,$2,'clear_trash',$3::jsonb,$4)",[randomUUID(),key,JSON.stringify({saved_records:count(records),cached_threads:count(threads)}),actor]);
+  await c.query("INSERT INTO enkyron_mail_record_filing_events(event_id,workspace_key,operation,details,actor_local) VALUES($1,$2,'clear_trash',$3::jsonb,$4)",[randomUUID(),key,JSON.stringify({saved_records:count(records),cached_threads:count(threads)}),actor]);
   return {cleared:true,records:count(records),threads:count(threads),provider_unchanged:true,audit_retained:true};
  });
 }
