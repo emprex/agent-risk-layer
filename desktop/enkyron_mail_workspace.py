@@ -186,6 +186,9 @@ class MailInboxView(QWidget):
     localRecordRequested = Signal(str, int)
     localRecordOpenRequested = Signal(str, int)
     localRecordLinkRequested = Signal(int)
+    localRecordMoveRequested = Signal(str, int, str)
+    filedRecordMoveRequested = Signal(str, str, str)
+    localTrashClearRequested = Signal()
     replyRequested = Signal(str, str)
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
@@ -209,6 +212,7 @@ class MailInboxView(QWidget):
         self.local_mode = False
         self.local_folders = []
         self.local_labels = []
+        self._filed_records = []
         self._full_text_options = []
         self._accepted_mailbox = None
         self._build()
@@ -575,6 +579,13 @@ class MailInboxView(QWidget):
         key = item.data(0, Qt.ItemDataRole.UserRole)
         folder = next((f for f in self.local_folders
                        if isinstance(f, dict) and f.get("key") == key), None)
+        if folder and folder.get("key") == "trash":
+            menu = QMenu(self)
+            clear = menu.addAction("Empty Trash (local view; audit retained)…")
+            selected = menu.exec(self.folder_tree.viewport().mapToGlobal(pos))
+            if selected == clear:
+                self.localTrashClearRequested.emit()
+            return
         if not folder or folder.get("system") is not False:
             return
         menu = QMenu(self)
@@ -650,6 +661,27 @@ class MailInboxView(QWidget):
         if not isinstance(record, tuple) or len(record) != 2:
             return
         mailbox, thread_id = record
+        if mailbox == "filed-record":
+            records = self._filed_records
+            if not isinstance(thread_id, int) or not 0 <= thread_id < len(records):
+                return
+            entry = records[thread_id]
+            original = entry.get("original_kind")
+            draft_id = entry.get("draft_id")
+            if original not in ("sent", "drafts") or not isinstance(draft_id, str):
+                return
+            menu = QMenu(self)
+            destinations = [original] + [x for x in ("archive", "spam", "trash")
+                                         if x != self._folder]
+            for target in destinations:
+                action = menu.addAction("Restore to " + original.title() if target == original
+                                        else "Move to " + target.title())
+                action.triggered.connect(
+                    lambda _checked=False, destination=target:
+                    self.filedRecordMoveRequested.emit(draft_id, self._folder, destination)
+                )
+            menu.exec(self.thread_list.mapToGlobal(pos))
+            return
         if mailbox in ("local-sent", "local-drafts"):
             menu = QMenu(self)
             action = menu.addAction(
@@ -667,6 +699,15 @@ class MailInboxView(QWidget):
                     link.triggered.connect(
                         lambda _checked=False: self.localRecordLinkRequested.emit(thread_id)
                     )
+            move = menu.addMenu("Move to folder")
+            for target in ("archive", "spam", "trash"):
+                action = move.addAction(target.title())
+                action.triggered.connect(
+                    lambda _checked=False, destination=target:
+                    self.localRecordMoveRequested.emit(
+                        mailbox.removeprefix("local-"), thread_id, destination
+                    )
+                )
             menu.exec(self.thread_list.mapToGlobal(pos))
             return
         if mailbox not in self._mailboxes:
@@ -1014,6 +1055,36 @@ class MailInboxView(QWidget):
             self.thread_list.addItem(item)
         self.thread_list.blockSignals(False)
         self._filter(self.search.text())
+        return True
+
+    def append_filed_records(self, folder, records):
+        """Show locally filed Sent/Drafts alongside cached conversations."""
+        if not self.local_mode or folder != self._folder or folder not in (
+                "archive", "spam", "trash"):
+            return False
+        if not isinstance(records, list):
+            return False
+        self._filed_records = list(records[:100])
+        self.thread_list.blockSignals(True)
+        for index, record in enumerate(self._filed_records):
+            if not isinstance(record, dict):
+                continue
+            if (self.selected_mailbox != "all"
+                    and record.get("mailbox_key") != self.selected_mailbox):
+                continue
+            label = "{} · {}\n{}\n{}".format(
+                (record.get("original_kind") or "Saved").title(),
+                str(record.get("recipient_email") or "Recipient not set")[:100],
+                str(record.get("subject") or "(No subject)")[:300],
+                "Locally filed record — provider unchanged"
+            )
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, ("filed-record", index))
+            item.setToolTip("Right-click to move or restore this saved record")
+            self.thread_list.addItem(item)
+        self.thread_list.blockSignals(False)
+        self.count.setText("{} conversation(s) / filed record(s)".format(
+            self.thread_list.count()))
         return True
 
     def update_local_sent_delivery(self, index, status):
