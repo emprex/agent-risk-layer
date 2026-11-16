@@ -164,7 +164,10 @@ export async function mailSent(pool,operator){
     'ON d.workspace_key=s.workspace_key AND d.id=s.draft_id '+
     'LEFT JOIN enkyron_crm_companies co '+
     'ON co.workspace_key=d.workspace_key AND co.id=d.company_id '+
-    'WHERE s.workspace_key=$1 ORDER BY s.recorded_at DESC LIMIT 100',
+    'LEFT JOIN enkyron_mail_outbound_locations l '+
+    "ON l.workspace_key=s.workspace_key AND l.record_kind='sent' AND l.record_id=s.id::text "+ 
+    "WHERE s.workspace_key=$1 AND COALESCE(l.folder_key,'sent')='sent' "+
+    'ORDER BY s.recorded_at DESC LIMIT 100',
     [key]
   )).rows;
   return {available:true,items:rows};
@@ -308,6 +311,13 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
     if(rows.length!==1||rows[0].revision!==revision)
       throw new Error('CRM draft revision changed; reopen it before sending');
     const draft=rows[0];
+    const location=(await client.query(
+      'SELECT folder_key FROM enkyron_mail_outbound_locations '+
+      "WHERE workspace_key=$1 AND record_kind='drafts' AND record_id=$2 FOR SHARE",
+      [scope,draftId]
+    )).rows[0];
+    if(location && location.folder_key!=='drafts')
+      throw new Error('CRM filed draft must be restored to Drafts before sending');
     mailboxKey(draft.mailbox_key);
     if(typeof draft.recipient_email!=='string'||!EMAIL.test(draft.recipient_email)
         ||typeof draft.subject!=='string'||!draft.subject.trim()

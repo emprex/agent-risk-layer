@@ -156,7 +156,8 @@ export async function localMailList(pool,actor,input={}){
     'AND LOWER(BTRIM(COALESCE(SUBSTRING(recipient.address FROM \'<([^<>]+)>\'),recipient.address))) '+
     '<> ALL($6::text[]) '+
     'ORDER BY m.created_at DESC,m.message_id DESC LIMIT 1) external_to ON TRUE '+
-    'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.folder_key=$2) '+
+    'WHERE t.workspace_key=$1 AND t.folder_key<>\'purged\' '+
+    'AND ($2::text=\'all\' OR t.folder_key=$2) '+
     'AND ($3::text=\'all\' OR t.mailbox_key=$3) '+
     'AND ($4::text=\'\' OR '+
     'POSITION(LOWER($4) IN LOWER(t.subject))>0 OR '+
@@ -571,6 +572,8 @@ export async function fetchAndCacheThread(pool,actor,input,{
 export async function moveLocalThread(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
   const target=requireFolderKey(input?.folder);
+  if(target==='sent'||target==='drafts'||target==='purged')
+    throw Error('Inbound mail cannot move into Sent, Drafts or a hidden folder');
   return withTransaction(pool,async c=>{
     // Serialize moves with empty-folder deletion so mail cannot be left
     // referring to a folder concurrently removed by the operator.

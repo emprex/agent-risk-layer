@@ -462,6 +462,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_drafts_loaded = False
         self.mail_unsent_items = []
         self._mail_unsent_seq = 0
+        self._mail_list_seq = 0
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
@@ -1737,6 +1738,8 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox = MailInboxView()
         self.mail_inbox.set_local_mode()
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
+        self.mail_inbox.localOutboundMoveRequested.connect(self.move_local_outbound_mail)
+        self.mail_inbox.localEmptyTrashRequested.connect(self.empty_local_mail_trash)
         self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
         self.mail_inbox.localRenameFolderRequested.connect(self.rename_local_folder)
         self.mail_inbox.localDeleteFolderRequested.connect(self.delete_empty_local_folder)
@@ -2372,11 +2375,18 @@ class EnkyronWindow(QMainWindow):
             preserve_search=bool(query)
         )
         request_folder = "all" if query else folder
+        self._mail_list_seq += 1
+        request_seq = self._mail_list_seq
+
+        def still_current():
+            return (request_seq == self._mail_list_seq
+                    and mailbox == self.mail_inbox.selected_mailbox
+                    and folder == self.mail_inbox.selected_folder
+                    and (not query or self.mail_inbox.search.text().strip().casefold()
+                         == query.casefold()))
+
         def received(data, error):
-            if (self.mail_inbox.selected_mailbox not in (None, mailbox)
-                    or folder != self.mail_inbox.selected_folder
-                    or (query and self.mail_inbox.search.text().strip().casefold()
-                        != query.casefold())):
+            if not still_current():
                 return
             if error or not isinstance(data, dict):
                 self.mail_inbox._show_empty(
@@ -2384,11 +2394,56 @@ class EnkyronWindow(QMainWindow):
                     "Check the PostgreSQL Mail schema and local access."
                 )
                 return
+            incoming = list(data.get("items") or [])
+            inbound_more = bool(data.get("has_more"))
+            # Show verified inbound results immediately. The optional second
+            # local read must not hide them if an older desktop bridge lacks it.
             self.mail_inbox.show_threads(
-                mailbox, data.get("items") or [],
-                bool(data.get("has_more")), folder,
+                mailbox, incoming, inbound_more, folder,
                 search_query=query if query else None, page=page
             )
+            if folder == "inbox" and not query:
+                return
+
+            def outbound_received(extra, failure):
+                if not still_current():
+                    return
+                if failure or not isinstance(extra, dict) or not extra.get("available"):
+                    self.mail_inbox.connection_label.setText(
+                        "Outgoing folder entries unavailable; inbound mail remains visible. "
+                        "Check the local mail filing migration."
+                    )
+                    self.mail_inbox.connection_label.setVisible(True)
+                    return
+                if self.mail_inbox.reply_editor.isVisible():
+                    # Never discard a reply started while the additional
+                    # local folder listing was in flight.
+                    return
+                outgoing = []
+                for record in (extra.get("items") or []):
+                    if not isinstance(record, dict):
+                        continue
+                    kind = record.get("record_kind")
+                    if kind not in ("sent", "drafts"):
+                        continue
+                    outgoing.append({
+                        **record,
+                        "mailbox": "local-" + kind,
+                        "last_message_at": record.get("updated_at") or "",
+                    })
+                combined = sorted(incoming + outgoing, key=lambda record:
+                    str(record.get("last_message_at") or
+                        record.get("updated_at") or ""), reverse=True)
+                self.mail_inbox.show_threads(
+                    mailbox, combined[:200],
+                    inbound_more or bool(extra.get("more")) or len(combined)>200,
+                    folder, search_query=query if query else None, page=page
+                )
+
+            self.bridge.call("mail-local-outbound-list", payload={
+                "mailbox": mailbox, "folder": request_folder, "search": query
+            }, callback=outbound_received)
+
         self.bridge.call("mail-local-list",
             payload={"mailbox":mailbox,"folder":request_folder,
                      "search":query,"page":page},callback=received)
@@ -2636,6 +2691,71 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
             callback=received)
+
+    def move_local_outbound_mail(self, kind, record_id, mailbox, source, target):
+        """File an outbound item locally without changing the provider or audit."""
+        if kind not in ("sent", "drafts") or mailbox not in ("direction", "support"):
+            return
+        if target == "trash":
+            answer = QMessageBox.question(
+                self, "Move to Trash",
+                "Move this saved outgoing message to Trash?\n\n"
+                "Its provider status and audit history will be preserved.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        payload = {"record_kind":kind, "record_id":record_id,
+                   "mailbox_key":mailbox, "from_folder":source,
+                   "to_folder":target, "confirmed":True}
+
+        def received(data, error):
+            if error or not isinstance(data, dict) or not data.get("moved"):
+                QMessageBox.warning(
+                    self, "Mail filing not verified",
+                    str(error or "Could not verify local filing. Refresh first.")
+                )
+                return
+            # Refresh by current folder; do not blindly send or alter the provider.
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+
+        self.bridge.call("mail-local-outbound-move", payload=payload, callback=received)
+
+    def empty_local_mail_trash(self):
+        """Explicit local suppression; immutable records and providers remain."""
+        answer = QMessageBox.question(
+            self, "Empty Trash — local views only",
+            "Remove all selected-account Trash items from visible Mail folders?\n\n"
+            "The messages will not be recoverable in this interface. "
+            "Provider copies, compliance records and immutable audit history "
+            "are NOT erased. No email will be sent.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        mailbox = self.mail_inbox.selected_mailbox or "all"
+
+        def received(data, error):
+            if error or not isinstance(data, dict) or not data.get("emptied"):
+                QMessageBox.warning(
+                    self, "Trash unchanged",
+                    str(error or "Could not verify Trash state. No retry was sent.")
+                )
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            QMessageBox.information(
+                self, "Trash emptied locally",
+                "{} item(s) removed from visible Mail folders. "
+                "Historical provider and compliance records remain.".format(
+                    data.get("removed_from_views", 0)
+                )
+            )
+
+        self.bridge.call("mail-local-trash-empty",
+                         payload={"mailbox":mailbox,"confirmed":True},
+                         callback=received)
 
     def set_local_mail_read(self, mailbox, thread_id, unread):
         """Persist confirmed read status in NEMORYTH; keep reader/draft intact."""
@@ -4227,10 +4347,17 @@ class EnkyronWindow(QMainWindow):
         """Preview saved drafts and sent submissions inside the Mail reading pane."""
         if kind not in ("sent", "drafts") or not isinstance(index, int):
             return
-        records = self.mail_sent_items if kind == "sent" else self.mail_unsent_items
+        if self.mail_inbox.selected_folder in ("sent", "drafts"):
+            records = (self.mail_sent_items if kind == "sent"
+                       else self.mail_unsent_items)
+        else:
+            records = self.mail_inbox.items
         if not 0 <= index < len(records):
             return
         item = records[index]
+        if (self.mail_inbox.selected_folder not in ("sent", "drafts")
+                and item.get("record_kind") != kind):
+            return
         if not isinstance(item, dict):
             return
         address = str(item.get("recipient_email") or "Not set")[:254]
@@ -4274,7 +4401,27 @@ class EnkyronWindow(QMainWindow):
         """Double-click preserves the existing secure draft/detail editor."""
         if not isinstance(index, int):
             return
-        if kind == "sent" and 0 <= index < len(self.mail_sent_items):
+        if self.mail_inbox.selected_folder not in ("sent", "drafts"):
+            if not 0 <= index < len(self.mail_inbox.items):
+                return
+            item = self.mail_inbox.items[index]
+            if not isinstance(item, dict) or item.get("record_kind") != kind:
+                return
+            draft_id = item.get("draft_id")
+            if not draft_id:
+                return
+            if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+                self.crm_draft_dialog.raise_()
+                return
+            def received(data, error):
+                if error or not isinstance(data, dict) or not isinstance(
+                        data.get("draft"), dict):
+                    QMessageBox.warning(self, "Mail unavailable",
+                        "The selected saved message could not be opened.")
+                    return
+                self.show_mail_draft_dialog(data["draft"])
+            self.bridge.call("crm-mail-draft", str(draft_id), callback=received)
+        elif kind == "sent" and 0 <= index < len(self.mail_sent_items):
             self.view_sent_mail_row(index)
         elif kind == "drafts" and 0 <= index < len(self.mail_unsent_items):
             selected = self.mail_unsent_items[index]
@@ -16203,8 +16350,11 @@ class EnkyronWindow(QMainWindow):
         state = draft.get("mail_state", "draft")
         reported = state == "external_send_reported"
         submitted = state == "provider_submitted"
-        read_only = reported or submitted
+        filed = (state == "draft" and
+                 draft.get("local_folder", "drafts") != "drafts")
+        read_only = reported or submitted or filed
         title = (
+            "ENKYRON · Filed draft (restore to edit)" if filed else
             "ENKYRON · Resend submission" if submitted else
             "ENKYRON · Reported external send" if reported else
             "ENKYRON · Edit draft" if existing else "ENKYRON · New draft"
@@ -16216,6 +16366,7 @@ class EnkyronWindow(QMainWindow):
         dialog.close_guard = self.confirm_mail_draft_close
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
+            "FILED DRAFT (READ ONLY)" if filed else
             "MESSAGE SUBMITTED THROUGH RESEND" if submitted else
             "EXTERNAL SEND (OPERATOR REPORTED)" if reported else
             "EDIT DRAFT" if existing else "NEW DRAFT"
@@ -16227,6 +16378,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_company_label = prospect
         layout.addWidget(prospect)
         warning = QLabel(
+            "This draft is filed outside Drafts. Restore it to Drafts before "
+            "editing or sending. No email has been transmitted." if filed else
             "The operator recorded an external send. ENKYRON has not verified "
             "provider transmission, delivery or reading. This saved revision "
             "is read-only." if reported else
