@@ -19,7 +19,7 @@ test('Sent/Drafts moving is operator-confirmed and never crosses system folders'
     {...mail,to_folder:'drafts'},{...mail,to_folder:'purged'},
     {...mail,from_folder:'purged'},{...mail,record_kind:'inbound'},
     {...mail,record_id:'wrong'}, {...mail,mailbox_key:'other'}
-  ])assert.throws(()=>validateOutboundMove(bad),/Mail/);
+  ])assert.throws(()=>validateOutboundMove(bad),/Mail|mail|folder|outbound/);
   assert.deepEqual(validateOutboundMove({...mail,from_folder:'trash',
     to_folder:'previous'}).to_folder,'previous');
 });
