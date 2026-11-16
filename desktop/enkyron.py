@@ -60,6 +60,15 @@ CRM_SECTORS = (
 )
 
 
+class MailRecipientCompleter(QCompleter):
+    """Show the CRM identity, but insert only the actual email address."""
+
+    def pathFromIndex(self, index):
+        label = super().pathFromIndex(index)
+        match = re.search(r"<([^<>\s]+@[^<>\s]+)>$", label)
+        return match.group(1) if match else label
+
+
 def crm_sector_selector(current=""):
     selector = QComboBox()
     selector.setEditable(False)
@@ -9687,7 +9696,7 @@ class EnkyronWindow(QMainWindow):
         name = company.get("name") or ""
         action, accepted = QInputDialog.getMultiLineText(
             self, "ENKYRON · Commercial opportunity",
-            "Company: {}\\n\\nNext commercial action (5–1000 characters):".format(name),
+            "Company: {}\n\nNext commercial action (5–1000 characters):".format(name),
             "Prepare a written introduction and record replies in the CRM."
         )
         if not accepted:
@@ -9699,7 +9708,7 @@ class EnkyronWindow(QMainWindow):
             return
         if QMessageBox.question(
             self, "Confirm commercial opportunity",
-            ("Create a CRM-only opportunity for {}?\\n\\n"
+            ("Create a CRM-only opportunity for {}?\n\n"
              "No service ticket, customer acceptance, email, contract, "
              "testing authorisation or assessment is created.").format(name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -16250,7 +16259,7 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
         self.crm_mail_to.setReadOnly(read_only)
-        self.crm_mail_to_completer = QCompleter([], self.crm_mail_to)
+        self.crm_mail_to_completer = MailRecipientCompleter([], self.crm_mail_to)
         self.crm_mail_to_completer.setCompletionMode(
             QCompleter.CompletionMode.UnfilteredPopupCompletion
         )
@@ -16420,8 +16429,14 @@ class EnkyronWindow(QMainWindow):
     def choose_mail_recipient(self, label):
         item = self.crm_mail_recipient_matches.get(label)
         if not item:
+            # pathFromIndex inserts an email rather than a display label.
+            item = next((
+                entry for entry in self.crm_mail_recipient_matches.values()
+                if str(entry.get("email") or "").casefold() == str(label).casefold()
+            ), None)
+        if not item:
             return
-        # Qt inserts address only, never a display name into the To field.
+        # Keep the To field machine-valid; the contact identity stays in CRM.
         self.crm_mail_to.blockSignals(True)
         self.crm_mail_to.setText(str(item["email"]))
         self.crm_mail_to.blockSignals(False)
@@ -17049,20 +17064,40 @@ class EnkyronWindow(QMainWindow):
             self.crm_followup_stage.setEnabled(False)
         form.addRow("Commercial stage", self.crm_followup_stage)
         if existing:
-            # One field inside the existing editor, not a new toolbar button.
-            # -1 means no human forecast; historical opportunities remain unknown.
-            self.crm_followup_probability = QSpinBox()
-            self.crm_followup_probability.setRange(-1, 100)
-            self.crm_followup_probability.setSpecialValueText("Not estimated")
-            self.crm_followup_probability.setSuffix(" %")
+            # An unknown forecast is explicit. Do not display a synthetic
+            # percentage for a prospect who has not replied.
             estimate = existing.get("probability_percent")
+            self.crm_followup_probability_toggle = QCheckBox("Record a manual estimate")
+            self.crm_followup_probability_toggle.setChecked(estimate is not None)
+            self.crm_followup_probability = QSpinBox()
+            self.crm_followup_probability.setRange(0, 100)
+            self.crm_followup_probability.setSingleStep(5)
+            self.crm_followup_probability.setSuffix(" %")
             self.crm_followup_probability.setValue(
-                -1 if estimate is None else int(estimate)
+                int(estimate) if estimate is not None else 0
             )
             self.crm_followup_probability.setToolTip(
-                "Your manual estimate (0–100%). Not calculated from stages or AI."
+                "Optional human-only estimate. Not calculated from stages or AI."
             )
-            form.addRow("Estimated win probability", self.crm_followup_probability)
+            self.crm_followup_probability.setEnabled(estimate is not None)
+            self.crm_followup_probability.setVisible(estimate is not None)
+            self.crm_followup_probability_unknown = QLabel("Not estimated")
+            self.crm_followup_probability_unknown.setVisible(estimate is None)
+            self.crm_followup_probability_toggle.toggled.connect(
+                self.crm_followup_probability.setEnabled
+            )
+            self.crm_followup_probability_toggle.toggled.connect(
+                self.crm_followup_probability.setVisible
+            )
+            self.crm_followup_probability_toggle.toggled.connect(
+                lambda checked: self.crm_followup_probability_unknown.setVisible(not checked)
+            )
+            forecast_row = QHBoxLayout()
+            forecast_row.addWidget(self.crm_followup_probability_toggle)
+            forecast_row.addWidget(self.crm_followup_probability)
+            forecast_row.addWidget(self.crm_followup_probability_unknown)
+            forecast_row.addStretch()
+            form.addRow("Estimated win probability", forecast_row)
         self.crm_followup_action = QPlainTextEdit()
         self.crm_followup_action.setMaximumHeight(130)
         self.crm_followup_action.setPlaceholderText(
@@ -17154,8 +17189,8 @@ class EnkyronWindow(QMainWindow):
                 "next_action": next_action,
                 "due_date": due_date,
                 "probability_percent": (
-                    None if self.crm_followup_probability.value() < 0
-                    else self.crm_followup_probability.value()
+                    self.crm_followup_probability.value()
+                    if self.crm_followup_probability_toggle.isChecked() else None
                 )
             }
             if company_id:

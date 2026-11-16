@@ -15,6 +15,7 @@ const edit={id,expected_version:1,stage:'qualified',
 test('validates business stages, actual calendar dates and manual action',()=>{
   assert.equal(OPPORTUNITY_STAGES.length,9);
   assert.deepEqual(validateOpportunityCreate(base),base);
+  assert.equal(validateOpportunityCreate({...base,next_action:'First step\nSecond step'}).next_action,'First step\nSecond step');
   for(const invalid of [
     {...base,prospect_id:''},
     {...base,company_name_at_review:' '},
@@ -22,7 +23,7 @@ test('validates business stages, actual calendar dates and manual action',()=>{
     {...base,due_date:'2026-02-30'},
     {...base,due_date:'2026-13-01'},
     {...base,due_date:'next week'},
-    {...base,next_action:'Line\nBreak'},
+    {...base,next_action:'Line\tBreak'},
     null,{},[]
   ]) assert.throws(()=>validateOpportunityCreate(invalid),/CRM/);
   assert.equal(validateOpportunityUpdate(edit).stage,'qualified');
