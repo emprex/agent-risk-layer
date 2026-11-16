@@ -8,6 +8,7 @@ import path from 'node:path';
 import pg from 'pg';
 import {createMissionPlan, listMissionPlans} from '../desktop/enkyron-psa-missions.mjs';
 import {exerciseWorkItems} from './helpers/enkyron-psa-work-items-ci.mjs';
+import {exerciseTimeEntries} from './helpers/enkyron-psa-time-ci.mjs';
 
 const url = process.env.ARL_CI_POSTGRES_URL || '';
 const schema = 'enk08_ci_' + randomUUID().replaceAll('-', '');
@@ -91,6 +92,9 @@ test('ENK-08: disposable PostgreSQL SQL constraints, concurrent retry and rollba
     ));
     await pool.query(await readFile(
       new URL('../docs/enkyron/sql/119_enkyron_psa_work_items.sql', import.meta.url), 'utf8'
+    ));
+    await pool.query(await readFile(
+      new URL('../docs/enkyron/sql/120_enkyron_psa_time_entries.sql', import.meta.url), 'utf8'
     ));
 
     const company = uuid(), otherCompany = uuid(), outside = uuid();
@@ -186,6 +190,7 @@ test('ENK-08: disposable PostgreSQL SQL constraints, concurrent retry and rollba
     )).rows[0];
     assert.deepEqual(summary, {missions: 2, events: 2});
     await exerciseWorkItems(pool,first.id,actor,foreignActor);
+    await exerciseTimeEntries(pool,first.id,simultaneous[0].id,actor,foreignActor);
   } finally {
     if (pool) await pool.end();
     // Only the uniquely generated disposable schema, in the checked arl_ci DB.

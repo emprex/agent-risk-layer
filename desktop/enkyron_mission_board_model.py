@@ -71,12 +71,41 @@ def normalize_missions(rows):
                           "status": task["status"]})
             if len(items) >= 100:
                 break
+        time_entries = []
+        time_ids = set()
+        source_time = raw.get("time_entries")
+        if not isinstance(source_time, list):
+            source_time = []
+        for entry in source_time[:60]:
+            if not isinstance(entry, dict):
+                continue
+            eid = _id(entry.get("id"))
+            item_ref = entry.get("work_item_id")
+            linked = _id(item_ref) if item_ref is not None else None
+            minutes = entry.get("minutes")
+            work_date = _date(entry.get("work_date"))
+            note = _text(entry.get("note"), 500)
+            if (not eid or eid in time_ids or _id(entry.get("mission_id")) != mission_id
+                    or (item_ref is not None and linked not in item_ids)
+                    or type(minutes) is not int or not 1 <= minutes <= 720
+                    or not work_date or len(note) < 10
+                    or entry.get("status") != "draft"
+                    or entry.get("billing_state") != "not_billable"):
+                continue
+            time_ids.add(eid)
+            time_entries.append({"id": eid, "mission_id": mission_id,
+                                 "work_item_id": linked, "work_date": work_date,
+                                 "minutes": minutes, "note": note,
+                                 "status": "draft", "billing_state": "not_billable"})
+            if len(time_entries) >= 50:
+                break
         result.append({"id": mission_id, "company_id": company_id,
                        "company_name": _text(raw.get("company_name"), 180) or "Company (unnamed)",
                        "title": title,
                        "description": _text(raw.get("description"), 2000),
                        "due_date": _date(raw.get("due_date")),
-                       "status": "planning", "work_items": items})
+                       "status": "planning", "work_items": items,
+                       "time_entries": time_entries})
         if len(result) >= 50:
             break
     return result
@@ -96,6 +125,12 @@ def totals(missions):
             "completed": sum(1 for task in work if task["status"] == "completed")}
 
 
+def time_summary(mission):
+    """Draft internal time only; not an approved timesheet or billable amount."""
+    minutes = sum(x["minutes"] for x in mission.get("time_entries", []))
+    return minutes, f"{minutes // 60}h {minutes % 60:02d}m"
+
+
 def filter_missions(missions, term):
     term = _text(term, 120).casefold()
     if not term:
@@ -113,6 +148,17 @@ def demo_missions():
          "company_name": "Example AI Ltd — fictitious", "title": "AI Agent Security Assessment — example",
          "description": "Internal planning example. No signed engagement or permission to test.",
          "status": "planning", "due_date": "2026-12-18",
+         "time_entries": [
+             {"id": "90000000-0000-4000-8000-000000000001", "mission_id": m1,
+              "work_item_id": "00000000-0000-4000-8000-000000000001",
+              "work_date": "2026-11-11", "minutes": 90,
+              "note": "Draft internal assessment scope", "status": "draft",
+              "billing_state": "not_billable"},
+             {"id": "90000000-0000-4000-8000-000000000002", "mission_id": m1,
+              "work_item_id": None, "work_date": "2026-11-12", "minutes": 165,
+              "note": "Prepare internal delivery checklist", "status": "draft",
+              "billing_state": "not_billable"}
+         ],
          "work_items": [
              {"id": f"00000000-0000-4000-8000-{i:012d}", "mission_id": m1,
               "kind": "milestone" if i == 5 else "task", "status": "completed" if i <= 2 else "open",
@@ -125,6 +171,12 @@ def demo_missions():
          "company_name": "Example Cloud Ltd — fictitious", "title": "Cloud Workflow Review — example",
          "description": "Internal scheduling illustration, not an accepted contract.",
          "status": "planning", "due_date": "2027-01-08",
+         "time_entries": [
+             {"id": "90000000-0000-4000-8000-000000000003", "mission_id": m2,
+              "work_item_id": None, "work_date": "2026-11-15", "minutes": 45,
+              "note": "Review synthetic client requirements",
+              "status": "draft", "billing_state": "not_billable"}
+         ],
          "work_items": [
              {"id": "00000000-0000-4000-8000-000000000006", "mission_id": m2,
               "kind": "task", "status": "open", "title": "Prepare customer questions",

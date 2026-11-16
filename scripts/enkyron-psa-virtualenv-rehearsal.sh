@@ -30,6 +30,10 @@ node -e "import('pg')" >/dev/null || die 'Node PostgreSQL package missing'
   die 'Missing review-only work item SQL'
 [[ ! -e migrations/119_enkyron_psa_work_items.sql ]] ||
   die 'Unapproved 119 SQL must not be in migrations/'
+[[ -f docs/enkyron/sql/120_enkyron_psa_time_entries.sql ]] ||
+  die 'Missing review-only manual time entry SQL'
+[[ ! -e migrations/120_enkyron_psa_time_entries.sql ]] ||
+  die 'Unapproved 120 SQL must not be in migrations/'
 
 # Remove inherited client overrides. All connections below specify host and port.
 unset PGOPTIONS PGHOSTADDR PGSERVICE PGCLUSTER

@@ -93,3 +93,30 @@ export function validateMissionTaskCompletion(input) {
     completed: true,
   };
 }
+
+
+/**
+ * A manual internal time log is NOT a billing approval or signed timesheet.
+ * Only the trusted server/bridge supplies workspace and actor.
+ */
+export function validateMissionTimeEntryCreate(input) {
+  const data = record(input, [
+    'mission_id', 'work_item_id', 'work_date', 'minutes', 'note',
+    'request_id', 'confirmed'
+  ], 'manual time entry');
+  if (!Number.isSafeInteger(data.minutes) || data.minutes < 1 || data.minutes > 720) {
+    throw new Error('PSA invalid time minutes (1 to 720)');
+  }
+  const workDate = date(data.work_date, 'time work date');
+  if (!workDate) throw new Error('PSA work date required');
+  return {
+    mission_id: uuid(data.mission_id, 'mission ID'),
+    work_item_id: data.work_item_id == null ? null : uuid(data.work_item_id, 'work item ID'),
+    work_date: workDate,
+    minutes: data.minutes,
+    note: text(data.note, 'time note', 10, 500),
+    request_id: uuid(data.request_id, 'request ID'),
+    status: 'draft',
+    billing_state: 'not_billable',
+  };
+}

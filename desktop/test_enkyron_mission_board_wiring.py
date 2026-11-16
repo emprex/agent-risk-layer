@@ -27,7 +27,8 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertNotIn("QWebEngine", text)
         self.assertIn("DEMONSTRATION", text)
         self.assertIn("NOT CONNECTED", text)
-        for item in ("new_button", "add_task_button", "complete_button"):
+        self.assertIn('self.detail_tabs.addTab(time_page, "Time entries")', text)
+        for item in ("new_button", "add_task_button", "complete_button", "log_time_button"):
             self.assertIn("self." + item + ".setEnabled(False)", text)
 
 

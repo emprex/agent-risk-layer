@@ -1,6 +1,6 @@
 import unittest
 from enkyron_mission_board_model import (
-    normalize_missions, demo_missions, progress, totals, filter_missions,
+    normalize_missions, demo_missions, progress, totals, filter_missions, time_summary,
 )
 
 
@@ -55,6 +55,32 @@ class MissionBoardModelTests(unittest.TestCase):
                 for i in range(140)]
         self.assertEqual(len(normalize_missions(rows)), 50)
 
+
+    def test_internal_time_summary_is_draft_only(self):
+        rows = demo_missions()
+        self.assertEqual(time_summary(rows[0]), (255, "4h 15m"))
+        self.assertEqual(time_summary(rows[1]), (45, "0h 45m"))
+        self.assertEqual(len(rows[0]["time_entries"]), 2)
+        self.assertTrue(all(x["billing_state"] == "not_billable"
+                            for m in rows for x in m["time_entries"]))
+
+    def test_bad_time_entries_dropped_without_changing_valid_task(self):
+        m = demo_missions()[0].copy()
+        wrong_mission = dict(m["time_entries"][0],
+                             mission_id="33333333-4444-4333-8333-333333333333")
+        invalid_minutes = dict(m["time_entries"][1], minutes=900)
+        premature_billing = dict(m["time_entries"][1], billing_state="billable")
+        m["time_entries"] = [wrong_mission, invalid_minutes, premature_billing]
+        result = normalize_missions([m])[0]
+        self.assertEqual(result["time_entries"], [])
+        self.assertEqual(progress(result), (2, 5, 40))
+
+    def test_time_reference_must_be_known_work_item(self):
+        m = demo_missions()[0].copy()
+        other = dict(m["time_entries"][0],
+                     work_item_id="33333333-3333-4333-8333-333333333333")
+        m["time_entries"] = [other]
+        self.assertEqual(normalize_missions([m])[0]["time_entries"], [])
 
 if __name__ == '__main__':
     unittest.main()
