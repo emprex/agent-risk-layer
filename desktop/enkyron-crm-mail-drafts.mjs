@@ -117,7 +117,7 @@ export async function readMailDraft(pool,id,actor){
       +'CASE WHEN a.id IS NOT NULL THEN \'provider_submitted\' '
       +'WHEN s.id IS NOT NULL THEN \'external_send_reported\' ELSE \'draft\' END AS mail_state, '
       +'a.outcome AS provider_outcome,a.provider_message_id, '
-      +"COALESCE(loc.folder_key,'drafts') AS local_folder, "+
+      +'COALESCE(loc.folder_key,\'drafts\') AS local_folder, '
       +'s.provider AS manual_send_provider,s.provider_message_id AS manual_message_id, '
       +'s.sender_email AS manual_sender_email,s.sent_at AS external_sent_at, '
       +'s.draft_revision AS sent_draft_revision '
@@ -131,7 +131,7 @@ export async function readMailDraft(pool,id,actor){
       +'LEFT JOIN enkyron_mail_send_attempts a '
       +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'LEFT JOIN enkyron_mail_outbound_locations loc '
-      +"ON loc.workspace_key=d.workspace_key AND loc.record_kind='drafts' AND loc.record_id=d.id "+
+      +'ON loc.workspace_key=d.workspace_key AND loc.record_kind=\'drafts\' AND loc.record_id=d.id '
       +'WHERE d.workspace_key=$1 AND d.id=$2',
       [owner.key,id]
     )).rows[0];
