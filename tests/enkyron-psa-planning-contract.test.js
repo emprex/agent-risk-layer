@@ -50,6 +50,24 @@ test('ENK-08: malformed identities, hidden text and invalid dates are rejected',
   ]) assert.throws(() => validateMissionPlanCreate(bad), /PSA/);
 });
 
+test('ENK-08: multiline mission descriptions work, while hidden controls still fail closed', () => {
+  const description = 'Prepare an internal planning checklist.\nReview the scope with the operator.';
+  assert.equal(validateMissionPlanCreate({...plan, description}).description, description);
+  for (const badDescription of [
+    description + '\\t', description + '\\r', description + '\\u200b',
+    description + '\\u202e',
+  ]) {
+    assert.throws(
+      () => validateMissionPlanCreate({...plan, description: badDescription}),
+      /PSA invalid mission description/
+    );
+  }
+  assert.throws(
+    () => validateMissionPlanCreate({...plan, title: 'Invalid\\ntitle'}),
+    /PSA invalid mission title/
+  );
+});
+
 test('ENK-08: tasks and milestones are accepted as planning-only work items', () => {
   assert.deepEqual(validateMissionTaskCreate(task), {
     mission_id: mission, kind: 'task', title: task.title,

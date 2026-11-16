@@ -25,6 +25,8 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn("self.mission_board.writeRequested.connect", text)
         self.assertNotIn("def unlock_mission_board", text)
         self.assertIn("def save_mission_board_action", text)
+        self.assertIn("This workspace cannot save a planning mission", text)
+        self.assertIn("Invalid planning request. Nothing was recorded.", text)
         self.assertIn("self.bridge.call(action, payload=details, callback=received)", text)
         self.assertIn('self.bridge.call("psa-board", "", callback=received)', text)
         self.assertIn("go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))", text)

@@ -22,8 +22,12 @@ function uuid(value, field) {
   return value.toLowerCase();
 }
 
-function text(value, field, min, max) {
-  if (typeof value !== 'string' || HIDDEN_OR_CONTROL.test(value) ||
+function text(value, field, min, max, allowLineBreaks = false) {
+  // QPlainTextEdit supplies LF-separated paragraphs. Allow LF only for the
+  // mission description; retain every other invisible/control-character ban.
+  const checked = allowLineBreaks && typeof value === 'string'
+    ? value.replace(/\n/g, '') : value;
+  if (typeof value !== 'string' || HIDDEN_OR_CONTROL.test(checked) ||
       value.length > max || value.trim().length < min) {
     throw new Error(`PSA invalid ${field}`);
   }
@@ -55,7 +59,7 @@ export function validateMissionPlanCreate(input) {
     company_id: uuid(data.company_id, 'company ID'),
     opportunity_id: data.opportunity_id == null ? null : uuid(data.opportunity_id, 'opportunity ID'),
     title: text(data.title, 'mission title', 5, 160),
-    description: text(data.description, 'mission description', 20, 2000),
+    description: text(data.description, 'mission description', 20, 2000, true),
     due_date: date(data.due_date, 'mission due date'),
     request_id: uuid(data.request_id, 'request ID'),
     status: 'planning',

@@ -6235,11 +6235,18 @@ class EnkyronWindow(QMainWindow):
         """Reuse the local ARL operator bridge; the backend checks peer identity."""
         allowed = {"psa-create-mission", "psa-add-work-item",
                    "psa-complete-work-item", "psa-log-time"}
-        if (action not in allowed or not isinstance(details, dict)
-                or self.mission_board._demo
+        if action not in allowed or not isinstance(details, dict):
+            QMessageBox.warning(self, "Mission Board",
+                                "Invalid planning request. Nothing was recorded.")
+            return
+        if (self.mission_board._demo
                 or not self.mission_board._live_can_write
                 or self.ux_preview_read_only
                 or os.environ.get("ENKYRON_UAT_DATABASE")):
+            QMessageBox.warning(
+                self, "Mission Board",
+                "This workspace cannot save a planning mission. "
+                "Nothing was recorded. Open Projects in the normal local workspace.")
             return
         self.mission_board.set_write_busy(True)
         def received(data, error):
