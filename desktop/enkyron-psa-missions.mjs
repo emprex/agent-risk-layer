@@ -3,44 +3,13 @@
 // This is NOT an authenticated multi-tenant RBAC system. Do not connect remotely.
 import {createHash, randomUUID} from 'node:crypto';
 import {validateMissionPlanCreate} from './enkyron-psa-planning-contract.mjs';
-
-const ACTOR = /^[A-Za-z0-9_.-]{1,80}$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function scope(actor) {
-  if (typeof actor !== 'string' || !ACTOR.test(actor)) {
-    throw new Error('PSA invalid trusted local operator');
-  }
-  return {workspace: 'local:' + actor, actor};
-}
+import {psaLocalScope, psaUuid, psaTransaction} from './enkyron-psa-db.mjs';
 
 function digest(data) {
   return createHash('sha256').update(JSON.stringify([
     data.company_id, data.opportunity_id, data.title,
     data.description, data.due_date, 'planning',
   ])).digest('hex');
-}
-
-function checkedUuid(value, name) {
-  if (typeof value !== 'string' || !UUID.test(value)) {
-    throw new Error('PSA invalid ' + name);
-  }
-  return value.toLowerCase();
-}
-
-async function transaction(pool, action) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const response = await action(client);
-    await client.query('COMMIT');
-    return response;
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 function resultFor(row, contentSha, created) {
@@ -63,10 +32,10 @@ function resultFor(row, contentSha, created) {
  */
 export async function createMissionPlan(pool, input, actor, options = {}) {
   const data = validateMissionPlanCreate(input);
-  const owner = scope(actor);
+  const owner = psaLocalScope(actor);
   const contentSha = digest(data);
   const generateId = options.uuid ?? randomUUID;
-  return transaction(pool, async client => {
+  return psaTransaction(pool, async client => {
     const existing = (await client.query(
       'SELECT id,company_id,opportunity_id,status,version,content_sha256 '
       + 'FROM enkyron_psa_missions WHERE workspace_key=$1 AND request_id=$2 FOR KEY SHARE',
@@ -95,7 +64,7 @@ export async function createMissionPlan(pool, input, actor, options = {}) {
       }
     }
 
-    const missionId = checkedUuid(generateId(), 'generated mission ID');
+    const missionId = psaUuid(generateId(), 'generated mission ID');
     const inserted = (await client.query(
       'INSERT INTO enkyron_psa_missions '
       + '(id,workspace_key,company_id,opportunity_id,title,description,due_date,'
@@ -118,7 +87,7 @@ export async function createMissionPlan(pool, input, actor, options = {}) {
       return resultFor(winner, contentSha, false);
     }
 
-    const eventId = checkedUuid(generateId(), 'generated audit event ID');
+    const eventId = psaUuid(generateId(), 'generated audit event ID');
     await client.query(
       'INSERT INTO enkyron_psa_mission_events '
       + '(id,workspace_key,mission_id,version,event_type,request_id,content_sha256,actor_local) '
@@ -131,8 +100,8 @@ export async function createMissionPlan(pool, input, actor, options = {}) {
 
 /** Non-mutating operator-scoped list for future Mission Board. */
 export async function listMissionPlans(pool, actor, companyId = null) {
-  const owner = scope(actor);
-  const company = companyId == null ? null : checkedUuid(companyId, 'company ID');
+  const owner = psaLocalScope(actor);
+  const company = companyId == null ? null : psaUuid(companyId, 'company ID');
   const response = await pool.query(
     'SELECT m.id,m.company_id,c.name AS company_name,m.opportunity_id,'
     + 'm.title,m.description,m.due_date::text AS due_date,m.status,m.version,m.created_at '
