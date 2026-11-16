@@ -39,7 +39,7 @@ test('sent to Trash preserves all underlying send/audit records',async()=>{
  assert.ok(mock.calls.some(x=>x.sql.startsWith('INSERT INTO enkyron_mail_record_filing')));
  assert.ok(mock.calls.some(x=>x.sql.startsWith('INSERT INTO enkyron_mail_filing_events')));
  assert.ok(!mock.calls.some(x=>/\bDELETE\b/i.test(x.sql)));
- assert.equal(mock.calls.at(-2).sql,'COMMIT');
+ assert.equal(mock.calls.at(-1).sql,'COMMIT');
 });
 
 test('stale source and invalid sent/draft transformation rollback',async()=>{
@@ -50,7 +50,7 @@ test('stale source and invalid sent/draft transformation rollback',async()=>{
  ]){
   const mock=db(options);
   await assert.rejects(()=>moveSavedMailRecord(mock,'ci-operator',request));
-  assert.equal(mock.calls.at(-2).sql,'ROLLBACK');
+  assert.equal(mock.calls.at(-1).sql,'ROLLBACK');
   assert.ok(!mock.calls.some(x=>x.sql.startsWith('INSERT INTO enkyron_mail_filing_events')));
  }
 });
