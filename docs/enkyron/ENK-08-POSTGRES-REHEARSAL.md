@@ -31,3 +31,5 @@ The test creates a randomly named `enk08_ci_*` PostgreSQL schema under `arl_ci`,
 - Does NOT provide user authentication, tenant isolation for a remote service, SOW approval, contract acceptance, permission to security-test, approved production migration, PySide6 UI or Debian operator UAT.
 
 **RELEASE HOLD:** local `arl_local` migration preflight is still STOP (historical applied 021 absent from current source; pending 114, 115, 117). Preserve existing data and do not apply/reconcile any migrations without a reviewed plan and verified restorable backup.
+
+The second real rehearsal reached the server identity assertion but found PostgreSQL returns `inet_server_addr()::text` as `127.0.0.1/32`, not a bare host address. The test now uses `host(inet_server_addr())` to remove the network mask while retaining strict loopback comparison. This regression is a test-format fix; no production or PostgreSQL permission change.

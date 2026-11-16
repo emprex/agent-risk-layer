@@ -70,7 +70,7 @@ test('ENK-08: disposable PostgreSQL SQL constraints, concurrent retry and rollba
     // before it created this role/database. Do not expand the test role grants.
     const target = (await admin.query(
       'SELECT current_database() AS database, current_user AS role, '
-      + 'inet_server_port() AS port, inet_server_addr()::text AS address'
+      + 'inet_server_port() AS port, host(inet_server_addr()) AS address'
     )).rows[0];
     assert.deepEqual(target, {
       database: 'arl_ci', role: 'arl_ci',
