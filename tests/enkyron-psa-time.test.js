@@ -27,7 +27,9 @@ function db(options = {}) {
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return {rows: []};
       if (sql.includes('FROM enkyron_psa_time_entries') && sql.includes('request_id=$2')) {
         priorReads++;
-        return {rows: [priorReads === 1 ? options.previous : options.winner].filter(Boolean)};
+        // Committed data remains visible on every separate transaction/retry.
+        // Only the ON CONFLICT path needs a second read of the concurrent winner.
+        return {rows: [options.previous ?? (priorReads > 1 ? options.winner : null)].filter(Boolean)};
       }
       if (sql.includes('FROM enkyron_psa_missions')) {
         return {rows: options.missionMissing ? [] : [{id: mission, status: 'planning'}]};
@@ -111,6 +113,7 @@ test('ENK-08 time: idempotent retry and changed content use separate outcomes', 
     status: 'draft', billing_state: 'not_billable', content_sha256: first.hash,
   };
   const retry = db({previous: row});
+  assert.equal((await createMissionTimeEntry(retry.pool, original, 'operator')).created, false);
   assert.equal((await createMissionTimeEntry(retry.pool, original, 'operator')).created, false);
   await assert.rejects(createMissionTimeEntry(retry.pool,
     {...original, minutes: 120}, 'operator'), /reused/);
