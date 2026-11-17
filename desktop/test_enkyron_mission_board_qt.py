@@ -166,10 +166,14 @@ class MissionBoardWidgetTests(unittest.TestCase):
                 if isinstance(dialog, QDialog):
                     dialog.reject()
         QTimer.singleShot(0, confirm_dialog)
-        QTimer.singleShot(2500, lambda: (
+        timeout = QTimer(self.view)
+        timeout.setSingleShot(True)
+        timeout.timeout.connect(lambda: (
             QApplication.activeModalWidget().reject()
             if isinstance(QApplication.activeModalWidget(), QDialog) else None))
+        timeout.start(2500)
         self.view.new_button.click()
+        timeout.stop()
         self.assertFalse(errors, errors)
         self.assertEqual(len(saved), 1, "Save must emit one backend request")
         action, details = saved[0]
