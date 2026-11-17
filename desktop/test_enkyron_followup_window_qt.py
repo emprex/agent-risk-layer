@@ -55,6 +55,10 @@ class FollowupWindowTests(unittest.TestCase):
             note = "Email sent.\nReview the reply on 25 November 2026."
             window.crm_followup_action.setPlainText(note)
             self.assertEqual(window.crm_followup_action.toPlainText(), note)
+            # The independently movable editor still closes with ENKYRON.
+            window.close()
+            self.app.processEvents()
+            self.assertFalse(dialog.isVisible())
         finally:
             if dialog is not None:
                 dialog.reject()
