@@ -6,6 +6,11 @@ by the backend; this presentation creates no authenticated actions or sends.
 from datetime import datetime
 from html import escape
 
+if __package__:
+    from .enkyron_mail_html import safe_mail_html
+else:
+    from enkyron_mail_html import safe_mail_html
+
 from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QFont, QImageReader, QPixmap
 from PySide6.QtWidgets import (
@@ -94,12 +99,22 @@ def format_mail_message_cards(messages):
         plain = str(item.get("text") or "")[:20000]
         if not plain and item.get("html_only"):
             plain = "[HTML-only message: safe text preview unavailable]"
-        body = escape(plain, quote=True).replace("\r\n", "\n").replace(
-            "\r", "\n").replace("\n", "<br>")
+        # The DB supplies a bounded inert archive preview. Never send this
+        # source straight into Qt; rebuild from an allowlist first.
+        html_source = item.get("html_inert")
+        formatted = safe_mail_html(html_source)
+        body = (formatted if formatted else
+                escape(plain, quote=True).replace("\r\n", "\n").replace(
+                    "\r", "\n").replace("\n", "<br>"))
         notices = []
-        if item.get("preview_truncated") is True:
-            notices.append("Preview only — complete body stored in NEMORYTH; "
+        if item.get("preview_truncated") is True and not formatted:
+            notices.append("Preview only — complete text stored in NEMORYTH; "
                            "showing the first 20,000 characters")
+        if item.get("html_preview_truncated") is True and formatted:
+            notices.append("HTML preview only — original message is stored "
+                           "in NEMORYTH; showing the first 20,000 characters")
+        if formatted:
+            notices.append("Remote images and active links are blocked.")
         if item.get("archive_state") == "incomplete":
             notices.append("Archive incomplete — source verification required")
         try:
@@ -156,8 +171,8 @@ def format_mail_message_cards(messages):
             + sent + "</p><span style='color:#334f63;'>"
             + subject + "</span></td></tr>"
             "<tr><td style='padding:12px 14px;'>"
-            "<p style='margin:0;white-space:pre-wrap;'>"
-            + body + "</p>" + notes + "".join(attachment_lines)
+            "<div>"
+            + body + "</div>" + notes + "".join(attachment_lines)
             + "</td></tr></table>"
             "<p style='margin:0 0 12px 0;'>&nbsp;</p>"
         )
@@ -1871,7 +1886,7 @@ class MailInboxView(QWidget):
             self.body.setHtml(cards)
         else:
             self.body.setPlainText("No messages in this conversation.")
-        self.meta.setText("{} message(s) · Safe text view · No remote content".format(
+        self.meta.setText("{} message(s) · Safe mail preview · No remote content".format(
             len(messages[:50])))
         self.reader_stack.setCurrentIndex(1)
         self.reply_button.setText("Reply")

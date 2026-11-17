@@ -478,8 +478,10 @@ export async function syncLocalMailBodies(pool,actor,input={},{
 
 export async function localMailMessages(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
-  // On schema 113, prefer full archived plain text but return only a bounded
-  // preview to Qt. HTML and attachment bytes never cross the bridge.
+  // Read bounded previews from the existing archive. Provider HTML remains
+  // untrusted DATA: the native UI must convert it to a restrictive, generated
+  // HTML subset before calling QTextBrowser.setHtml. No attachment bytes,
+  // direct provider content, resource URLs or credentials are returned.
   const archive=(await pool.query(
     "SELECT to_regclass('enkyron_mail_full_messages') IS NOT NULL AS ready"
   )).rows[0]?.ready===true;
@@ -490,6 +492,11 @@ export async function localMailMessages(pool,actor,input){
     'ELSE m.body_text END AS text,m.html_only,m.created_at,'+
     'a.archive_state,COALESCE(length(a.body_text_full)>20000,FALSE) '+
     'AS preview_truncated,'+
+    "CASE WHEN a.archive_state='body_captured' "+
+    'AND a.body_html_inert IS NOT NULL THEN LEFT(a.body_html_inert,20000) '+
+    'ELSE NULL END AS html_inert,'+
+    'COALESCE(length(a.body_html_inert)>20000,FALSE) '+
+    'AS html_preview_truncated,'+
     '(SELECT count(*)::int FROM enkyron_mail_attachment_quarantine q '+
     'WHERE q.workspace_key=m.workspace_key AND q.mailbox_key=m.mailbox_key '+
     'AND q.message_id=m.message_id) AS attachment_count,'+
