@@ -3,6 +3,7 @@
 Qt's date/time widgets produce wall-clock input. Europe/London timezone is
 converted to an explicit offset-aware timestamp before submitting to backend.
 """
+import re
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -34,6 +35,63 @@ def _local_datetime(day, hour):
     if other.utcoffset() != result.utcoffset():
         raise ValueError("This local time occurs twice due to the clock change.")
     return result
+
+
+
+MAIL_SOURCE_UUID = re.compile(
+    r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", re.I
+)
+
+
+def parse_task_mail_source(notes):
+    """Recognise references created by ENKYRON; not a relational DB link."""
+    if not isinstance(notes, str) or len(notes) > 4000:
+        return None
+    lines = notes.splitlines()
+    if not lines:
+        return None
+
+    def field(index, prefix):
+        if index >= len(lines) or not lines[index].startswith(prefix):
+            return None
+        return lines[index][len(prefix):].strip()
+
+    if lines[0] == "Source: ENKYRON Mail conversation (local reference only)":
+        mailbox = field(1, "Mailbox: ")
+        thread = field(2, "Thread ID: ")
+        subject = field(3, "Subject: ")
+        if (mailbox in ("direction", "support")
+                and isinstance(thread, str)
+                and MAIL_SOURCE_UUID.fullmatch(thread)
+                and subject is not None):
+            return {"kind": "thread", "mailbox": mailbox,
+                    "thread_id": thread, "subject": subject[:200]}
+        return None
+
+    kinds = {
+        "Source: ENKYRON saved sent message": "sent",
+        "Source: ENKYRON saved unsent draft": "drafts",
+    }
+    saved_kind = kinds.get(lines[0])
+    if saved_kind is None or field(1, "Reference type: ") != "local saved-mail record":
+        return None
+
+    folder = field(2, "Folder: ")
+    mailbox = field(3, "Mailbox: ")
+    draft = field(4, "Saved draft ID: ")
+    recipient = field(5, "Recipient: ")
+    subject = field(6, "Subject: ")
+    if (folder not in ("sent", "drafts", "archive", "spam", "trash")
+            or mailbox not in ("direction", "support")
+            or not isinstance(draft, str)
+            or not MAIL_SOURCE_UUID.fullmatch(draft)
+            or recipient is None or subject is None):
+        return None
+
+    return {"kind": "saved", "source_kind": saved_kind,
+            "mailbox": mailbox, "draft_id": draft,
+            "folder": folder, "recipient": recipient[:254],
+            "subject": subject[:200]}
 
 
 class CalendarEntryDialog(QDialog):
@@ -134,6 +192,7 @@ class MailCalendarView(QWidget):
     eventCreateRequested = Signal(dict)
     taskCreateRequested = Signal(dict)
     taskCompleteRequested = Signal(dict)
+    sourceMailRequested = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -544,6 +603,18 @@ class MailCalendarView(QWidget):
         notes.setReadOnly(True)
         notes.setPlainText(str(record.get("notes") or ""))
         layout.addWidget(notes, 1)
+
+        if kind == "Task":
+            reference = parse_task_mail_source(record.get("notes"))
+            if reference is not None:
+                source_button = QPushButton("Open source email")
+                source_button.setObjectName("enkyronTaskOpenSourceMail")
+                source_button.setToolTip(
+                    "Read the exact referenced message from ENKYRON Mail")
+                source_button.clicked.connect(
+                    lambda _checked=False, ref=reference:
+                    self.sourceMailRequested.emit(ref))
+                layout.addWidget(source_button)
 
         close = QPushButton("Close")
         close.clicked.connect(dialog.accept)

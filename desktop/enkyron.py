@@ -2286,6 +2286,8 @@ class EnkyronWindow(QMainWindow):
         self.calendar_view.eventCreateRequested.connect(self.create_calendar_event)
         self.calendar_view.taskCreateRequested.connect(self.create_calendar_task)
         self.calendar_view.taskCompleteRequested.connect(self.complete_calendar_task)
+        self.calendar_view.sourceMailRequested.connect(
+            self.open_calendar_source_mail)
         self.pages.addWidget(self.calendar_view)
         # ENK-08: display-only Mission Board. No bridge, database or write path.
         self.mission_board = MissionBoardView()
@@ -4565,6 +4567,135 @@ class EnkyronWindow(QMainWindow):
         self.calendar_view.open_editor(
             "task", prefill={"title": title, "notes": notes}
         )
+
+    def open_calendar_source_mail(self, source):
+        """Read a referenced Mail record via existing workspace-scoped routes."""
+        if not isinstance(source, dict):
+            return
+        mailbox = source.get("mailbox")
+        if (mailbox not in ("direction", "support")
+                or mailbox not in self.mail_inbox._mailboxes):
+            QMessageBox.warning(
+                self, "Source email", "This mailbox is not available.")
+            return
+
+        uuid_pattern = (
+            r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"
+        )
+
+        if source.get("kind") == "thread":
+            thread_id = source.get("thread_id")
+            if (not isinstance(thread_id, str)
+                    or not re.fullmatch(uuid_pattern, thread_id)):
+                return
+
+            def received(data, error):
+                messages = data.get("items") if isinstance(data, dict) else None
+                if (error or not isinstance(messages, list)
+                        or not messages
+                        or data.get("mailbox") != mailbox
+                        or data.get("thread_id") != thread_id):
+                    QMessageBox.warning(
+                        self, "Source email",
+                        "The exact saved conversation could not be verified. "
+                        "No other email was opened.")
+                    return
+
+                self.navigation.setCurrentRow(3)
+                subject = str(messages[0].get("subject") or
+                              source.get("subject") or "Conversation")
+                self.open_mail_thread_window(
+                    mailbox, thread_id, subject_override=subject)
+
+            self.bridge.call(
+                "mail-thread-conversation",
+                payload={"mailbox": mailbox, "thread_id": thread_id},
+                callback=received)
+            return
+
+        if source.get("kind") != "saved":
+            return
+
+        draft_id = source.get("draft_id")
+        if (not isinstance(draft_id, str)
+                or not re.fullmatch(uuid_pattern, draft_id)):
+            return
+
+        def received(data, error):
+            draft = data.get("draft") if isinstance(data, dict) else None
+            if (error or not isinstance(draft, dict)
+                    or draft.get("id") != draft_id
+                    or draft.get("mailbox_key") != mailbox):
+                QMessageBox.warning(
+                    self, "Source email",
+                    "The exact saved email could not be verified. "
+                    "No other email was opened.")
+                return
+
+            state = draft.get("mail_state")
+            if state not in (
+                    "draft", "provider_submitted", "external_send_reported"):
+                QMessageBox.warning(
+                    self, "Source email", "Unknown saved email state.")
+                return
+
+            if source.get("source_kind") == "sent" and state == "draft":
+                QMessageBox.warning(
+                    self, "Source email",
+                    "The reference describes a sent email, but the current "
+                    "record is an unsent draft.")
+                return
+
+            self.navigation.setCurrentRow(3)
+
+            key = ("calendar-source", draft_id)
+            opened = self.mail_thread_windows.get(key)
+            if opened is not None and opened.isVisible():
+                opened.raise_()
+                opened.activateWindow()
+                return
+
+            dialog = make_workspace_window(
+                "ENKYRON · Source email",
+                size=(780, 570), minimum=(540, 390))
+            layout = QVBoxLayout(dialog)
+
+            title = QLabel(str(draft.get("subject") or "(No subject)"))
+            title.setTextFormat(Qt.TextFormat.PlainText)
+            title.setWordWrap(True)
+            layout.addWidget(title)
+
+            states = {
+                "draft": "Unsent draft",
+                "provider_submitted": "Submitted to provider; delivery unconfirmed",
+                "external_send_reported": "External send reported; unverified",
+            }
+            details = QLabel(
+                "Mailbox: {}\nTo: {}\nState: {}\nSaved ID: {}".format(
+                    mailbox, draft.get("recipient_email") or "",
+                    states[state], draft_id))
+            details.setTextFormat(Qt.TextFormat.PlainText)
+            details.setWordWrap(True)
+            layout.addWidget(details)
+
+            body = QPlainTextEdit(dialog)
+            body.setObjectName("enkyronCalendarSourceMailBody")
+            body.setReadOnly(True)
+            body.setPlainText(
+                str(draft.get("body_text") or "(Empty message)")[:20000])
+            layout.addWidget(body, 1)
+
+            close = QPushButton("Close")
+            close.clicked.connect(dialog.close)
+            layout.addWidget(close)
+
+            self.mail_thread_windows[key] = dialog
+            dialog.finished.connect(
+                lambda _result, ref=key:
+                self.mail_thread_windows.pop(ref, None))
+            dialog.show()
+
+        self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
     def open_mail_company_link(self, mailbox, thread_id):
         """E04-04: operator-selected existing company, not inferred client."""
