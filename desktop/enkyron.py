@@ -6262,6 +6262,11 @@ class EnkyronWindow(QMainWindow):
         for window in list(self.mail_thread_windows.values()):
             window.close()
         self.mail_thread_windows.clear()
+        # Independent CRM opportunity editors belong to this workstation.
+        # No orphaned window remains when the application closes.
+        if (self.crm_followup_dialog is not None
+                and self.crm_followup_dialog.isVisible()):
+            self.crm_followup_dialog.close()
         # Detached drafts must not expose customer data after workstation exit.
         # Closing a draft first avoids an orphan/read-only dossier dependency.
         if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
