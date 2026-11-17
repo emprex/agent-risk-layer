@@ -130,6 +130,55 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.view.example_button.click()
         self.assertTrue(self.view.new_button.isEnabled())
 
+    def test_new_mission_save_emits_write_request_from_real_dialog(self):
+        """UI acceptance regression: no database, subprocess or mock save."""
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import (
+            QApplication, QDialog, QDialogButtonBox, QLineEdit, QPlainTextEdit,
+        )
+
+        self.view.show_crm_companies({"available": True, "items": [
+            {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+             "name": "Synthetic Client", "relationship_state": "prospect",
+             "city": "", "country": ""}]})
+        self.view.show_live_board({
+            "available": True, "items": [], "can_write": True, "more": False})
+        saved = []
+        errors = []
+        self.view.writeRequested.connect(
+            lambda action, details: saved.append((action, details)))
+        def confirm_dialog():
+            dialog = QApplication.activeModalWidget()
+            try:
+                if not isinstance(dialog, QDialog):
+                    raise AssertionError("New mission dialog did not open")
+                edits = dialog.findChildren(QLineEdit)
+                descriptions = dialog.findChildren(QPlainTextEdit)
+                buttons = dialog.findChild(QDialogButtonBox)
+                if len(edits) != 2 or len(descriptions) != 1 or buttons is None:
+                    raise AssertionError("Unexpected mission form fields")
+                edits[0].setText("ENK-08 UI Save Regression")
+                descriptions[0].setPlainText(
+                    "Test internal planning mission save from the real dialog.")
+                buttons.button(QDialogButtonBox.StandardButton.Ok).click()
+            except Exception as exc:
+                errors.append(str(exc))
+                if isinstance(dialog, QDialog):
+                    dialog.reject()
+        QTimer.singleShot(0, confirm_dialog)
+        QTimer.singleShot(2500, lambda: (
+            QApplication.activeModalWidget().reject()
+            if isinstance(QApplication.activeModalWidget(), QDialog) else None))
+        self.view.new_button.click()
+        self.assertFalse(errors, errors)
+        self.assertEqual(len(saved), 1, "Save must emit one backend request")
+        action, details = saved[0]
+        self.assertEqual(action, "psa-create-mission")
+        self.assertEqual(details["company_id"],
+                         "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
+        self.assertEqual(details["title"], "ENK-08 UI Save Regression")
+        self.assertTrue(details["confirmed"])
+
     def test_server_write_refusal_never_enables_editing(self):
         self.view.show_crm_companies({"available": True, "more": False, "items": [
             {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
