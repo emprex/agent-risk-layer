@@ -20,7 +20,8 @@ test('company association requires explicit selection, real IDs and confirmation
   ])assert.throws(()=>validateMailCompanyLink(bad));
 });
 
-function mock({permission=true,existing=null,folder='inbox',target=true}={}){
+function mock({permission=true,existing=null,folder='inbox',target=true,
+  ticketCompanies=[]}={}){
   const logs=[],state={company:existing},owner='local:operator';
   const query=async(sql,args)=>{
     logs.push({sql,args});
@@ -31,6 +32,8 @@ function mock({permission=true,existing=null,folder='inbox',target=true}={}){
       return {rows:[{crm_company_id:state.company,folder_key:folder}]};
     if(sql.startsWith('SELECT id,name,relationship_state FROM enkyron_crm_companies'))
       return {rows:target?[{id:company,name:'Example Client',relationship_state:'prospect'}]:[]};
+    if(sql.startsWith('SELECT 1 FROM enkyron_mail_ticket_links l'))
+      return {rows:ticketCompanies.some(c=>c!==args[3])?[{exists:1}]:[]};
     if(sql.startsWith('UPDATE enkyron_mail_local_threads SET crm_company_id=')){
       if(state.company!==null)return {rowCount:0,rows:[]};
       state.company=args[3];
@@ -67,6 +70,27 @@ test('human reviewed company link changes one local thread and never touches Res
     ...valid,company_id:alternate
   }),/already linked/);
   assert.equal(h.logs.filter(x=>x.sql.startsWith('UPDATE ')).length,1);
+});
+
+test('reverse-order Mail -> CRM blocks conflicting or unreviewed ticket company',async()=>{
+  for(const ticketCompanies of [[alternate],[null],[company,alternate]]){
+    const h=mock({ticketCompanies});
+    await assert.rejects(
+      linkLocalMailCompany(h.pool,'operator',valid),
+      /no matching reviewed CRM company/
+    );
+    assert.equal(h.state.company,null);
+    assert.equal(h.logs.some(x=>x.sql.startsWith('UPDATE ')),false);
+    assert.equal(h.logs.at(-1).sql,'ROLLBACK');
+  }
+  const h=mock({ticketCompanies:[company]});
+  const linked=await linkLocalMailCompany(h.pool,'operator',valid);
+  assert.equal(linked.linked,true);
+  const guard=h.logs.find(x=>x.sql.startsWith('SELECT 1 FROM enkyron_mail_ticket_links l'));
+  assert.ok(guard);
+  assert.match(guard.sql,/NOT EXISTS/);
+  assert.match(guard.sql,/enkyron_crm_effective_ticket_links/);
+  assert.deepEqual(guard.args,[h.owner,'direction',thread,company]);
 });
 
 test('unverified, inaccessible, spam and unavailable associations fail closed',async()=>{

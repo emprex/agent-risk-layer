@@ -1011,11 +1011,19 @@ class MailInboxView(QWidget):
             )
             if mailbox == "local-sent":
                 entry = self.items[thread_id] if 0 <= thread_id < len(self.items) else {}
-                if entry.get("draft_id") and not entry.get("company_id"):
+                if entry.get("company_id"):
+                    linked = menu.addAction(
+                        "CRM: " + str(entry.get("company_name") or "Linked company")[:50]
+                    )
+                    linked.setEnabled(False)
+                elif entry.get("draft_id"):
                     link = menu.addAction("Link to CRM…")
                     link.triggered.connect(
                         lambda _checked=False: self.localRecordLinkRequested.emit(thread_id)
                     )
+                else:
+                    unavailable = menu.addAction("CRM link unavailable")
+                    unavailable.setEnabled(False)
             menu.addSeparator()
             trash = menu.addAction("Move to Trash")
             trash.triggered.connect(
@@ -1536,6 +1544,8 @@ class MailInboxView(QWidget):
         self.reply_button.setText("Follow up")
         self.reply_button.setToolTip("Write a new follow-up to this recipient")
         self.reply_button.setVisible(follow_up_ready)
+        if kind == "sent":
+            self._show_sent_company_link(index)
         return True
 
     def _search_saved_mail(self):
@@ -1639,6 +1649,8 @@ class MailInboxView(QWidget):
             self.meta.setText("Loading saved message…")
             self.body.setPlainText("Loading saved message…")
             self.reader_stack.setCurrentIndex(1)
+            if kind == "sent":
+                self._show_sent_company_link(thread_id)
             self.localRecordRequested.emit(kind, thread_id)
             return
         if self.local_mode and source == "filed-record":
@@ -1704,7 +1716,54 @@ class MailInboxView(QWidget):
             return
         self.replyRequested.emit(self.current_thread_mailbox, self.current_thread_id)
 
+    def _show_sent_company_link(self, index):
+        """Expose existing Sent CRM association or the reviewed link action."""
+        if (not self.local_mode or self.selected_folder != "sent"
+                or not isinstance(index, int) or not 0 <= index < len(self.items)):
+            return
+        selected = self.thread_list.currentItem()
+        if (selected is None or selected.data(Qt.ItemDataRole.UserRole)
+                != ("local-sent", index)):
+            return
+        record = self.items[index]
+        if not isinstance(record, dict):
+            return
+        if record.get("company_id"):
+            self.crm_link_button.setText(
+                "CRM: " + str(record.get("company_name") or "Linked company")[:50])
+            self.crm_link_button.setEnabled(False)
+            self.crm_link_button.setToolTip(
+                "Already associated. Correction requires a separate reviewed workflow.")
+        elif record.get("draft_id"):
+            self.crm_link_button.setText("Link to CRM…")
+            self.crm_link_button.setEnabled(True)
+            self.crm_link_button.setToolTip(
+                "Requires an existing verified CRM contact and company; no email is sent.")
+        else:
+            self.crm_link_button.setText("CRM link unavailable")
+            self.crm_link_button.setEnabled(False)
+            self.crm_link_button.setToolTip(
+                "No saved draft reference; cannot safely associate this email.")
+        self.crm_link_button.show()
+
     def _request_company_link(self):
+        if self.local_mode and self.selected_folder == "sent":
+            selected = self.thread_list.currentItem()
+            reference = (selected.data(Qt.ItemDataRole.UserRole)
+                         if selected is not None else None)
+            if (not isinstance(reference, tuple) or len(reference) != 2
+                    or reference[0] != "local-sent"
+                    or not isinstance(reference[1], int)
+                    or not 0 <= reference[1] < len(self.items)
+                    or self.crm_link_button.isHidden()
+                    or not self.crm_link_button.isEnabled()):
+                return
+            record = self.items[reference[1]]
+            if (not isinstance(record, dict) or not record.get("draft_id")
+                    or record.get("company_id")):
+                return
+            self.localRecordLinkRequested.emit(reference[1])
+            return
         if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
                 or not self.current_thread_id or self.selected_folder in
                 ("sent", "drafts", "spam", "trash")

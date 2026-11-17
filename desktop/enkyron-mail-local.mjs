@@ -258,6 +258,20 @@ export async function linkLocalMailCompany(pool,actor,input){
     )).rows[0];
     if(!target||target.relationship_state==='inactive')
       throw Error('Selected CRM company unavailable or inactive');
+    // Mail -> Ticket already checks the reviewed CRM company. Protect the
+    // reverse order too: a previously linked ticket must have exactly this
+    // reviewed company, including when the ticket has no company link.
+    // The locked thread row serializes both association directions.
+    const conflictingTicket=(await client.query(
+      'SELECT 1 FROM enkyron_mail_ticket_links l '+
+      'WHERE l.workspace_key=$1 AND l.mailbox_key=$2 AND l.thread_id=$3 '+
+      'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_effective_ticket_links e '+
+      'WHERE e.workspace_key=l.workspace_key AND e.ticket_id=l.ticket_id '+
+      'AND e.company_id=$4) LIMIT 1',
+      [key,mailbox,thread,company]
+    )).rows[0];
+    if(conflictingTicket)
+      throw Error('Linked ticket has no matching reviewed CRM company');
     const updated=await client.query(
       'UPDATE enkyron_mail_local_threads SET crm_company_id=$4 '+
       'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 '+
