@@ -66,6 +66,9 @@ class MailUXTests(unittest.TestCase):
             "folder_key":"inbox","unread":True,
             "last_message_at":"2026-11-17T07:41:00Z"}]))
         item=self.view.thread_list.item(0)
+        preview=self.view.thread_list.compact_drag_preview(item)
+        self.assertEqual((preview.width(),preview.height()),(206,46))
+        self.assertLess(preview.width(),self.view.thread_list.width())
         mime=self.view.thread_list.mimeData([item])
         folder=self.view.folder_tree.topLevelItem(1)
         self.view.resize(900,600)
@@ -73,9 +76,14 @@ class MailUXTests(unittest.TestCase):
         self.app.processEvents()
         rect=self.view.folder_tree.visualItemRect(folder)
         self.assertGreater(rect.width(),0)
+        self.assertGreaterEqual(rect.height(),30)
         at=rect.center()
         self.assertEqual(self.view.folder_tree._drop_target(mime,at),
                          ("support",THREAD,"user_mission"))
+        self.view.folder_tree._highlight_folder(folder)
+        self.assertIs(self.view.folder_tree._hover_folder,folder)
+        self.view.folder_tree._highlight_folder(None)
+        self.assertIsNone(self.view.folder_tree._hover_folder)
         dropped=[]
         self.view.localMoveRequested.connect(
             lambda *args: dropped.append(args))

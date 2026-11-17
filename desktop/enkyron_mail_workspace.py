@@ -12,8 +12,8 @@ if __package__:
 else:
     from enkyron_mail_html import safe_mail_html
 
-from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice, QMimeData
-from PySide6.QtGui import QFont, QImageReader, QPixmap
+from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice, QMimeData, QPoint, QRect, QSize
+from PySide6.QtGui import QFont, QImageReader, QPixmap, QDrag, QPainter, QColor, QBrush
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
@@ -56,11 +56,70 @@ class MailThreadList(QListWidget):
             }).encode("utf-8"))
         return mime
 
+    def compact_drag_preview(self, item):
+        """Small fixed-size cursor badge instead of dragging the whole email row.
+
+        Never expose the full subject or untrusted message body in the ghost.
+        """
+        picture = QPixmap(206, 46)
+        picture.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(picture)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(QColor("#86aebc"))
+            painter.setBrush(QColor("#e7f4f7"))
+            painter.drawRoundedRect(1, 1, 203, 43, 9, 9)
+            painter.setPen(QColor("#193447"))
+            sender = item.text().splitlines()[0].removeprefix("★ ").removeprefix("● ")
+            font = QFont(self.font())
+            font.setBold(True)
+            painter.setFont(font)
+            sender = painter.fontMetrics().elidedText(
+                sender.strip() or "Conversation", Qt.TextElideMode.ElideRight, 177)
+            painter.drawText(QRect(13, 5, 180, 19),
+                             Qt.AlignmentFlag.AlignVCenter, sender)
+            font.setBold(False)
+            font.setPointSize(max(8, font.pointSize() - 1))
+            painter.setFont(font)
+            painter.setPen(QColor("#4f6c7a"))
+            painter.drawText(QRect(13, 24, 180, 17),
+                             Qt.AlignmentFlag.AlignVCenter, "Move to folder")
+        finally:
+            painter.end()
+        return picture
+
+    def startDrag(self, _supported_actions):
+        """Use the existing local-only MIME payload, with a compact visual."""
+        selected = self.selectedItems()
+        if len(selected) != 1:
+            return
+        mime = self.mimeData(selected)
+        if not mime.hasFormat(_MAIL_THREAD_MIME):
+            return
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.setPixmap(self.compact_drag_preview(selected[0]))
+        drag.setHotSpot(QPoint(13, 21))
+        drag.exec(Qt.DropAction.MoveAction)
+
 
 class MailFolderTree(QTreeWidget):
     """Folder drop target; the existing localMoveRequested backend does the write."""
 
     threadDropped = Signal(str, str, str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._hover_folder = None
+
+    def _highlight_folder(self, item):
+        if item is self._hover_folder:
+            return
+        if self._hover_folder is not None:
+            self._hover_folder.setBackground(0, QBrush())
+        self._hover_folder = item
+        if item is not None:
+            item.setBackground(0, QBrush(QColor("#cce9e0")))
 
     def _drop_target(self, mime, at):
         if mime is None or not mime.hasFormat(_MAIL_THREAD_MIME):
@@ -90,16 +149,25 @@ class MailFolderTree(QTreeWidget):
         if event.mimeData().hasFormat(_MAIL_THREAD_MIME):
             event.acceptProposedAction()
         else:
+            self._highlight_folder(None)
             event.ignore()
 
     def dragMoveEvent(self, event):
-        if self._drop_target(event.mimeData(), event.position().toPoint()):
+        position = event.position().toPoint()
+        if self._drop_target(event.mimeData(), position):
+            self._highlight_folder(self.itemAt(position))
             event.acceptProposedAction()
         else:
+            self._highlight_folder(None)
             event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._highlight_folder(None)
+        super().dragLeaveEvent(event)
 
     def dropEvent(self, event):
         target = self._drop_target(event.mimeData(), event.position().toPoint())
+        self._highlight_folder(None)
         if target:
             self.threadDropped.emit(*target)
             event.acceptProposedAction()
@@ -761,6 +829,7 @@ class MailInboxView(QWidget):
         if not self.local_mode:
             return
         self.folder_tree.blockSignals(True)
+        self.folder_tree._highlight_folder(None)
         self.folder_tree.clear()
         selected = None
         for folder in self.local_folders:
@@ -780,6 +849,8 @@ class MailInboxView(QWidget):
                 item.setFont(0, font)
             item.setToolTip(0, name + (" — " + str(count) + " unread" if count else ""))
             item.setData(0, Qt.ItemDataRole.UserRole, key)
+            # Larger Qt hit area so a drop does not require pixel-perfect aim.
+            item.setSizeHint(0, QSize(0, 30))
             self.folder_tree.addTopLevelItem(item)
             if key == current:
                 selected = item
