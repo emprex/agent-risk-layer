@@ -22,6 +22,8 @@ test('company-first sales opportunity is explicit and source-linked',()=>{
     {...valid,ticket_id:'wrong'}, {...valid,company_name_at_review:' '},
     {...valid,ticket_number_at_review:'x'},{...valid,next_action:'hi'},
     {...valid,due_date:'2026-02-30'},{...valid,unknown:'yes'},
-    {...valid,prospect_id:'fake-prospect'}, {...valid,next_action:'bad\nline'}
+    {...valid,prospect_id:'fake-prospect'}, {...valid,next_action:'bad\tline'}
   ])assert.throws(()=>validateCompanyOpportunityCreate(broken),/CRM|ticket/i);
+  const next='Review the engineering context.\nPlan a written follow-up.';
+  assert.equal(validateCompanyOpportunityCreate({...valid,next_action:next}).next_action,next);
 });

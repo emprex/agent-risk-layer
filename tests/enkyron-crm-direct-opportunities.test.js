@@ -22,6 +22,8 @@ test('CRM direct opportunities require reviewed company and never accept a ticke
  assert.throws(()=>validateDirectCompanyOpportunityCreate({...direct,confirmed:false}),/review/);
  assert.throws(()=>validateDirectCompanyOpportunityCreate({...direct,ticket_id:ticket}),/invalid/);
  assert.throws(()=>validateDirectCompanyOpportunityCreate({...direct,company_name_at_review:'Wrong\nName'}),/company/);
+ const next='Research current status.\nPrepare a personalised email.';
+ assert.equal(validateDirectCompanyOpportunityCreate({...direct,next_action:next}).next_action,next);
 });
 test('historical origin correction requires all reviewed identifiers and a reason',()=>{
  const req={company_id:company,opportunity_id:opportunity,ticket_id:ticket,

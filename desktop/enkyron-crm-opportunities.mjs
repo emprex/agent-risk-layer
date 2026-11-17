@@ -15,8 +15,12 @@ function workspace(name){
     throw new Error('CRM invalid local operator');
   return {actor:name,key:'local:'+name};
 }
-function textField(value,label,min,max){
-  if(typeof value!=='string'||/[\x00-\x1f\x7f]/.test(value)
+function textField(value,label,min,max,allowLf=false){
+  // QPlainTextEdit emits LF for paragraphs. Only next_action opts into LF;
+  // tabs, carriage returns and other controls remain forbidden.
+  const inspected=allowLf && typeof value==='string'
+    ? value.replace(/\n/g,'') : value;
+  if(typeof value!=='string'||/[\x00-\x1f\x7f]/.test(inspected)
     ||value.trim().length<min||value.trim().length>max) {
     throw new Error('CRM invalid '+label);
   }
@@ -44,7 +48,7 @@ export function validateOpportunityCreate(data){
     prospect_id:requireProspectId(data.prospect_id),
     company_name_at_review:textField(data.company_name_at_review,
       'reviewed prospect name',1,300),
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:textField(data.next_action,'next action',5,1000,true),
     due_date:dateField(data.due_date)
   };
 }
@@ -60,7 +64,7 @@ export function validateCompanyOpportunityCreate(data){
     ticket_id:requireTicketId(data.ticket_id),
     company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
     ticket_number_at_review:textField(data.ticket_number_at_review,'ticket number',8,40),
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:textField(data.next_action,'next action',5,1000,true),
     due_date:dateField(data.due_date)
   };
 }
@@ -75,7 +79,7 @@ export function validateDirectCompanyOpportunityCreate(data){
   return {
     company_id:requireCompanyId(data.company_id),
     company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:textField(data.next_action,'next action',5,1000,true),
     due_date:dateField(data.due_date)
   };
 }
@@ -117,7 +121,7 @@ export function validateOpportunityUpdate(data){
     id:data.id,
     expected_version:data.expected_version,
     stage:data.stage,
-    next_action:textField(data.next_action,'next action',5,1000),
+    next_action:textField(data.next_action,'next action',5,1000,true),
     due_date:dateField(data.due_date),
     ...(Object.hasOwn(data,'company_id')?
       {company_id:requireCompanyId(data.company_id)}:{}),

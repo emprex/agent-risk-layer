@@ -19604,12 +19604,14 @@ class EnkyronWindow(QMainWindow):
         }, current)
 
     def build_followup_dialog(self, prospect, existing):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(
+        # Work editor: independent native top-level window, not a modal
+        # child/transient of the main workspace (unlike safety confirmations).
+        dialog = make_workspace_window(
             "ENKYRON · Update follow-up" if existing else
-            "ENKYRON · Plan prospect follow-up"
+            "ENKYRON · Plan prospect follow-up",
+            size=(720, 540), minimum=(600, 450)
         )
-        dialog.setMinimumWidth(600)
+        dialog.setObjectName("enkyronOpportunityEditWindow")
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
             "UPDATE COMMERCIAL OPPORTUNITY" if existing else
@@ -19710,7 +19712,9 @@ class EnkyronWindow(QMainWindow):
             "return_tab": self.crm_tabs.currentIndex()
         }
         self.crm_followup_dialog = dialog
-        dialog.open()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def save_followup(self):
         dialog = self.crm_followup_dialog

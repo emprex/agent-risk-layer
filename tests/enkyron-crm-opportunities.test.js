@@ -22,10 +22,17 @@ test('validates business stages, actual calendar dates and manual action',()=>{
     {...base,due_date:'2026-02-30'},
     {...base,due_date:'2026-13-01'},
     {...base,due_date:'next week'},
-    {...base,next_action:'Line\nBreak'},
+    {...base,next_action:'Line\tBreak'},
     null,{},[]
   ]) assert.throws(()=>validateOpportunityCreate(invalid),/CRM/);
   assert.equal(validateOpportunityUpdate(edit).stage,'qualified');
+  const multi='Review the contact history.\nSend a thoughtful email next week.';
+  assert.equal(validateOpportunityCreate({...base,next_action:multi}).next_action,multi);
+  assert.equal(validateOpportunityUpdate({...edit,next_action:multi}).next_action,multi);
+  for(const dangerous of ['Review\tcontact','Review\rcontact','Review\u0000contact']){
+    assert.throws(()=>validateOpportunityUpdate({...edit,next_action:dangerous}),
+      /CRM invalid next action/);
+  }
   assert.equal(validateOpportunityUpdate({...edit,company_id:companyId,confirmed:true}).company_id,companyId);
   assert.throws(()=>validateOpportunityUpdate({...edit,company_id:companyId}),/confirmation/);
   assert.throws(()=>validateOpportunityUpdate({...edit,company_id:'wrong'}),/CRM/);
