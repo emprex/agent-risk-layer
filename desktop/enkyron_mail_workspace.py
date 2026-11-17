@@ -1,8 +1,9 @@
-"""Native ENKYRON Inbox: clean list/detail mail experience, provider read-only.
+"""Native ENKYRON Inbox: local-first Mail with inert HTML previews.
 
-All data remains text-only. Mailbox permissions and Resend access are handled
-by the backend; this presentation creates no authenticated actions or sends.
+Mailbox permissions and Resend access remain in the existing backend.
 """
+import json
+import re
 from datetime import datetime
 from html import escape
 
@@ -11,7 +12,7 @@ if __package__:
 else:
     from enkyron_mail_html import safe_mail_html
 
-from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice
+from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice, QMimeData
 from PySide6.QtGui import QFont, QImageReader, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
@@ -30,6 +31,80 @@ def _display_date(value):
         return instant.astimezone().strftime("%d %b %Y · %H:%M")
     except (ValueError, OverflowError):
         return value[:32]
+
+
+_MAIL_THREAD_MIME = "application/x-enkyron-local-mail-thread"
+_MAIL_UUID = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", re.I)
+
+
+class MailThreadList(QListWidget):
+    """Drag ONLY existing local Inbox conversations; never draft/attachment data."""
+
+    def mimeData(self, items):
+        mime = QMimeData()
+        if len(items) != 1:
+            return mime
+        ref = items[0].data(Qt.ItemDataRole.UserRole)
+        origin = items[0].data(Qt.ItemDataRole.UserRole + 1)
+        if (isinstance(ref, tuple) and len(ref) == 2
+                and ref[0] in ("direction", "support")
+                and isinstance(ref[1], str) and _MAIL_UUID.fullmatch(ref[1])
+                and isinstance(origin, str) and origin
+                and origin not in ("sent", "drafts", "hidden")):
+            mime.setData(_MAIL_THREAD_MIME, json.dumps({
+                "mailbox": ref[0], "thread_id": ref[1], "source": origin,
+            }).encode("utf-8"))
+        return mime
+
+
+class MailFolderTree(QTreeWidget):
+    """Folder drop target; the existing localMoveRequested backend does the write."""
+
+    threadDropped = Signal(str, str, str)
+
+    def _drop_target(self, mime, at):
+        if mime is None or not mime.hasFormat(_MAIL_THREAD_MIME):
+            return None
+        try:
+            data = json.loads(bytes(mime.data(_MAIL_THREAD_MIME)).decode("utf-8"))
+        except (UnicodeError, ValueError, TypeError):
+            return None
+        if (not isinstance(data, dict) or set(data) != {
+                "mailbox", "thread_id", "source"}
+                or data.get("mailbox") not in ("direction", "support")
+                or not isinstance(data.get("thread_id"), str)
+                or not _MAIL_UUID.fullmatch(data["thread_id"])
+                or not isinstance(data.get("source"), str)):
+            return None
+        item = self.itemAt(at)
+        if item is None:
+            return None
+        destination = item.data(0, Qt.ItemDataRole.UserRole)
+        if (not isinstance(destination, str)
+                or destination in ("sent", "drafts", "hidden")
+                or destination == data["source"]):
+            return None
+        return data["mailbox"], data["thread_id"], destination
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(_MAIL_THREAD_MIME):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._drop_target(event.mimeData(), event.position().toPoint()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        target = self._drop_target(event.mimeData(), event.position().toPoint())
+        if target:
+            self.threadDropped.emit(*target)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 def format_mail_messages(messages):
@@ -205,6 +280,7 @@ class MailInboxView(QWidget):
     localReadRequested = Signal(str, str, bool)
     localSearchRequested = Signal(str)
     localPageRequested = Signal(int)
+    localSortRequested = Signal(str)
     localRecordRequested = Signal(str, int)
     localRecordOpenRequested = Signal(str, int)
     localRecordLinkRequested = Signal(int)
@@ -364,7 +440,17 @@ class MailInboxView(QWidget):
         self.empty_trash_button.hide()
         list_heading.addWidget(self.empty_trash_button)
         left_layout.addLayout(list_heading)
-        self.thread_list = QListWidget()
+        self.mail_sort = QComboBox()
+        self.mail_sort.setObjectName("enkyronMailSortOrder")
+        self.mail_sort.setAccessibleName("Conversation order")
+        self.mail_sort.addItem("Newest first", "newest")
+        self.mail_sort.addItem("Oldest first", "oldest")
+        self.mail_sort.currentIndexChanged.connect(
+            lambda _index: self.localSortRequested.emit(
+                str(self.mail_sort.currentData())))
+        self.mail_sort.hide()
+        left_layout.addWidget(self.mail_sort)
+        self.thread_list = MailThreadList()
         self.thread_list.setObjectName("enkyronMailThreadList")
         self.thread_list.setAccessibleName("Conversations in selected mailbox")
         self.thread_list.setWordWrap(True)
@@ -386,11 +472,11 @@ class MailInboxView(QWidget):
         self.thread_list.customContextMenuRequested.connect(self._thread_context_menu)
         left_layout.addWidget(self.thread_list, 1)
         self.local_page_toolbar = QHBoxLayout()
-        self.local_earlier_button = QPushButton("Newer")
+        self.local_earlier_button = QPushButton("Previous")
         self.local_earlier_button.setObjectName("enkyronMailNewerPage")
         self.local_earlier_button.clicked.connect(
             lambda: self.localPageRequested.emit(max(0, self._local_page - 1)))
-        self.local_later_button = QPushButton("Older")
+        self.local_later_button = QPushButton("Next")
         self.local_later_button.setObjectName("enkyronMailOlderPage")
         self.local_later_button.clicked.connect(
             lambda: self.localPageRequested.emit(self._local_page + 1))
@@ -622,6 +708,9 @@ class MailInboxView(QWidget):
         self.search.setAccessibleName("Search saved mail in NEMORYTH; press Enter")
         self.local_earlier_button.show()
         self.local_later_button.show()
+        self.mail_sort.show()
+        self.thread_list.setDragEnabled(True)
+        self.thread_list.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.local_earlier_button.setEnabled(False)
         self.local_later_button.setEnabled(False)
         left = QFrame()
@@ -638,8 +727,12 @@ class MailInboxView(QWidget):
         add.clicked.connect(self.create_folder_prompt)
         head.addWidget(add)
         layout.addLayout(head)
-        self.folder_tree = QTreeWidget()
+        self.folder_tree = MailFolderTree()
         self.folder_tree.setObjectName("enkyronMailLocalFolderTree")
+        self.folder_tree.setAcceptDrops(True)
+        self.folder_tree.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+        self.folder_tree.setDropIndicatorShown(True)
+        self.folder_tree.threadDropped.connect(self.localMoveRequested.emit)
         self.folder_tree.setHeaderHidden(True)
         self.folder_tree.setRootIsDecorated(False)
         self.folder_tree.setMinimumWidth(145)
@@ -676,7 +769,11 @@ class MailInboxView(QWidget):
             name = folder.get("name")
             if not isinstance(key, str) or not isinstance(name, str):
                 continue
-            item = QTreeWidgetItem([name])
+            unread = folder.get("unread_count")
+            count = unread if isinstance(unread, int) and 0 <= unread <= 1000000 else 0
+            display = name + ("  (" + str(count) + ")" if count else "")
+            item = QTreeWidgetItem([display])
+            item.setToolTip(0, name + (" — " + str(count) + " unread" if count else ""))
             item.setData(0, Qt.ItemDataRole.UserRole, key)
             self.folder_tree.addTopLevelItem(item)
             if key == current:
@@ -1201,6 +1298,8 @@ class MailInboxView(QWidget):
             label += ("\n" + date if date else "")
             entry = QListWidgetItem(label)
             entry.setData(Qt.ItemDataRole.UserRole, (source, thread_id))
+            entry.setData(Qt.ItemDataRole.UserRole + 1,
+                          item.get("folder_key") or folder)
             full_sender = str(item.get("sender") or "") if self.local_mode else ""
             entry.setToolTip((full_sender + "\n" if full_sender else "")
                              + subject + ("\n" + date if date else ""))

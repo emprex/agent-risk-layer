@@ -52,9 +52,19 @@ export async function localMailFolders(pool,actor){
   const rows=(await pool.query(
     'SELECT folder_key,name FROM enkyron_mail_local_folders '+
     'WHERE workspace_key=$1 ORDER BY name ASC',[key])).rows;
+  // Count real unread local threads across the configured mailboxes.
+  // These counts are not guessed from a 50-row UI page.
+  const counts=(await pool.query(
+    'SELECT folder_key,COUNT(*)::int AS unread_count '+
+    'FROM enkyron_mail_local_threads WHERE workspace_key=$1 AND unread=TRUE '+
+    'AND folder_key<>\'hidden\' GROUP BY folder_key',[key]
+  )).rows;
+  const byFolder=new Map(counts.map(x=>[x.folder_key,Number(x.unread_count)||0]));
   return {folders:[
-    ...SYSTEM.map(name=>({key:name,name:name[0].toUpperCase()+name.slice(1),system:true})),
-    ...rows.map(x=>({key:x.folder_key,name:x.name,system:false}))
+    ...SYSTEM.map(name=>({key:name,name:name[0].toUpperCase()+name.slice(1),
+      system:true,unread_count:byFolder.get(name)||0})),
+    ...rows.map(x=>({key:x.folder_key,name:x.name,system:false,
+      unread_count:byFolder.get(x.folder_key)||0}))
   ]};
 }
 export async function createLocalMailFolder(pool,actor,input){
@@ -128,9 +138,16 @@ export async function localMailList(pool,actor,input={}){
   const page=input.page??0;
   if(!Number.isSafeInteger(page)||page<0||page>1000)
     throw Error('Invalid Mail page');
+  const sort=input.sort??'newest';
+  if(!['newest','oldest'].includes(sort))throw Error('Invalid Mail sort order');
+  const direction=sort==='oldest'?'ASC':'DESC';
   const rows=(await pool.query(
     'SELECT t.mailbox_key AS mailbox,t.thread_id AS id,t.subject,'+
     'COALESCE(external_mail.sender,external_to.recipient,\'\') AS sender,'+
+    'GREATEST(t.last_message_at,COALESCE((SELECT MAX(m_sort.created_at) '+
+    'FROM enkyron_mail_local_messages m_sort WHERE '+
+    'm_sort.workspace_key=t.workspace_key AND m_sort.mailbox_key=t.mailbox_key '+
+    'AND m_sort.thread_id=t.thread_id),\'\')) AS sort_at,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder,'+
     "COALESCE(string_agg(DISTINCT l.name, ', '), '') AS labels "+
     'FROM enkyron_mail_local_threads t LEFT JOIN enkyron_mail_thread_labels tl '+
@@ -175,10 +192,10 @@ export async function localMailList(pool,actor,input={}){
     'POSITION(LOWER($4) IN LOWER(l2.name))>0)) '+
     'GROUP BY t.mailbox_key,t.thread_id,t.subject,external_mail.sender,external_to.recipient,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder '+
-    'ORDER BY t.last_message_at DESC,t.mailbox_key,t.thread_id LIMIT 51 OFFSET $5',
+    'ORDER BY sort_at '+direction+',t.mailbox_key,t.thread_id LIMIT 51 OFFSET $5',
     [key,folder,mailbox,search,page*50,OWN_EMAILS]
   )).rows;
-  return {mailbox,folder,search,page,items:rows.slice(0,50),
+  return {mailbox,folder,search,page,sort,items:rows.slice(0,50),
     has_more:rows.length>50,source:'local'};
 }
 // E04-04A. Existing schema 112 already has crm_company_id on each thread.

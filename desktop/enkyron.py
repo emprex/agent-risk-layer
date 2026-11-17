@@ -1790,6 +1790,8 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.localSearchRequested.connect(self.search_local_mail)
         self.mail_inbox.localPageRequested.connect(
             lambda page: self.load_local_mail(page=page))
+        self.mail_inbox.localSortRequested.connect(
+            lambda _sort: self.load_local_mail(page=0))
         self.mail_inbox.draftsRequested.connect(
             lambda: self.mail_inbox.activate_local_folder("drafts")
         )
@@ -2420,6 +2422,7 @@ class EnkyronWindow(QMainWindow):
             self.mail_inbox.connection_label.setVisible(True)
             return
         folder = self.mail_inbox.selected_folder
+        sort = self.mail_inbox.mail_sort.currentData() or "newest"
         self.mail_inbox.set_connection_state("connected")
         self.mail_inbox.search.setEnabled(True)
         self.mail_inbox.refresh_button.setEnabled(self.mail_provider_ready)
@@ -2443,6 +2446,7 @@ class EnkyronWindow(QMainWindow):
         def received(data, error):
             if (self.mail_inbox.selected_mailbox not in (None, mailbox)
                     or folder != self.mail_inbox.selected_folder
+                    or sort != self.mail_inbox.mail_sort.currentData()
                     or (query and self.mail_inbox.search.text().strip().casefold()
                         != query.casefold())):
                 return
@@ -2472,7 +2476,7 @@ class EnkyronWindow(QMainWindow):
                     payload={"folder":folder,"mailbox":mailbox},callback=filed)
         self.bridge.call("mail-local-list",
             payload={"mailbox":mailbox,"folder":request_folder,
-                     "search":query,"page":page},callback=received)
+                     "search":query,"page":page,"sort":sort},callback=received)
 
     def archive_mail_batch(self):
         """Archive up to four saved messages in NEMORYTH, if schema 113 exists.
@@ -2518,6 +2522,8 @@ class EnkyronWindow(QMainWindow):
             if note and self.mail_inbox.selected_folder == "inbox":
                 self.mail_inbox.connection_label.setText(note)
                 self.mail_inbox.connection_label.setVisible(True)
+            if refresh:
+                self.load_local_mail_metadata()
             if not refresh or self.mail_inbox.selected_folder != "inbox":
                 return
             if (self.mail_inbox._local_page != 0
@@ -2534,7 +2540,8 @@ class EnkyronWindow(QMainWindow):
                     page=0, preserve_reader=True
                 )
             self.bridge.call("mail-local-list",
-                payload={"mailbox":mailbox,"folder":"inbox","page":0},
+                payload={"mailbox":mailbox,"folder":"inbox","page":0,
+                         "sort":self.mail_inbox.mail_sort.currentData() or "newest"},
                 callback=updated)
 
         def received_headers(data, error):
@@ -2713,6 +2720,7 @@ class EnkyronWindow(QMainWindow):
                 QMessageBox.warning(self, "Mail folders",
                     "Could not move message locally. No provider changes.")
                 return
+            self.load_local_mail_metadata()
             self.load_local_mail(self.mail_inbox.selected_mailbox)
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
@@ -2798,6 +2806,7 @@ class EnkyronWindow(QMainWindow):
             # after reading: the operator may already be composing a reply.
             self.mail_inbox.apply_local_read_status(
                 mailbox, thread_id, bool(unread))
+            self.load_local_mail_metadata()
         self.bridge.call("mail-local-read",
             payload={"mailbox":mailbox,"thread_id":thread_id,
                      "unread":bool(unread)},callback=received)
