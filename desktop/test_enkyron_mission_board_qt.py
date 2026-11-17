@@ -183,6 +183,15 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertEqual(details["title"], "ENK-08 UI Save Regression")
         self.assertTrue(details["confirmed"])
 
+    def test_projects_detach_button_emits_single_request(self):
+        requested = []
+        self.view.detachRequested.connect(lambda: requested.append(True))
+        self.assertEqual(self.view.detach_button.text(), "Open in window")
+        self.assertEqual(self.view.detach_button.objectName(), "enkyronMissionDetach")
+        self.view.detach_button.click()
+        self.assertEqual(requested, [True])
+        self.assertEqual(self.view.mission_table.rowCount(), 0)
+
     def test_server_write_refusal_never_enables_editing(self):
         self.view.show_crm_companies({"available": True, "more": False, "items": [
             {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",

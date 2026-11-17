@@ -428,6 +428,8 @@ class EnkyronWindow(QMainWindow):
         self._sent_followup_context = None
         self.mail_detached_window = None
         self.calendar_detached_window = None
+        self.projects_detached_window = None
+        self.projects_detach_placeholder = None
         self.batch_review_detached_window = None
         self.batch_review_detach_placeholder = None
         self.batch_record_progress = None
@@ -2283,6 +2285,7 @@ class EnkyronWindow(QMainWindow):
         self.mission_board = MissionBoardView()
         self.mission_board.crmRefreshRequested.connect(self.load_mission_board_companies)
         self.mission_board.missionRefreshRequested.connect(self.load_mission_board)
+        self.mission_board.detachRequested.connect(self.toggle_projects_window)
         self.mission_board.writeRequested.connect(self.save_mission_board_action)
         self.pages.addWidget(self.mission_board)
 
@@ -6087,6 +6090,50 @@ class EnkyronWindow(QMainWindow):
         self.calendar_detach_placeholder = None
         self.calendar_detached_window = None
 
+    def toggle_projects_window(self):
+        """Detach the existing Projects board into another native window."""
+        if self.projects_detached_window is not None:
+            self.projects_detached_window.close()
+            return
+        slot = self.pages.indexOf(self.mission_board)
+        if slot < 0:
+            return
+        placeholder = self._detached_notice("Projects")
+        self.pages.removeWidget(self.mission_board)
+        self.pages.insertWidget(slot, placeholder)
+        self.pages.setCurrentIndex(slot)
+        self.projects_detach_placeholder = placeholder
+        window = DetachableModuleWindow(
+            "ENKYRON — Projects", self._return_projects_window, None
+        )
+        self.projects_detached_window = window
+        window.setCentralWidget(self.mission_board)
+        self.mission_board.detach_button.setText("Return to ENKYRON")
+        window.show()
+        # Moving a QStackedWidget page hides it; reveal the reparented board.
+        self.mission_board.show()
+        self.mission_board.raise_()
+        window.activateWindow()
+
+    def _return_projects_window(self):
+        """Restore the identical Projects widget, including current selection."""
+        window = self.projects_detached_window
+        if window is None:
+            return
+        board = window.takeCentralWidget()
+        placeholder = self.projects_detach_placeholder
+        slot = self.pages.indexOf(placeholder) if placeholder is not None else -1
+        if board is not None and slot >= 0:
+            self.pages.removeWidget(placeholder)
+            self.pages.insertWidget(slot, board)
+            self.pages.setCurrentIndex(slot)
+            board.show()
+        if placeholder is not None:
+            placeholder.deleteLater()
+        self.mission_board.detach_button.setText("Open in window")
+        self.projects_detach_placeholder = None
+        self.projects_detached_window = None
+
     def preview_mail_local_record(self, kind, index):
         """Preview saved drafts and sent submissions inside the Mail reading pane."""
         if kind not in ("sent", "drafts") or not isinstance(index, int):
@@ -6192,6 +6239,8 @@ class EnkyronWindow(QMainWindow):
             self.mail_detached_window.close()
         if self.calendar_detached_window is not None:
             self.calendar_detached_window.close()
+        if self.projects_detached_window is not None:
+            self.projects_detached_window.close()
         if self.batch_review_detached_window is not None:
             self.batch_review_detached_window.close()
         # Calendar editors are independent windows and must close with ENKYRON.

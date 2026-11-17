@@ -43,6 +43,7 @@ class MissionBoardView(QWidget):
 
     crmRefreshRequested = Signal()
     missionRefreshRequested = Signal()
+    detachRequested = Signal()
     writeRequested = Signal(str, dict)
 
     def __init__(self, parent=None):
@@ -84,6 +85,11 @@ class MissionBoardView(QWidget):
         self.mission_reload_button.clicked.connect(
             lambda: self.missionRefreshRequested.emit())
         heading.addWidget(self.mission_reload_button)
+        self.detach_button = QPushButton("Open in window")
+        self.detach_button.setObjectName("enkyronMissionDetach")
+        self.detach_button.setAccessibleName("Open Projects in a separate window")
+        self.detach_button.clicked.connect(self.detachRequested.emit)
+        heading.addWidget(self.detach_button)
         root.addLayout(heading)
 
         # Quiet status line: hidden during normal use; shown only for demo/errors.
