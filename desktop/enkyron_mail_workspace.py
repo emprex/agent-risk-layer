@@ -774,6 +774,10 @@ class MailInboxView(QWidget):
             count = unread if isinstance(unread, int) and 0 <= unread <= 1000000 else 0
             display = name + ("  (" + str(count) + ")" if count else "")
             item = QTreeWidgetItem([display])
+            if count:
+                font = QFont(item.font(0))
+                font.setBold(True)
+                item.setFont(0, font)
             item.setToolTip(0, name + (" — " + str(count) + " unread" if count else ""))
             item.setData(0, Qt.ItemDataRole.UserRole, key)
             self.folder_tree.addTopLevelItem(item)
