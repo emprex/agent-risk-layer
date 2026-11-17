@@ -360,6 +360,8 @@ class MailInboxView(QWidget):
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
     localCompanyLinkRequested = Signal(str, str)
+    taskFromMailRequested = Signal(str, str, str)
+    taskFromSavedMailRequested = Signal(dict)
     localTicketLinkRequested = Signal(str, str)
     attachmentRequested = Signal(str, str)
     attachmentOpenRequested = Signal(str, str, str, str, int)
@@ -639,6 +641,13 @@ class MailInboxView(QWidget):
         self.ticket_link_button.clicked.connect(self._request_ticket_link)
         self.ticket_link_button.hide()
         reply_toolbar.addWidget(self.ticket_link_button)
+        self.followup_task_button = QPushButton("Create follow-up task…")
+        self.followup_task_button.setObjectName("enkyronMailCreateTask")
+        self.followup_task_button.setToolTip(
+            "Prepare a Calendar task from this saved email; nothing is sent")
+        self.followup_task_button.clicked.connect(self._request_followup_task)
+        self.followup_task_button.hide()
+        reply_toolbar.addWidget(self.followup_task_button)
         self.document_dossier_button = QPushButton("Save to dossier…")
         self.document_dossier_button.setObjectName(
             "enkyronMailSaveToDossier"
@@ -1198,6 +1207,7 @@ class MailInboxView(QWidget):
         self.full_text_button.hide()
         self.crm_link_button.hide()
         self.ticket_link_button.hide()
+        self.followup_task_button.hide()
         self.attachment_button.hide()
         self.attachment_back_button.hide()
         self.attachment_image_label.clear()
@@ -1618,6 +1628,7 @@ class MailInboxView(QWidget):
         self.full_text_button.hide()
         self.crm_link_button.hide()
         self.ticket_link_button.hide()
+        self.followup_task_button.hide()
         self.attachment_button.hide()
         self.attachment_back_button.hide()
         self.attachment_image_label.clear()
@@ -1651,6 +1662,7 @@ class MailInboxView(QWidget):
             self.reader_stack.setCurrentIndex(1)
             if kind == "sent":
                 self._show_sent_company_link(thread_id)
+            self._show_saved_task_action()
             self.localRecordRequested.emit(kind, thread_id)
             return
         if self.local_mode and source == "filed-record":
@@ -1664,6 +1676,7 @@ class MailInboxView(QWidget):
                 "Moving it never changes provider delivery or CRM audit records."
             )
             self.reader_stack.setCurrentIndex(1)
+            self._show_saved_task_action()
             return
         if source not in self._mailboxes:
             return
@@ -1745,6 +1758,89 @@ class MailInboxView(QWidget):
             self.crm_link_button.setToolTip(
                 "No saved draft reference; cannot safely associate this email.")
         self.crm_link_button.show()
+
+    def _saved_task_context(self):
+        if not self.local_mode or self.connection_state != "connected":
+            return None
+        selected = self.thread_list.currentItem()
+        reference = (selected.data(Qt.ItemDataRole.UserRole)
+                     if selected is not None else None)
+        if not isinstance(reference, tuple) or len(reference) != 2:
+            return None
+        source, index = reference
+        if not isinstance(index, int):
+            return None
+        if source == "filed-record":
+            if self.selected_folder not in ("archive", "spam", "trash"):
+                return None
+            records = self._filed_records
+        elif source in ("local-sent", "local-drafts"):
+            if self.selected_folder != source.removeprefix("local-"):
+                return None
+            records = self.items
+        else:
+            return None
+        if not 0 <= index < len(records):
+            return None
+        record = records[index]
+        if not isinstance(record, dict):
+            return None
+        kind = (record.get("original_kind") if source == "filed-record"
+                else source.removeprefix("local-"))
+        mailbox = record.get("mailbox_key")
+        draft_id = record.get("draft_id")
+        if (kind not in ("sent", "drafts")
+                or mailbox not in self._mailboxes
+                or not isinstance(draft_id, str)
+                or not _MAIL_UUID.fullmatch(draft_id)):
+            return None
+        return {
+            "source": source,
+            "row": index,
+            "kind": kind,
+            "folder": self.selected_folder,
+            "mailbox": mailbox,
+            "draft_id": draft_id,
+            "subject": str(record.get("subject") or "(No subject)")[:200],
+            "recipient": str(record.get("recipient_email") or "")[:254],
+        }
+
+    def _show_saved_task_action(self):
+        context = self._saved_task_context()
+        if context is None:
+            return
+        self.followup_task_button.setText(
+            "Create follow-up task…" if context["kind"] == "sent"
+            else "Create task…")
+        self.followup_task_button.show()
+
+    def _request_followup_task(self):
+        if (not self.local_mode
+                or self.connection_state != "connected"
+                or self.followup_task_button.isHidden()
+                or self.reader_stack.currentIndex() != 1):
+            return
+
+        context = self._saved_task_context()
+        if context is not None:
+            self.taskFromSavedMailRequested.emit(context)
+            return
+
+        current = self.thread_list.currentItem()
+        reference = (current.data(Qt.ItemDataRole.UserRole)
+                     if current is not None else None)
+        if (self.current_thread_mailbox not in self._mailboxes
+                or not isinstance(self.current_thread_id, str)
+                or not _MAIL_UUID.fullmatch(self.current_thread_id)
+                or reference != (self.current_thread_mailbox,
+                                 self.current_thread_id)):
+            return
+
+        self.taskFromMailRequested.emit(
+            self.current_thread_mailbox,
+            self.current_thread_id,
+            self.subject.text().strip()[:200]
+        )
 
     def _request_company_link(self):
         if self.local_mode and self.selected_folder == "sent":
@@ -2155,6 +2251,8 @@ class MailInboxView(QWidget):
         self.ticket_link_button.setVisible(
             self.local_mode and bool(messages)
             and self.selected_folder not in ("sent", "drafts", "spam", "trash"))
+        self.followup_task_button.setVisible(
+            self.local_mode and bool(messages))
         self.attachment_button.hide()
         # Opening a successfully rendered saved conversation marks it read.
         # Never mark unread items read on a failed/empty load or stale selection.

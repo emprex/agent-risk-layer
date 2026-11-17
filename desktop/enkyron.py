@@ -1820,6 +1820,10 @@ class EnkyronWindow(QMainWindow):
             self.save_mail_attachment_as)
         self.mail_inbox.localCompanyLinkRequested.connect(self.open_mail_company_link)
         self.mail_inbox.localTicketLinkRequested.connect(self.open_mail_ticket_link)
+        self.mail_inbox.taskFromMailRequested.connect(
+            self.open_mail_followup_task)
+        self.mail_inbox.taskFromSavedMailRequested.connect(
+            self.open_saved_mail_followup_task)
         self.mail_inbox.replySubmitRequested.connect(
             self.send_inline_mail_reply)
         self.mail_inbox.replyPreviewRequested.connect(
@@ -4493,6 +4497,74 @@ class EnkyronWindow(QMainWindow):
         save.clicked.connect(submit)
         dialog.show()
         read_existing()
+
+    def open_mail_followup_task(self, mailbox, thread_id, subject):
+        """Prepare a local task; source reference is notes, not a CRM link."""
+        if (mailbox not in ("direction", "support")
+                or not isinstance(thread_id, str)
+                or not re.fullmatch(
+                    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}",
+                    thread_id)
+                or mailbox != self.mail_inbox.current_thread_mailbox
+                or thread_id != self.mail_inbox.current_thread_id
+                or self.mail_inbox.selected_folder in
+                    ("sent", "drafts")
+                or self.mail_inbox.followup_task_button.isHidden()):
+            return
+
+        subject = " ".join(str(subject or "").split())[:150] or "Mail conversation"
+        notes = (
+            "Source: ENKYRON Mail conversation (local reference only)\n"
+            f"Mailbox: {mailbox}\n"
+            f"Thread ID: {thread_id}\n"
+            f"Subject: {subject}\n\n"
+            "Follow-up instructions:\n"
+        )
+        self.navigation.setCurrentRow(4)
+        self.calendar_view.view_picker.setCurrentIndex(2)
+        self.calendar_view.calendar.setSelectedDate(QDate.currentDate())
+        self.calendar_view.open_editor(
+            "task",
+            prefill={"title": ("Follow up: " + subject)[:200],
+                     "notes": notes}
+        )
+
+    def open_saved_mail_followup_task(self, context):
+        """Prepare a task from a stable saved-mail record, with human review."""
+        if not isinstance(context, dict):
+            return
+        live = self.mail_inbox._saved_task_context()
+        if (live is None or live != context
+                or self.mail_inbox.followup_task_button.isHidden()):
+            return
+
+        kind = live["kind"]
+        subject = " ".join(live["subject"].split())[:150]
+        recipient = " ".join(live["recipient"].split())[:254]
+        title = (
+            ("Follow up: " if kind == "sent" else "Review draft: ")
+            + (subject or "Saved email")
+        )[:200]
+
+        notes = "\n".join([
+            "Source: ENKYRON saved " +
+            ("sent message" if kind == "sent" else "unsent draft"),
+            "Reference type: local saved-mail record",
+            "Folder: " + live["folder"],
+            "Mailbox: " + live["mailbox"],
+            "Saved draft ID: " + live["draft_id"],
+            "Recipient: " + recipient,
+            "Subject: " + subject,
+            "",
+            "Follow-up instructions:",
+        ])
+
+        self.navigation.setCurrentRow(4)
+        self.calendar_view.view_picker.setCurrentIndex(2)
+        self.calendar_view.calendar.setSelectedDate(QDate.currentDate())
+        self.calendar_view.open_editor(
+            "task", prefill={"title": title, "notes": notes}
+        )
 
     def open_mail_company_link(self, mailbox, thread_id):
         """E04-04: operator-selected existing company, not inferred client."""

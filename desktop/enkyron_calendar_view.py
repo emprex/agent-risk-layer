@@ -471,8 +471,15 @@ class MailCalendarView(QWidget):
                 len(self.event_rows), len(self.task_rows), mode.capitalize())
         )
 
-    def open_editor(self, kind):
-        dialog = CalendarEntryDialog(self.calendar.selectedDate(), kind)
+    def open_editor(self, kind, prefill=None):
+        chosen_date = (QDate.currentDate() if prefill is not None
+                       else self.calendar.selectedDate())
+        dialog = CalendarEntryDialog(chosen_date, kind)
+        if kind == "task" and isinstance(prefill, dict):
+            dialog.title_input.setText(
+                str(prefill.get("title") or "")[:200])
+            dialog.notes_input.setPlainText(
+                str(prefill.get("notes") or "")[:4000])
         self._dialogs.append(dialog)
         def submit():
             try:
