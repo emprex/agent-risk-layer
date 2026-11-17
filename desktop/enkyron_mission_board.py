@@ -425,7 +425,9 @@ class MissionBoardView(QWidget):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        return dialog.exec() == QDialog.DialogCode.Accepted
+        # Retain the dialog while its field widgets are read by the caller.
+        # Returning only a bool destroys the C++ child widgets on return.
+        return dialog if dialog.exec() == QDialog.DialogCode.Accepted else None
 
     def _create_mission(self):
         if not self.new_button.isEnabled():
@@ -444,9 +446,10 @@ class MissionBoardView(QWidget):
         due = QLineEdit()
         due.setPlaceholderText("YYYY-MM-DD (optional)")
         due.setMaxLength(10)
-        if not self._form("New planning mission", [
+        form_dialog = self._form("New planning mission", [
             ("CRM company", companies), ("Mission title", title),
-            ("Description", description), ("Due date", due)]):
+            ("Description", description), ("Due date", due)])
+        if form_dialog is None:
             return
         if len(title.text().strip()) < 5 or len(description.toPlainText().strip()) < 20:
             QMessageBox.warning(self, "Mission", "Title needs 5 characters and description 20.")
@@ -470,8 +473,9 @@ class MissionBoardView(QWidget):
         due = QLineEdit()
         due.setPlaceholderText("YYYY-MM-DD (optional)")
         due.setMaxLength(10)
-        if not self._form("Add work item", [
-            ("Type", kind), ("Title", title), ("Due date", due)]):
+        form_dialog = self._form("Add work item", [
+            ("Type", kind), ("Title", title), ("Due date", due)])
+        if form_dialog is None:
             return
         if len(title.text().strip()) < 5:
             QMessageBox.warning(self, "Work item", "Title needs at least 5 characters.")
@@ -518,9 +522,10 @@ class MissionBoardView(QWidget):
         note = QPlainTextEdit()
         note.setPlaceholderText("Internal work description, min. 10 characters")
         note.setMaximumHeight(100)
-        if not self._form("Log internal draft time", [
+        form_dialog = self._form("Log internal draft time", [
             ("Work item", item), ("Work date", day),
-            ("Minutes", minutes), ("Internal note", note)]):
+            ("Minutes", minutes), ("Internal note", note)])
+        if form_dialog is None:
             return
         if len(note.toPlainText().strip()) < 10:
             QMessageBox.warning(self, "Time entry", "Note needs at least 10 characters.")
