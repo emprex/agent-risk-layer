@@ -19,10 +19,10 @@ class MailUXTests(unittest.TestCase):
 
     def setUp(self):
         self.view = MailInboxView()
-        self.view.set_owner_mailboxes([
+        self.view.set_owner_mailboxes({"mailboxes": [
             {"key": "support", "address": "support@agentrisklayer.com"},
             {"key": "direction", "address": "owner@agentrisklayer.com"},
-        ])
+        ]})
         self.view.set_local_mode()
 
     def tearDown(self):
