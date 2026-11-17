@@ -32,6 +32,27 @@
 
 **Recette effectivement observée le 14/11 :** Xurrent et Threat ResQ, toutes deux `Contacted` ; échéance Xurrent au 16/11 enregistrée et retrouvée sur Home. Ce n'est pas une preuve que l'ensemble des variantes de pagination, filtres et étapes a été testé.
 
+## 2bis. CRM : procédure commerciale standard et discipline de données — 17 novembre 2026
+
+**Statut :** convention opérateur pour les nouveaux prospects dans ENKYRON. Cette procédure uniformise les fiches et la prospection, **sans autoriser de tests de sécurité ni d'envois automatiques**. Ne pas réinventer l'ordre d'un prospect à l'autre ; documenter les améliorations avant de changer de méthode.
+
+**Ordre de travail unique :**
+
+1. **Company / association historique** — depuis `CRM > Existing prospect research`, vérifier l'identité de l'éditeur, son produit, son site et d'éventuels doublons ; conserver le prospect ID et la provenance. Créer ou lier une seule entreprise réelle. Si le nom de l'import comprend un nom de produit, corriger le nom CRM après association (ex. « Mindsight Ventures — Lona » → « Mindsight Ventures »). Toute correction porte une raison tracée.
+2. **Company fields** — nom public, nom légal uniquement si justifié, secteur, pays/ville uniquement si fondés, site officiel, relation `Prospect`. Ne pas inventer de forme juridique, pays, adresse, coordonnées ni relation client. `Reason` justifie une correction de champ ; ce n'est pas une note de recherche.
+3. **Research links + Messages / notes** — consigner la date de vérification, URLs d'origine, produits et fonctionnalités vérifiables, pertinence ARL, limites de connaissance et absence d'autorisation d'audit. Utiliser `Record activity > Company — general research / notes > Internal note`. Le fait qu'un texte soit enregistré ne signifie pas qu'un email a été envoyé.
+4. **Contacts** — un enregistrement par personne ou boîte fonctionnelle réellement identifiée ; titre avec contexte temporel s'il peut avoir changé. Ne pas inférer d'email nominatif d'un domaine ; conserver les emails inconnus vides. Ne pas déduire le consentement marketing de la disponibilité d'une adresse.
+5. **Qualification** — `Potential fit / Needs research / Not a fit / On hold`, priorité motivée, note technique sourcée, prochaine action et confirmation humaine. Une qualification n'est pas une preuve de vulnérabilité, de contrat ou d'intérêt du prospect.
+6. **Opportunity** — créer au stade `Research`, enregistrer une prochaine tâche **concrète** (pas un historique mélangé) et éventuellement une échéance. Ne pas créer d'opportunité en doublon ; garder la probabilité `Not estimated` si elle n'est pas fondée.
+7. **Outreach** — rechercher la documentation technique propre à chaque prospect ; produire un PDF anglais à valeur technique (données publiques, frontières à vérifier, scénarios contrôlés, méthode, livrables, sources). Inspecter *toutes les pages rendues* : pas de texte tronqué, superposé ou débordant. Rédiger l'email en anglais à la première personne, signé **Guillaume Strohecker, Founder | AGENTRISKLAYER LTD**, avec une question technique spécifique ; jamais une signature impersonnelle. N'envoyer qu'à une adresse publique vérifiée, après relecture humaine dans ENKYRON ; privilégier un échange par email. Aucun test du système cible sans autorisation distincte.
+8. **Sent / Follow-up** — confirmer le message réel et sa pièce jointe dans `Mail > Sent` ou une preuve de transport équivalente. **Seulement après confirmation**, passer l'opportunité à `Contacted`, noter la prochaine action et une date de relance. Ne pas changer automatiquement la qualification après envoi. La note d'activité n'est pas la preuve du transport.
+
+**Contrôle qualité constant :** informations distinguées `verified / self-declared / historical / unverified`, sources et dates conservées, aucune adresse inventée, aucune vulnérabilité supposée, aucun client fictif, aucune duplication, aucun envoi non approuvé.
+
+**Méthode d'assistance opérateur :** guider **un seul écran et une seule action à la fois**. Fournir le texte exact pour le champ actuellement affiché, puis attendre la confirmation de l'interface avant de dérouler les autres étapes. Les textes préparatoires peuvent exister en coulisses, mais ne pas noyer l'opérateur sous plusieurs formulaires simultanés.
+
+**Cible d'amélioration future :** assistances EIRYON/ENKYRON pour recherche sourcée, extraction, déduplication et pré-remplissage ; les corrections d'identité, qualifications, envois, évaluations de sécurité et décisions finales conservent leurs contrôles humains.
+
 ## 3. CRM : services et propositions — PARCOURS PARTIELLEMENT OBSERVÉ
 
 `CRM > Proposals > Service catalog…` ouvre la liste et les versions des services.
