@@ -2,7 +2,11 @@
 
 Offline tests. No provider token, database, mail send or filesystem writes.
 """
+import os
 import unittest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PySide6.QtWidgets import QApplication, QTextBrowser
 
 from desktop.enkyron_mail_html import safe_mail_html
 from desktop.enkyron_mail_workspace import format_mail_message_cards
@@ -32,6 +36,19 @@ class InertHTMLMailTests(unittest.TestCase):
         self.assertNotIn("<style", cards)
         self.assertNotIn("<script", cards)
         self.assertNotIn(">None<", cards)
+        # Check what the actual Qt reader displays, not only the generated HTML.
+        app = QApplication.instance() or QApplication([])
+        reader = QTextBrowser()
+        try:
+            reader.setOpenExternalLinks(False)
+            reader.setOpenLinks(False)
+            reader.setHtml(cards)
+            visible = reader.toPlainText()
+            self.assertIn("Dear Guillaume", visible)
+            self.assertIn("investment seminar", visible)
+            self.assertNotIn("None", visible)
+        finally:
+            reader.close()
 
     def test_active_content_removed_and_links_only_visible_as_text(self):
         source = (
