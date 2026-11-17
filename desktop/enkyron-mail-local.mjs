@@ -144,13 +144,15 @@ export async function localMailList(pool,actor,input={}){
   const rows=(await pool.query(
     'SELECT t.mailbox_key AS mailbox,t.thread_id AS id,t.subject,'+
     'COALESCE(external_mail.sender,external_to.recipient,\'\') AS sender,'+
-    'GREATEST(t.last_message_at,COALESCE((SELECT MAX(m_sort.created_at) '+
-    'FROM enkyron_mail_local_messages m_sort WHERE '+
-    'm_sort.workspace_key=t.workspace_key AND m_sort.mailbox_key=t.mailbox_key '+
-    'AND m_sort.thread_id=t.thread_id),\'\')) AS sort_at,'+
+    'GREATEST(t.last_message_at,COALESCE(sort_hint.latest_created_at,\'\')) AS sort_at,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder,'+
     "COALESCE(string_agg(DISTINCT l.name, ', '), '') AS labels "+
-    'FROM enkyron_mail_local_threads t LEFT JOIN enkyron_mail_thread_labels tl '+
+    'FROM enkyron_mail_local_threads t '+
+    'LEFT JOIN LATERAL (SELECT MAX(m_sort.created_at) AS latest_created_at '+
+    'FROM enkyron_mail_local_messages m_sort WHERE '+
+    'm_sort.workspace_key=t.workspace_key AND m_sort.mailbox_key=t.mailbox_key '+
+    'AND m_sort.thread_id=t.thread_id) sort_hint ON TRUE '+
+    'LEFT JOIN enkyron_mail_thread_labels tl '+
     'ON tl.workspace_key=t.workspace_key AND tl.mailbox_key=t.mailbox_key '+
     'AND tl.thread_id=t.thread_id LEFT JOIN enkyron_mail_local_labels l '+
     'ON l.workspace_key=tl.workspace_key AND l.label_id=tl.label_id '+
@@ -191,7 +193,8 @@ export async function localMailList(pool,actor,input={}){
     'AND tl2.thread_id=t.thread_id AND '+
     'POSITION(LOWER($4) IN LOWER(l2.name))>0)) '+
     'GROUP BY t.mailbox_key,t.thread_id,t.subject,external_mail.sender,external_to.recipient,'+
-    't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder '+
+    't.last_message_at,sort_hint.latest_created_at,'+
+    't.unread,t.flagged,t.folder_key,t.provider_folder '+
     'ORDER BY sort_at '+direction+',t.mailbox_key,t.thread_id LIMIT 51 OFFSET $5',
     [key,folder,mailbox,search,page*50,OWN_EMAILS]
   )).rows;
