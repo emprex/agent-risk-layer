@@ -119,6 +119,10 @@ Before proposing merge:
 - review Git status;
 - explain exactly what changed and what remains uncertain.
 
+## ENKYRON CRM operating consistency
+
+For every real prospect, use the **single, ordered, repeatable operator process** documented in [ENKYRON CRM procédure commerciale standard](docs/enkyron/ENKYRON_ARL_GUIDE_UTILISATEUR.md#2bis-crm--procédure-commerciale-standard-et-discipline-de-données--17-novembre-2026). This is the live prospecting convention: **Company → Research notes → Contacts → Qualification → Opportunity → Outreach → Sent verification → Follow-up**. Work one GUI screen at a time, keep sourced facts separate from unverified claims, reuse existing CRM entities, and do not turn research into customer status, a security finding or authority for testing. Personalized outreach is signed by Guillaume; never mark `Contacted` before confirming the outbound message and attachment.
+
 ## Commercial/public-site discipline
 
 The public surface belongs here and should remain focused on presenting ARL and receiving assessment requests.
