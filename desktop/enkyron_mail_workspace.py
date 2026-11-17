@@ -1584,6 +1584,10 @@ class MailInboxView(QWidget):
             self._show_empty("No matching conversations",
                 "Try a different search term.")
         else:
+            if self.thread_list.currentItem() is None:
+                self.reader_empty_text.setText(
+                    "Select a conversation to read it")
+                self.reader_stack.setCurrentIndex(0)
             self.mail_stack.setCurrentIndex(1)
 
     def _selected(self, current, _previous):

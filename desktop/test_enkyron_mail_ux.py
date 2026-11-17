@@ -100,6 +100,22 @@ class MailUXTests(unittest.TestCase):
         self.assertEqual(self.view.thread_list.item(0).data(
             Qt.ItemDataRole.UserRole),("support",THREAD))
 
+    def test_loaded_inbox_never_claims_empty(self):
+        self.assertTrue(self.view.show_threads("all", [{
+            "mailbox": "support", "id": THREAD,
+            "subject": "Security discussion", "folder_key": "inbox"
+        }]))
+        self.assertEqual(self.view.thread_list.count(), 1)
+        self.assertEqual(
+            self.view.reader_empty_text.text(),
+            "Select a conversation to read it")
+        self.view.search.setText("no-match-xyz")
+        self.assertIn("No matching", self.view.reader_empty_text.text())
+        self.view.search.clear()
+        self.assertEqual(
+            self.view.reader_empty_text.text(),
+            "Select a conversation to read it")
+
     def test_non_mail_items_cannot_be_dragged(self):
         self.view.show_local_records("sent",[],False)
         self.assertIsInstance(self.view.thread_list,MailThreadList)

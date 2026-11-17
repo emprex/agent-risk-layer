@@ -386,7 +386,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             calls.append((command, payload if payload is not None else arg))
             if callback is None:
                 return
-            if command == "mail-local-messages":
+            if command == "mail-thread-conversation":
                 callback({"mailbox":"direction","thread_id":THREAD,
                     "items":[{"id":message,"text":"A client request",
                          "from":"unknown@example.invalid",
@@ -411,6 +411,9 @@ class MailNativeUXSmoke(unittest.TestCase):
         window = None
         try:
             window = EnkyronWindow()
+            window.navigation.setCurrentRow(3)
+            window.show()
+            self.app.processEvents()
             window.mail_inbox.set_owner_mailboxes(CARD)
             window.mail_inbox.set_connection_state("connected")
             self.assertTrue(window.mail_inbox.show_threads("all",[{
@@ -422,6 +425,9 @@ class MailNativeUXSmoke(unittest.TestCase):
             window.mail_inbox.crm_link_button.click()
             dialog = window.mail_company_link_dialog
             self.assertTrue(dialog.isVisible())
+            self.assertTrue(dialog.isWindow())
+            self.assertEqual(
+                dialog.windowModality(), Qt.WindowModality.NonModal)
             submit = dialog.findChild(QPushButton,"enkyronMailCompanySubmit")
             search = dialog.findChild(QLineEdit,"enkyronMailCompanySearch")
             find = dialog.findChild(QPushButton,"enkyronMailCompanyFind")

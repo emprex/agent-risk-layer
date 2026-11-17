@@ -56,6 +56,76 @@ class MailTicketLinkSmoke(unittest.TestCase):
                 window.deleteLater()
             DesktopBridge.call = original
 
+    def test_browse_tickets_without_number_and_independent_window(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QComboBox, QCheckBox
+
+        original = DesktopBridge.call
+        calls = []
+
+        def stub(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg))
+            if command == "mail-local-ticket-links" and callback:
+                callback({"available": True, "items": []}, None)
+            elif command == "tickets" and callback:
+                callback({"items": [{
+                    "id": THREAD,
+                    "ticket_number": "ARL-TEST-001",
+                    "title": "Existing security assessment",
+                    "client_name": "Test Client",
+                    "status": "open",
+                    "archived_at": None
+                }], "more": False}, None)
+
+        DesktopBridge.call = stub
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.navigation.setCurrentRow(3)
+            window.show()
+            self.app.processEvents()
+
+            inbox = window.mail_inbox
+            inbox.local_mode = True
+            inbox.current_thread_mailbox = "direction"
+            inbox.current_thread_id = THREAD
+            inbox._folder = "inbox"
+            inbox.ticket_link_button.show()
+            inbox.ticket_link_button.setEnabled(True)
+
+            window.open_mail_ticket_link("direction", THREAD)
+            dialog = window.mail_ticket_link_dialog
+            self.assertTrue(dialog.isVisible())
+            self.assertEqual(
+                dialog.windowModality(), Qt.WindowModality.NonModal)
+
+            choice = dialog.findChild(QComboBox, "enkyronMailTicketChoice")
+            self.assertEqual(choice.count(), 2)
+            self.assertIn("Existing security assessment", choice.itemText(1))
+            self.assertIn("Test Client", choice.itemText(1))
+            self.assertIn("open", choice.itemText(1))
+            self.assertIn(("tickets", ""), calls)
+
+            submit = dialog.findChild(QPushButton, "enkyronMailTicketSubmit")
+            self.assertFalse(submit.isEnabled())
+
+            approval = dialog.findChild(QCheckBox, "enkyronMailTicketConfirm")
+            choice.setCurrentIndex(1)
+            approval.setChecked(True)
+            choice.setCurrentIndex(0)
+            self.assertFalse(approval.isChecked())
+            self.assertFalse(submit.isEnabled())
+
+            self.assertNotIn("mail-local-ticket-link",
+                             [command for command, _ in calls])
+        finally:
+            if window:
+                if getattr(window, "mail_ticket_link_dialog", None):
+                    window.mail_ticket_link_dialog.close()
+                window.close()
+                window.deleteLater()
+            DesktopBridge.call = original
+
     def test_user_action_required_before_link_dialog_is_opened(self):
         original = DesktopBridge.call
         calls = []

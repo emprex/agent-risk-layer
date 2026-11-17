@@ -4101,6 +4101,9 @@ class EnkyronWindow(QMainWindow):
             previous.raise_()
             return
         dialog = QDialog(self)
+        dialog.setWindowFlags(
+            Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint)
+        dialog.setWindowModality(Qt.WindowModality.NonModal)
         dialog.setWindowTitle("ENKYRON · Link Mail to existing Ticket")
         dialog.setMinimumWidth(680)
         layout = QVBoxLayout(dialog)
@@ -4119,7 +4122,7 @@ class EnkyronWindow(QMainWindow):
         search = QLineEdit()
         search.setObjectName("enkyronMailTicketSearch")
         search.setMaxLength(100)
-        search.setPlaceholderText("Search exact ticket number, title or client…")
+        search.setPlaceholderText("Filter by ticket number, title or client (optional)…")
         search_bar.addWidget(search, 1)
         find = QPushButton("Find tickets")
         find.setObjectName("enkyronMailTicketFind")
@@ -4128,6 +4131,9 @@ class EnkyronWindow(QMainWindow):
         select = QComboBox()
         select.setObjectName("enkyronMailTicketChoice")
         select.addItem("Choose an existing ticket…", None)
+        select.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        select.setMinimumContentsLength(32)
         layout.addWidget(select)
         note = QPlainTextEdit()
         note.setObjectName("enkyronMailTicketReason")
@@ -4162,6 +4168,8 @@ class EnkyronWindow(QMainWindow):
                 and select.currentData() not in state["linked"]
                 and checked.isChecked()
                 and 30 <= len(note.toPlainText().strip()) <= 1000)
+        select.currentIndexChanged.connect(
+            lambda _index: checked.setChecked(False))
         select.currentIndexChanged.connect(enable_save)
         checked.toggled.connect(enable_save)
         note.textChanged.connect(enable_save)
@@ -4189,12 +4197,13 @@ class EnkyronWindow(QMainWindow):
                     "Already linked: " + ", ".join(numbers[:10]) if numbers
                     else "No linked tickets.")
                 enable_save()
+                lookup()
             self.bridge.call("mail-local-ticket-links", payload={
                 "mailbox": mailbox, "thread_id": thread_id}, callback=received)
 
         def lookup():
             term = search.text().strip()
-            if not state["ready"] or len(term) < 2:
+            if not state["ready"] or (term and len(term) < 2):
                 notice.setText("Enter at least two characters to search existing tickets.")
                 return
             state["seq"] += 1
@@ -4222,10 +4231,22 @@ class EnkyronWindow(QMainWindow):
                     client = str(item.get("client_name") or "").strip()
                     if not isinstance(tid, str) or len(tid) != 36 or not number or not client:
                         continue
+                    title = str(item.get("title") or "(Untitled)")
+                    status = str(item.get("status") or "Unknown")
+                    label = "{} · {} · {} [{}]".format(
+                        number[:60], title[:100], client[:80], status[:30])
                     state["tickets"][tid] = (number, client)
-                    select.addItem("{} · {}".format(number[:70], client[:80]), tid)
-                notice.setText("{} matching existing ticket(s).".format(
-                    len(state["tickets"])))
+                    select.addItem(label, tid)
+                    select.setItemData(
+                        select.count() - 1, label,
+                        Qt.ItemDataRole.ToolTipRole)
+                count = len(state["tickets"])
+                notice.setText(
+                    "{} ticket(s) available{}.".format(
+                        count,
+                        " · refine the search to see more"
+                        if data.get("more") is True else "")
+                    if count else "No matching active tickets.")
                 enable_save()
             self.bridge.call("tickets", term, callback=found)
         search.returnPressed.connect(lookup)
@@ -4470,7 +4491,7 @@ class EnkyronWindow(QMainWindow):
                 callback=check_mail_company
             )
         save.clicked.connect(submit)
-        dialog.open()
+        dialog.show()
         read_existing()
 
     def open_mail_company_link(self, mailbox, thread_id):
@@ -4486,6 +4507,9 @@ class EnkyronWindow(QMainWindow):
             old.activateWindow()
             return
         dialog = QDialog(self)
+        dialog.setWindowFlags(
+            Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint)
+        dialog.setWindowModality(Qt.WindowModality.NonModal)
         dialog.setWindowTitle("ENKYRON · Link Mail to existing CRM company")
         dialog.setMinimumWidth(610)
         layout = QVBoxLayout(dialog)
@@ -4628,7 +4652,7 @@ class EnkyronWindow(QMainWindow):
                 payload={"mailbox":mailbox,"thread_id":thread_id,
                          "company_id":cid,"confirmed":True}, callback=saved)
         link.clicked.connect(submit)
-        dialog.open()
+        dialog.show()
 
     def prepare_mail_reply(self, mailbox, thread_id):
         """Resolve the real reply target from Resend before opening the editor."""
