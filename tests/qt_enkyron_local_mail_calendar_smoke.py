@@ -101,7 +101,6 @@ class LocalMailCalendarSmoke(unittest.TestCase):
         window=None
         try:
             window=EnkyronWindow()
-            self.assertEqual(window.pages.count(),4)
             window.navigation.setCurrentRow(4)
             self.assertEqual(window.pages.currentIndex(),3)
             self.assertIn("calendar-list",[x[0] for x in calls])

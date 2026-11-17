@@ -52,7 +52,7 @@ export async function calendarList(pool,actor,input={}){
       [key,start,end]
     ),
     pool.query(
-      'SELECT task_id AS id,title,due_at,completed_at,crm_company_id '+
+      'SELECT task_id AS id,title,due_at,completed_at,crm_company_id,notes '+
       'FROM enkyron_calendar_tasks WHERE workspace_key=$1 '+
       'AND (due_at IS NULL OR (due_at>=$2 AND due_at<$3)) '+
       'ORDER BY due_at ASC NULLS LAST LIMIT 300',
@@ -87,12 +87,15 @@ export async function calendarCreate(pool,actor,input){
 export async function calendarCreateTask(pool,actor,input){
   const key=scope(actor),title=textValue(input?.title,200),
     due=input?.due_at?iso(input.due_at):null,id=randomUUID();
+  const notes=input?.notes??'';
+  if(typeof notes!=='string'||notes.length>4000||notes.includes('\u0000'))
+    throw Error('Invalid calendar task notes');
   const client=await pool.connect();
   try{
     await client.query('BEGIN');
     await client.query(
-      'INSERT INTO enkyron_calendar_tasks(workspace_key,task_id,title,due_at) '+
-      'VALUES($1,$2,$3,$4)',[key,id,title,due]
+      'INSERT INTO enkyron_calendar_tasks(workspace_key,task_id,title,due_at,notes) '+
+      'VALUES($1,$2,$3,$4,$5)',[key,id,title,due,notes]
     );
     await client.query(
       'INSERT INTO enkyron_mail_local_events '+
@@ -101,7 +104,7 @@ export async function calendarCreateTask(pool,actor,input){
       [randomUUID(),key,actor,JSON.stringify({task_id:id})]
     );
     await client.query('COMMIT');
-    return {id,title,due_at:due};
+    return {id,title,due_at:due,notes};
   }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}
   finally{client.release();}
 }
