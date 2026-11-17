@@ -35,6 +35,7 @@ test('newest is default, explicit oldest reverses database ordering',async()=>{
     assert.equal(value.sort,sort);
     assert.match(queries[0].sql,new RegExp('ORDER BY sort_at '+direction));
     assert.match(queries[0].sql,/MAX\(m_sort\.created_at\)/);
+    assert.match(queries[0].sql,/LEFT JOIN LATERAL/);
     assert.deepEqual(queries[0].args.slice(0,3),
       ['local:emprex','inbox','support']);
   }
