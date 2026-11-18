@@ -2286,6 +2286,7 @@ class EnkyronWindow(QMainWindow):
         self.calendar_view.eventCreateRequested.connect(self.create_calendar_event)
         self.calendar_view.taskCreateRequested.connect(self.create_calendar_task)
         self.calendar_view.taskCompleteRequested.connect(self.complete_calendar_task)
+        self.calendar_view.taskUpdateRequested.connect(self.update_calendar_task)
         self.calendar_view.sourceMailRequested.connect(
             self.open_calendar_source_mail)
         self.pages.addWidget(self.calendar_view)
@@ -6660,6 +6661,32 @@ class EnkyronWindow(QMainWindow):
                 return
             self.load_calendar()
         self.bridge.call("calendar-task-create", payload=data, callback=received)
+
+    def update_calendar_task(self, data):
+        task_id = data.get("id")
+
+        def written(result, error):
+            if error or not isinstance(result, dict) or result.get("id") != task_id:
+                self.calendar_view.finish_task_update(
+                    task_id, error=str(error or "Task save not confirmed."))
+                return
+
+            def reread(read_result, read_error):
+                task = (read_result.get("task") if
+                        isinstance(read_result, dict) else None)
+                if (read_error or not isinstance(task, dict)
+                        or task.get("id") != task_id):
+                    self.calendar_view.finish_task_update(
+                        task_id, error=("Save returned success, but the exact "
+                                        "task could not be reread."))
+                    return
+                self.calendar_view.finish_task_update(task_id, fresh_record=task)
+                self.calendar_view.request_range()
+
+            self.bridge.call("calendar-task-read", payload={"id": task_id},
+                             callback=reread)
+
+        self.bridge.call("calendar-task-update", payload=data, callback=written)
 
     def complete_calendar_task(self, data):
         def received(result, error):

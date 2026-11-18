@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QDate, Qt, QTime, Signal
 from PySide6.QtWidgets import (
-    QCalendarWidget, QComboBox, QDateEdit, QDialog, QFormLayout, QHBoxLayout, QLabel,
+    QCalendarWidget, QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTabWidget, QTableWidget,
     QTableWidgetItem, QTimeEdit, QVBoxLayout, QWidget, QHeaderView,
     QAbstractItemView,
@@ -97,10 +97,12 @@ def parse_task_mail_source(notes):
 class CalendarEntryDialog(QDialog):
     """Free-standing editor; no implicit mail send or meeting invitation."""
 
-    def __init__(self, selected_date, kind="event"):
+    def __init__(self, selected_date, kind="event", edit_record=None):
         super().__init__(None)
         self.kind = kind
-        self.setWindowTitle("ENKYRON · New appointment" if kind == "event"
+        self.edit_record = edit_record if kind == "task" else None
+        self.setWindowTitle("ENKYRON · Edit task" if self.edit_record else
+                            "ENKYRON · New appointment" if kind == "event"
                             else "ENKYRON · New task")
         self.resize(540, 360)
         self.setMinimumWidth(420)
@@ -134,6 +136,14 @@ class CalendarEntryDialog(QDialog):
             self.due_input = QTimeEdit(QTime(17, 0))
             self.due_input.setDisplayFormat("HH:mm")
             form.addRow("Due by", self.due_input)
+            if self.edit_record is not None:
+                self.has_due_date = QCheckBox("Task has a due date")
+                self.has_due_date.setChecked(bool(self.edit_record.get("due_at")))
+                self.has_due_date.toggled.connect(self.date_input.setEnabled)
+                self.has_due_date.toggled.connect(self.due_input.setEnabled)
+                form.addRow("", self.has_due_date)
+                self.date_input.setEnabled(self.has_due_date.isChecked())
+                self.due_input.setEnabled(self.has_due_date.isChecked())
             self.notes_input = QPlainTextEdit()
             self.notes_input.setPlaceholderText("Optional task notes")
             self.notes_input.setMaximumHeight(90)
@@ -143,11 +153,20 @@ class CalendarEntryDialog(QDialog):
         helper.setStyleSheet("color: #617184;")
         helper.setWordWrap(True)
         layout.addWidget(helper)
+        if self.edit_record is not None:
+            original = self.edit_record
+            self.title_input.setText(str(original.get("title") or ""))
+            self.notes_input.setPlainText(str(original.get("notes") or ""))
+            if original.get("due_at"):
+                stamp = datetime.fromisoformat(str(original["due_at"]).replace(
+                    "Z", "+00:00")).astimezone(TZ)
+                self.date_input.setDate(QDate(stamp.year, stamp.month, stamp.day))
+                self.due_input.setTime(QTime(stamp.hour, stamp.minute))
         buttons = QHBoxLayout()
         buttons.addStretch()
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
-        self.save_button = QPushButton("Save")
+        self.save_button = QPushButton("Save changes" if self.edit_record else "Save")
         self.save_button.setObjectName("enkyronCalendarSave")
         self.save_button.clicked.connect(self._validated_accept)
         buttons.addWidget(cancel)
@@ -173,7 +192,9 @@ class CalendarEntryDialog(QDialog):
                 raise ValueError("Task notes must contain at most 4000 characters.")
             return {
                 "title": title,
-                "due_at": _utc_string(_local_datetime(day, self.due_input.time())),
+                "due_at": (None if self.edit_record is not None and
+                           not self.has_due_date.isChecked() else
+                           _utc_string(_local_datetime(day, self.due_input.time()))),
                 "notes": notes
             }
         starts = _local_datetime(day, self.start_input.time())
@@ -192,11 +213,14 @@ class MailCalendarView(QWidget):
     eventCreateRequested = Signal(dict)
     taskCreateRequested = Signal(dict)
     taskCompleteRequested = Signal(dict)
+    taskUpdateRequested = Signal(dict)
     sourceMailRequested = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dialogs = []
+        self._task_editors = {}
+        self._pending_task_updates = {}
         self.task_rows = []
         self.event_rows = []
         self._agenda_records = []
@@ -530,10 +554,10 @@ class MailCalendarView(QWidget):
                 len(self.event_rows), len(self.task_rows), mode.capitalize())
         )
 
-    def open_editor(self, kind, prefill=None):
+    def open_editor(self, kind, prefill=None, edit_record=None, details_dialog=None):
         chosen_date = (QDate.currentDate() if prefill is not None
                        else self.calendar.selectedDate())
-        dialog = CalendarEntryDialog(chosen_date, kind)
+        dialog = CalendarEntryDialog(chosen_date, kind, edit_record=edit_record)
         if kind == "task" and isinstance(prefill, dict):
             dialog.title_input.setText(
                 str(prefill.get("title") or "")[:200])
@@ -550,11 +574,71 @@ class MailCalendarView(QWidget):
                 self.eventCreateRequested.emit(payload)
             else:
                 self.taskCreateRequested.emit(payload)
-        dialog.accepted.connect(submit)
+        if edit_record is None:
+            dialog.accepted.connect(submit)
+        else:
+            task_id = edit_record.get("id")
+            if task_id in self._task_editors:
+                self._dialogs.remove(dialog)
+                dialog.deleteLater()
+                existing = self._task_editors[task_id]
+                existing.raise_()
+                existing.activateWindow()
+                return
+            self._task_editors[task_id] = dialog
+            dialog.save_button.clicked.disconnect()
+
+            def save_changes():
+                try:
+                    values = dialog.build_payload()
+                except ValueError as exc:
+                    QMessageBox.warning(dialog, "Check task", str(exc))
+                    return
+                old_ref = parse_task_mail_source(edit_record.get("notes"))
+                if old_ref is not None and old_ref != parse_task_mail_source(values["notes"]):
+                    answer = QMessageBox.question(
+                        dialog, "Change Mail source reference",
+                        "The saved Mail reference was changed or removed. "
+                        "Continue with this explicit change?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No)
+                    if answer != QMessageBox.StandardButton.Yes:
+                        return
+                payload = {"id": task_id, **values, "expected": {
+                    "title": edit_record.get("title"),
+                    "due_at": edit_record.get("due_at"),
+                    "notes": edit_record.get("notes") or "",
+                    "completed_at": edit_record.get("completed_at")
+                }}
+                dialog.save_button.setEnabled(False)
+                dialog.save_button.setText("Saving…")
+                self._pending_task_updates[task_id] = (dialog, details_dialog)
+                self.taskUpdateRequested.emit(payload)
+
+            dialog.save_button.clicked.connect(save_changes)
+            dialog.finished.connect(
+                lambda _result, tid=task_id: self._task_editors.pop(tid, None))
         dialog.finished.connect(lambda _result: self._dialogs.remove(dialog)
                                 if dialog in self._dialogs else None)
         dialog.show()
         dialog.raise_()
+
+    def finish_task_update(self, task_id, fresh_record=None, error=None):
+        pending = self._pending_task_updates.pop(task_id, None)
+        if pending is None:
+            return
+        editor, details_dialog = pending
+        if error is not None:
+            editor.save_button.setText("Refresh before retrying")
+            QMessageBox.warning(
+                editor, "Edit task", str(error) +
+                "\nThe editor remains open. Verify the task in Calendar "
+                "before attempting another save.")
+            return
+        editor.accept()
+        if details_dialog is not None:
+            details_dialog.accept()
+        self._show_item_details("Task", fresh_record)
 
     def open_task_details(self, row):
         if 0 <= row < len(self.task_rows):
@@ -605,6 +689,11 @@ class MailCalendarView(QWidget):
         layout.addWidget(notes, 1)
 
         if kind == "Task":
+            edit = QPushButton("Edit task")
+            edit.setObjectName("enkyronTaskEdit")
+            edit.clicked.connect(lambda: self.open_editor(
+                "task", edit_record=record, details_dialog=dialog))
+            layout.addWidget(edit)
             reference = parse_task_mail_source(record.get("notes"))
             if reference is not None:
                 source_button = QPushButton("Open source email")
@@ -641,6 +730,8 @@ class MailCalendarView(QWidget):
             self.taskCompleteRequested.emit({"id":task["id"],"completed":True})
 
     def close_editors(self):
+        self._pending_task_updates.clear()
+        self._task_editors.clear()
         for dialog in list(self._dialogs):
             dialog.close()
         self._dialogs.clear()

@@ -1,6 +1,6 @@
 // ENKYRON Calendar: operator-owned local appointments and tasks.
 // No external calendar invitations, auto-send, or invented assignees.
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 function scope(actor){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
@@ -131,4 +131,122 @@ export async function calendarCompleteTask(pool,actor,input){
     return {id,completed:true};
   }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}
   finally{client.release();}
+}
+
+
+// ENK-06 / M07 / UAT-06: scoped task editing without implicit completion.
+function taskSnapshot(row){
+  return {
+    title:row.title,
+    due_at:row.due_at==null?null:iso(
+      row.due_at instanceof Date?row.due_at.toISOString():row.due_at),
+    notes:row.notes,
+    completed_at:row.completed_at==null?null:iso(
+      row.completed_at instanceof Date
+        ?row.completed_at.toISOString():row.completed_at)
+  };
+}
+
+function inputTaskSnapshot(data){
+  if(!data || !['title','due_at','notes','completed_at']
+      .every(k=>Object.hasOwn(data,k)))
+    throw Error('Invalid calendar task expected values');
+  if(typeof data.title!=='string'||data.title.length<1||
+     data.title.length>200||typeof data.notes!=='string'||
+     data.notes.length>4000||data.notes.includes('\u0000'))
+    throw Error('Invalid calendar task expected values');
+  return {
+    title:data.title,
+    due_at:data.due_at==null?null:iso(data.due_at),
+    notes:data.notes,
+    completed_at:data.completed_at==null?null:iso(data.completed_at)
+  };
+}
+
+export async function calendarReadTask(pool,actor,input){
+  const key=scope(actor),id=input?.id;
+  if(typeof id!=='string'||!UUID.test(id))
+    throw Error('Invalid calendar task ID');
+  const result=await pool.query(
+    'SELECT task_id AS id,title,due_at,completed_at,crm_company_id,notes '+
+    'FROM enkyron_calendar_tasks WHERE workspace_key=$1 AND task_id=$2',
+    [key,id]
+  );
+  if(result.rows.length!==1)
+    throw Error('Calendar task not found or not accessible');
+  return {task:result.rows[0]};
+}
+
+export async function calendarUpdateTask(pool,actor,input){
+  const key=scope(actor),id=input?.id;
+  if(typeof id!=='string'||!UUID.test(id))
+    throw Error('Invalid calendar task ID');
+  if(!input || !Object.hasOwn(input,'due_at') ||
+     !Object.hasOwn(input,'notes'))
+    throw Error('Invalid calendar task update');
+
+  const title=textValue(input.title,200);
+  const due=input.due_at==null?null:iso(input.due_at);
+  const notes=input.notes;
+  if(typeof notes!=='string'||notes.length>4000||
+     notes.includes('\u0000'))
+    throw Error('Invalid calendar task notes');
+
+  const expected=inputTaskSnapshot(input.expected);
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const found=await client.query(
+      'SELECT title,due_at,notes,completed_at FROM enkyron_calendar_tasks '+
+      'WHERE workspace_key=$1 AND task_id=$2 FOR UPDATE',
+      [key,id]
+    );
+    if(found.rows.length!==1)
+      throw Error('Calendar task not found or not accessible');
+
+    const previous=taskSnapshot(found.rows[0]);
+    if(JSON.stringify(previous)!==JSON.stringify(expected))
+      throw Error(
+        'Calendar task changed since it was opened. Refresh before editing'
+      );
+
+    const next={...previous,title,due_at:due,notes};
+    if(JSON.stringify(next)===JSON.stringify(previous)){
+      await client.query('COMMIT');
+      return {id,unchanged:true};
+    }
+
+    const changed=['title','due_at','notes']
+      .filter(k=>previous[k]!==next[k]);
+    const updated=await client.query(
+      'UPDATE enkyron_calendar_tasks SET title=$3,due_at=$4,notes=$5 '+
+      'WHERE workspace_key=$1 AND task_id=$2 RETURNING task_id',
+      [key,id,title,due,notes]
+    );
+    if(updated.rowCount!==1)
+      throw Error('Calendar task changed before save');
+
+    const digest=record=>createHash('sha256')
+      .update(JSON.stringify(record)).digest('hex');
+
+    await client.query(
+      'INSERT INTO enkyron_mail_local_events '+
+      '(id,workspace_key,event_kind,actor_local,detail) '+
+      "VALUES($1,$2,'calendar_updated',$3,$4::jsonb)",
+      [randomUUID(),key,actor,JSON.stringify({
+        entity:'task',
+        task_id:id,
+        changed_fields:changed,
+        before_sha256:digest(previous),
+        after_sha256:digest(next)
+      })]
+    );
+    await client.query('COMMIT');
+    return {id,updated:true};
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+  }finally{
+    client.release();
+  }
 }
