@@ -28,9 +28,20 @@ export function validateProspectLink(data){
     ||data.review_note.trim().length>1000||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(data.review_note))
     throw new Error('CRM review note must contain 20-1000 characters');
   if(data.reviewed!==true)throw new Error('CRM manual review confirmation required');
+  const supplied=Object.hasOwn(data,'company_name') ||
+    Object.hasOwn(data,'website');
+  if(data.mode==='existing' && supplied)
+    throw new Error('CRM existing company identity cannot be edited here');
+  if(supplied && (!Object.hasOwn(data,'company_name') ||
+     !Object.hasOwn(data,'website')))
+    throw new Error('CRM reviewed company identity is incomplete');
+  const reviewed=supplied
+    ?validateCompany({name:data.company_name,website:data.website})
+    :null;
   return {prospect_id,source_digest:data.source_digest,
     mode:data.mode,company_id:data.mode==='existing'?data.company_id:null,
-    review_note:data.review_note.trim()};
+    review_note:data.review_note.trim(),
+    company_name:reviewed?.name??null,website:reviewed?.website??null};
 }
 export function sourceDigest(row){
   const keys=['id','company_name','website','buyer_name','buyer_role','buyer_email','source','updated_at'];
@@ -96,8 +107,14 @@ export async function associateProspect(pool,input,actor,options={}){
     if(existing)throw new Error('CRM prospect already linked; duplicate rejected');
     let companyId=req.company_id,created=false;
     if(req.mode==='create'){
-      const identity=validateCompany({name:candidate.company_name,website:candidate.website??''});
-      if((await matches(client,owner.key,candidate)).length)
+      const identity=validateCompany({
+        name:req.company_name??candidate.company_name,
+        website:req.website??candidate.website??''
+      });
+      const reviewedCandidate={
+        company_name:identity.name,website:identity.website
+      };
+      if((await matches(client,owner.key,reviewedCandidate)).length)
         throw new Error('CRM possible duplicate; link reviewed existing company instead');
       companyId=uuid();
       await client.query(

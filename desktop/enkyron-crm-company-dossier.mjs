@@ -89,11 +89,18 @@ const LISTS={
   drafts:
     'SELECT d.id,d.opportunity_id,d.company_id,d.subject,d.recipient_email,'
     +'d.revision,d.updated_at,'
-    +'CASE WHEN m.id IS NULL THEN \'Draft\' ELSE \'External send reported\' END AS send_state, '
-    +'m.sent_at AS external_sent_at,count(*) OVER() AS total_rows '
+    // ENK-UX-MAIL-STATUS: same evidence semantics as readMailDraft/listMailDrafts.
+    // Provider accepted != recipient delivered; uncertain != sent; no silent backfill.
+    +"CASE WHEN a.id IS NOT NULL AND a.outcome='accepted' "
+    +"THEN 'Resend accepted (delivery unverified)' "
+    +"WHEN a.id IS NOT NULL THEN 'Resend submission uncertain' "
+    +"WHEN m.id IS NOT NULL THEN 'External send reported' ELSE 'Draft' END AS send_state, "
+    +'m.sent_at AS external_sent_at,a.outcome AS provider_outcome,count(*) OVER() AS total_rows '
     +'FROM enkyron_crm_mail_drafts d '
     +'LEFT JOIN enkyron_crm_mail_manual_sends m '
     +'ON m.workspace_key=d.workspace_key AND m.draft_id=d.id '
+    +'LEFT JOIN enkyron_mail_send_attempts a '
+    +'ON a.workspace_key=d.workspace_key AND a.draft_id=d.id '
     +'WHERE d.workspace_key=$1 AND ('
     +'d.company_id=$2 OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_opportunities o '

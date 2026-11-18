@@ -4,6 +4,7 @@
 // No mail is sent unless a saved draft, explicit human confirmation, mailbox
 // grant, and private Resend key all pass independently.
 import {createHash,randomUUID} from 'node:crypto';
+import {syncProviderAcceptedFollowup} from './enkyron-crm-confirmed-outreach-followup.mjs';
 import {outgoingAttachmentsForDraft} from './enkyron-mail-outgoing.mjs';
 import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
 import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
@@ -442,10 +443,15 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
     'provider_message_id=$3,completed_at=NOW() WHERE id=$1',
     [prepared.attemptId,outcome,providerId]
   );
+  const followup=outcome==='accepted'
+    ?await syncProviderAcceptedFollowup(pool,actor,draftId):
+    {updated:false,reason:'provider_outcome_uncertain'};
   return {
-    outcome,provider_message_id:providerId,
+    outcome,provider_message_id:providerId,followup,
     notice:providerId
-      ?'Resend accepted the message. Delivery has not been verified.'
+      ?'Resend accepted the message. Delivery has not been verified. '+
+       (followup.updated?'CRM opportunity set to Contacted with follow-up in seven days.':
+        'CRM follow-up not changed; review the linked company opportunity.')
       :'Provider outcome uncertain. Check Resend before trying another email; no automatic retry.',
   };
 }
@@ -654,8 +660,13 @@ export async function mailReplyDraft(pool,actor,input,{
     'UPDATE enkyron_mail_send_attempts SET outcome=$2,'+
     'provider_message_id=$3,completed_at=NOW() WHERE id=$1',
     [prepared.attemptId,outcome,providerId]);
-  return {outcome,provider_message_id:providerId,
+  const followup=outcome==='accepted'
+    ?await syncProviderAcceptedFollowup(pool,actor,draftId):
+    {updated:false,reason:'provider_outcome_uncertain'};
+  return {outcome,provider_message_id:providerId,followup,
     notice:providerId
-      ?'Resend accepted this reply in the existing thread. Delivery not confirmed.'
+      ?'Resend accepted this reply. Delivery not confirmed. '+
+       (followup.updated?'CRM seven-day follow-up updated.':
+        'CRM follow-up not changed; review the linked opportunity.')
       :'Reply outcome uncertain. Do not resend without reviewing the provider.'};
 }

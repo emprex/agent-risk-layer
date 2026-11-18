@@ -7653,7 +7653,7 @@ class EnkyronWindow(QMainWindow):
                 for column, value in enumerate((
                     item.get("request_kind"), item.get("source_channel"),
                     str(item.get("received_on") or "")[:10],
-                    item.get("processing_state"), item.get("recorded_by")
+                    item.get("processing_state"), self.crm_operator_display(item.get("recorded_by"))
                 )):
                     history.setItem(index, column, QTableWidgetItem(str(value or "")))
             notice.setText(
@@ -7807,7 +7807,7 @@ class EnkyronWindow(QMainWindow):
                 for col, value in enumerate((
                     item.get("purpose_code"), item.get("hold_check"),
                     str(item.get("next_review_on") or "")[:10],
-                    item.get("recorded_by"), display_date(item.get("recorded_at"))
+                    self.crm_operator_display(item.get("recorded_by")), display_date(item.get("recorded_at"))
                 )):
                     history.setItem(i, col, QTableWidgetItem(str(value or "")))
             notice.setText(
@@ -8087,7 +8087,7 @@ class EnkyronWindow(QMainWindow):
                 values = [
                     entry.get("new_version"),
                     ", ".join(entry.get("changed_fields") or []),
-                    entry.get("actor_local"),
+                    self.crm_operator_display(entry.get("actor_local")),
                     entry.get("review_note")
                 ]
                 for col, value in enumerate(values):
@@ -9158,12 +9158,13 @@ class EnkyronWindow(QMainWindow):
                 pending.append("contact details")
         if self.crm_dossier_followup_editor is not None:
             current = (
-                self.crm_dossier_followup_action.toPlainText(),
+                self.crm_dossier_followup_stage.currentData(),
+                self.crm_dossier_followup_action.toPlainText().strip(),
                 self.crm_dossier_followup_due.date().toString("yyyy-MM-dd")
                 if self.crm_dossier_followup_has_date.isChecked() else None
             )
             if current != self.crm_dossier_followup_initial:
-                pending.append("next action")
+                pending.append("opportunity update")
         if (self.crm_dossier_activity_editor is not None
                 and self.crm_dossier_activity_detail.toPlainText().strip()):
             pending.append("activity note")
@@ -9518,6 +9519,10 @@ class EnkyronWindow(QMainWindow):
                 for row_index, record in enumerate(rows):
                     for column_index, (_heading, key) in enumerate(columns):
                         value = record.get(key)
+                        # Identity is display-only; the record and its audit IDs
+                        # remain exactly as returned by the CRM backend.
+                        if key in ("recorded_by", "actor_local", "owner_local"):
+                            value = self.crm_operator_display(value)
                         if key == "changed_fields":
                             value = ", ".join(value or [])
                         if key in ("updated_at", "recorded_at", "linked_at", "created_at"):
@@ -9601,7 +9606,7 @@ class EnkyronWindow(QMainWindow):
                             scoped_company, company_name
                         )
                     )
-                    edit_draft = QPushButton("Edit selected draft")
+                    edit_draft = QPushButton("Open selected email")
                     edit_draft.setObjectName("crmDossierEditDraft")
                     edit_draft.setEnabled(False)
 
@@ -9624,6 +9629,9 @@ class EnkyronWindow(QMainWindow):
                             )
 
                     table.itemSelectionChanged.connect(update_draft_actions)
+                    table.cellDoubleClicked.connect(
+                        lambda _row, _column: launch_existing_draft()
+                    )
                     edit_draft.clicked.connect(launch_existing_draft)
                     draft_actions.addWidget(create_draft)
                     draft_actions.addWidget(edit_draft)
@@ -9631,8 +9639,10 @@ class EnkyronWindow(QMainWindow):
                     page_layout.addLayout(draft_actions)
                     update_draft_actions()
                     notice = QLabel(
-                        "Unsent local drafts only. No email account is connected "
-                        "and no message will be sent from ENKYRON."
+                        "Local drafts and recorded external sends. "
+                        "Double-click a row to open it. To reconcile an email "
+                        "sent elsewhere, use Record external send in the editor; "
+                        "delivery and reading are not independently verified."
                     )
                     notice.setWordWrap(True)
                     page_layout.addWidget(notice)
@@ -9731,6 +9741,71 @@ class EnkyronWindow(QMainWindow):
                             min(180, 35 + min(len(rows), 4) * 30)
                         )
                         page_layout.addWidget(table)
+
+                        def open_qualification_review(row, _column,
+                                                      reviews=tuple(rows),
+                                                      company_name=str(company.get("name") or "Company")):
+                            # Render the exact historical dossier row, not the current editor.
+                            # The window is top-level, movable, non-modal and read-only.
+                            if not 0 <= row < len(reviews):
+                                return
+                            review = reviews[row]
+                            if not isinstance(review, dict):
+                                return
+                            old = getattr(self, "crm_qualification_review_window", None)
+                            if old is not None and old.isVisible():
+                                old.raise_()
+                                old.activateWindow()
+                                return
+                            window = make_workspace_window(
+                                "ENKYRON · Qualification Review — " + company_name,
+                                size=(850, 660), minimum=(610, 450)
+                            )
+                            window.setObjectName("crmQualificationReviewReadOnlyWindow")
+                            layout = QVBoxLayout(window)
+                            header = QLabel("HISTORICAL COMMERCIAL QUALIFICATION — READ ONLY")
+                            header.setStyleSheet("font-weight: bold;")
+                            layout.addWidget(header)
+                            form = QFormLayout()
+                            for title, value in (
+                                ("Company", company_name),
+                                ("Subject", review.get("subject")),
+                                ("Commercial fit", review.get("fit_status")),
+                                ("Priority", review.get("priority")),
+                                ("Recorded", display_date(review.get("recorded_at"))),
+                                ("Recorded by", review.get("recorded_by")),
+                            ):
+                                field = QLineEdit(str(value or "Not recorded"))
+                                field.setReadOnly(True)
+                                form.addRow(title, field)
+                            for title, key, height in (
+                                ("Review note", "rationale", 155),
+                                ("Source", "source_reference", 75),
+                                ("Next action at review", "next_action", 90),
+                            ):
+                                field = QPlainTextEdit()
+                                field.setObjectName("crmQualificationReview_" + key)
+                                field.setReadOnly(True)
+                                field.setPlainText(str(review.get(key) or "Not recorded"))
+                                field.setMinimumHeight(height)
+                                form.addRow(title, field)
+                            layout.addLayout(form)
+                            explanation = QLabel(
+                                "Historical operator-entered review. This record does not "
+                                "establish buyer consent, confirmed interest or client status."
+                            )
+                            explanation.setWordWrap(True)
+                            layout.addWidget(explanation)
+                            actions = QHBoxLayout()
+                            actions.addStretch()
+                            close = QPushButton("Close")
+                            close.clicked.connect(window.close)
+                            actions.addWidget(close)
+                            layout.addLayout(actions)
+                            self.crm_qualification_review_window = window
+                            window.show()
+
+                        table.cellDoubleClicked.connect(open_qualification_review)
                     else:
                         page_layout.addWidget(
                             QLabel("No qualification reviews recorded yet.")
@@ -9874,7 +9949,7 @@ class EnkyronWindow(QMainWindow):
                                     edit_contact, alignment=Qt.AlignmentFlag.AlignRight
                                 )
                             if section_id == "opportunities":
-                                edit = QPushButton("Edit next action")
+                                edit = QPushButton("Update opportunity")
                                 edit.setObjectName("crmDossierEditFollowup")
                                 edit.setEnabled(
                                     isinstance(item.get("opportunity_id"), str)
@@ -10021,7 +10096,7 @@ class EnkyronWindow(QMainWindow):
                                 record_kind = str(event.get("resource_kind") or "Record")
                                 action = str(event.get("action") or "recorded")
                                 date = display_date(event.get("recorded_at"))
-                                actor = str(event.get("actor_local") or "Unknown")
+                                actor = self.crm_operator_display(event.get("actor_local"))
                                 summary = str(event.get("summary") or "")
                                 card = QFrame()
                                 card.setObjectName("crmCompanyHistoryCard")
@@ -10499,7 +10574,7 @@ class EnkyronWindow(QMainWindow):
                         header_text = "{}   ·   {}   ·   Entered by {}".format(
                             type_label,
                             display_date(record.get("recorded_at")) or "Date unknown",
-                            record.get("recorded_by") or "Unknown operator"
+                            self.crm_operator_display(record.get("recorded_by")) or "Unknown operator"
                         )
                         card_header = QLabel(header_text)
                         card_header.setTextFormat(Qt.TextFormat.PlainText)
@@ -10923,7 +10998,7 @@ class EnkyronWindow(QMainWindow):
         enabled()
 
     def open_dossier_followup_editor(self, card, record, company_id):
-        """Edit the already-linked next action in-place, without a new window."""
+        """Edit stage, next action and due date together for an existing opportunity."""
         dialog = self.crm_dossier_dialog
         if (not dialog or not dialog.isVisible()
                 or company_id != self.crm_dossier_company_id):
@@ -10955,12 +11030,29 @@ class EnkyronWindow(QMainWindow):
         )
         layout = QVBoxLayout(editor)
         notice = QLabel(
-            "Update the planned action only. Stage and forecast stay unchanged; "
-            "this does not send a message or schedule a notification."
+            "Update the commercial stage, next action and due date together. "
+            "No email is sent or verified; no notification is scheduled."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
         form = QFormLayout()
+        stage_box = QComboBox()
+        stage_box.setObjectName("crmDossierOpportunityStage")
+        for stage_key in ("research", "qualified", "contact_planned",
+                          "contacted", "discovery", "proposal",
+                          "negotiation", "won", "lost"):
+            stage_box.addItem(stage_key.replace("_", " ").title(), stage_key)
+        stage_index = stage_box.findData(stage)
+        if stage_index < 0:
+            QMessageBox.warning(dialog, "Unknown CRM stage",
+                                "Refresh the opportunity before editing.")
+            return
+        stage_box.setCurrentIndex(stage_index)
+        stage_box.setToolTip(
+            "Contacted = outreach actually sent or operator-reported; "
+            "not a reply, read receipt or verified delivery."
+        )
+        form.addRow("Commercial stage", stage_box)
         action = QPlainTextEdit()
         action.setObjectName("crmDossierFollowupAction")
         action.setMaximumHeight(110)
@@ -10985,12 +11077,12 @@ class EnkyronWindow(QMainWindow):
         form.addRow("Due", due_row)
         layout.addLayout(form)
         confirmed = QCheckBox(
-            "I confirm this action and due date were entered by me."
+            "I confirm this stage, action and due date are my commercial decisions."
         )
         layout.addWidget(confirmed)
         controls = QHBoxLayout()
         cancel = QPushButton("Cancel edit")
-        save = QPushButton("Save next action")
+        save = QPushButton("Save opportunity")
         save.setObjectName("crmDossierSaveFollowup")
         save.setEnabled(False)
         controls.addWidget(cancel)
@@ -10999,10 +11091,11 @@ class EnkyronWindow(QMainWindow):
         card.layout().addWidget(editor)
         self.crm_dossier_followup_editor = editor
         self.crm_dossier_followup_action = action
+        self.crm_dossier_followup_stage = stage_box
         self.crm_dossier_followup_has_date = has_date
         self.crm_dossier_followup_due = due
         self.crm_dossier_followup_initial = (
-            action.toPlainText(), existing_date or None
+            stage, action.toPlainText().strip(), existing_date or None
         )
         self.crm_dossier_followup_confirm = confirmed
         self.crm_dossier_followup_save = save
@@ -11010,9 +11103,13 @@ class EnkyronWindow(QMainWindow):
 
         def enabled(*_args):
             value = action.toPlainText().strip()
+            chosen_due = (due.date().toString("yyyy-MM-dd")
+                          if has_date.isChecked() else None)
+            changed = ((stage_box.currentData(), value, chosen_due)
+                       != self.crm_dossier_followup_initial)
             save.setEnabled(
                 not self.crm_dossier_followup_saving
-                and confirmed.isChecked()
+                and confirmed.isChecked() and changed
                 and 5 <= len(value) <= 1000
                 and not any(ord(c) < 32 or ord(c) == 127 for c in value)
             )
@@ -11037,7 +11134,7 @@ class EnkyronWindow(QMainWindow):
                 "company_id": company_id,
                 "expected_version": version,
                 "confirmed": True,
-                "stage": stage,
+                "stage": stage_box.currentData(),
                 "next_action": action.toPlainText().strip(),
                 "due_date": (
                     due.date().toString("yyyy-MM-dd")
@@ -11054,7 +11151,8 @@ class EnkyronWindow(QMainWindow):
                     return
                 self.crm_dossier_followup_saving = False
                 if (error or not result or result.get("id") != opportunity_id
-                        or result.get("version") != version + 1):
+                        or result.get("version") != version + 1
+                        or result.get("stage") != stage_box.currentData()):
                     enabled()
                     QMessageBox.warning(
                         dialog, "Update not confirmed",
@@ -11064,11 +11162,16 @@ class EnkyronWindow(QMainWindow):
                     return
                 finish()
                 self.refresh_company_dossier()
+                # Pipeline is a projection of the same canonical opportunity.
+                # Refresh it; do not write a separate stage or row.
+                if hasattr(self, "crm_pipeline_table"):
+                    self.load_pipeline()
 
             self.bridge.call("crm-update-opportunity",
                              payload=payload, callback=received)
 
         action.textChanged.connect(enabled)
+        stage_box.currentIndexChanged.connect(enabled)
         confirmed.toggled.connect(enabled)
         has_date.toggled.connect(enabled)
         cancel.clicked.connect(finish)
@@ -11374,7 +11477,7 @@ class EnkyronWindow(QMainWindow):
                     "Source event ID: {}\nStored SHA-256: {}"
                     .format(version["title"], price, minor_units,
                             version.get("recorded_at", ""),
-                            version["recorded_by"],
+                            self.crm_operator_display(version["recorded_by"]),
                             version["source_event_id"],
                             version["content_sha256"])
                 )
@@ -13486,7 +13589,7 @@ class EnkyronWindow(QMainWindow):
                         (receipt.get("document_kind") or "").replace("_", " ").upper(),
                         receipt.get("sow_revision"), freshness,
                         receipt.get("source_reference") or "",
-                        receipt.get("recorded_by") or ""
+                        self.crm_operator_display(receipt.get("recorded_by")) or ""
                     )
                 )
             if not data.get("contract_references"):
@@ -13738,7 +13841,7 @@ class EnkyronWindow(QMainWindow):
         records.setPlainText("\n".join(
             "Proposal R{} · SOW R{} · {} · SHA-256 {}".format(
                 x.get("proposal_revision"), x.get("sow_revision"),
-                x.get("recorded_by") or "operator",
+                self.crm_operator_display(x.get("recorded_by")) or "operator",
                 x.get("content_sha256") or "not recorded"
             )
             for x in history
@@ -14031,7 +14134,7 @@ class EnkyronWindow(QMainWindow):
             for row, item in enumerate(history):
                 values = (
                     item.get("revision"), display_date(item.get("recorded_at")),
-                    item.get("recorded_by"), item.get("source_reference")
+                    self.crm_operator_display(item.get("recorded_by")), item.get("source_reference")
                 )
                 for col, value in enumerate(values):
                     table.setItem(row, col, QTableWidgetItem(str(value or "")))
@@ -14476,7 +14579,7 @@ class EnkyronWindow(QMainWindow):
         for row, item in enumerate(history):
             for col, value in enumerate((
                 item.get("proposal_revision"), item.get("valid_until"),
-                item.get("recorded_by")
+                self.crm_operator_display(item.get("recorded_by"))
             )):
                 table.setItem(row, col, QTableWidgetItem(str(value or "")))
         table.setMinimumHeight(min(210, 42 + len(history) * 27))
@@ -14770,7 +14873,7 @@ class EnkyronWindow(QMainWindow):
         for row, item in enumerate(events):
             for col, value in enumerate((
                 display_date(item.get("recorded_at")), item.get("review_state"),
-                item.get("recorded_by")
+                self.crm_operator_display(item.get("recorded_by"))
             )):
                 history.setItem(row, col, QTableWidgetItem(str(value or "")))
         history.setMinimumHeight(min(220, 44 + len(events) * 28))
@@ -15240,7 +15343,7 @@ class EnkyronWindow(QMainWindow):
         )
         for row, item in enumerate(history):
             values = (
-                item.get("proposal_revision"), item.get("decision"), item.get("recorded_by")
+                item.get("proposal_revision"), item.get("decision"), self.crm_operator_display(item.get("recorded_by"))
             )
             for column, value in enumerate(values):
                 table.setItem(row, column, QTableWidgetItem(str(value or "")))
@@ -15437,7 +15540,7 @@ class EnkyronWindow(QMainWindow):
             values = (
                 item.get("proposal_revision"),
                 "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
-                item.get("recorded_by")
+                self.crm_operator_display(item.get("recorded_by"))
             )
             for col, value in enumerate(values):
                 table.setItem(row, col, QTableWidgetItem(str(value or "")))
@@ -16845,7 +16948,7 @@ class EnkyronWindow(QMainWindow):
             for col, value in enumerate((
                 display_date(item.get("recorded_at")),
                 item.get("outcome"),
-                item.get("recorded_by")
+                self.crm_operator_display(item.get("recorded_by"))
             )):
                 table.setItem(row, col, QTableWidgetItem(str(value or "")))
         table.setMinimumHeight(min(225, 44 + len(history) * 28))
@@ -16972,7 +17075,7 @@ class EnkyronWindow(QMainWindow):
              str(draft.get("buyer_legal_name") or "") + "\n"
              + str(draft.get("buyer_registered_address") or "")),
             ("Preparation note", draft.get("preparation_note")),
-            ("Recorded by", draft.get("recorded_by")),
+            ("Recorded by", self.crm_operator_display(draft.get("recorded_by"))),
             ("Recorded at", display_date(draft.get("recorded_at")))
         ]
         for title, value in fields:
@@ -17495,7 +17598,7 @@ class EnkyronWindow(QMainWindow):
                         item.get("currency") or "",
                         "not priced" if price is None else
                         self._quote_format_minor(int(price)),
-                        version.get("recorded_by") or "",
+                        self.crm_operator_display(version.get("recorded_by")),
                         display_date(version.get("recorded_at"))
                     )
                 )
@@ -19212,6 +19315,12 @@ class EnkyronWindow(QMainWindow):
                     self.load_mail_drafts()
                 if self.mail_inbox.selected_folder == "drafts":
                     self.load_unsent_mail_drafts()
+                # Explicit human stage choice only after the exact send
+                # record is saved. Does not infer buyer engagement.
+                if context.get("company_id"):
+                    self.offer_contacted_stage_after_external_send(
+                        context["company_id"], context["id"]
+                    )
             self.bridge.call("crm-mail-manual-send",
                              payload=payload, callback=saved)
         record.clicked.connect(submit)
@@ -19222,6 +19331,120 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_send_confirm = confirm
         self.crm_mail_send_save = record
         dialog.open()
+
+    def offer_contacted_stage_after_external_send(self, company_id, draft_id):
+        """Offer, never assume, a CRM stage transition after a recorded send.
+
+        The record is operator testimony, not proof of provider delivery or reading.
+        Reads fresh company/draft/opportunity records and uses the versioned,
+        audited existing opportunity update endpoint. No new records created.
+        """
+        if not (isinstance(company_id, str) and isinstance(draft_id, str)):
+            return
+
+        def loaded(dossier, error):
+            if error or not isinstance(dossier, dict) or not dossier.get("available"):
+                return  # The recorded external send remains valid; no stage inference.
+            company = dossier.get("company") or {}
+            sections = dossier.get("sections") or {}
+            if company.get("id") != company_id or not isinstance(sections, dict):
+                return
+            drafts = (sections.get("drafts") or {}).get("items") or []
+            matched = [row for row in drafts if isinstance(row, dict)
+                       and row.get("id") == draft_id
+                       and row.get("send_state") == "External send reported"]
+            if len(matched) != 1:
+                return
+            rows = (sections.get("opportunities") or {}).get("items") or []
+            opportunities = [row for row in rows if isinstance(row, dict)
+                             and row.get("company_id") == company_id
+                             and row.get("source_ticket_id") is None]
+            if len(opportunities) != 1:
+                return  # Ambiguous or absent company opportunity; require operator review.
+            opportunity = opportunities[0]
+            if opportunity.get("stage") not in ("research", "qualified", "contact_planned"):
+                return
+            opportunity_id = opportunity.get("opportunity_id")
+            version = opportunity.get("version")
+            if not isinstance(opportunity_id, str) or not isinstance(version, int) or version < 1:
+                return
+            due = str(opportunity.get("due_date") or "")[:10]
+            parsed_due = QDate.fromString(due, "yyyy-MM-dd")
+            if not parsed_due.isValid():
+                due = QDate.currentDate().addDays(7).toString("yyyy-MM-dd")
+            original_action = str(opportunity.get("next_action") or "")
+            if ("sent" in original_action.casefold()
+                    and "follow" in original_action.casefold()):
+                next_action = original_action
+            else:
+                next_action = (
+                    "Follow up by email after the operator-reported initial outreach "
+                    "if no reply. No recipient response or commercial interest confirmed."
+                )
+            decision = QMessageBox.question(
+                self.crm_dossier_dialog if self.crm_dossier_dialog and
+                self.crm_dossier_dialog.isVisible() else self,
+                "Update outreach stage?",
+                "The external email send has been recorded as operator-reported "
+                "(delivery and reading NOT verified).\n\n"
+                "Company: {}\nMove opportunity: {} \u2192 Contacted (Engagement)\n"
+                "Next action: {}\nDue: {}\n\n"
+                "Apply this audited stage/follow-up update?".format(
+                    str(company.get("name") or "Company"),
+                    str(opportunity.get("stage") or ""), next_action, due
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if decision != QMessageBox.StandardButton.Yes:
+                return
+            payload = {
+                "id": opportunity_id,
+                "company_id": company_id,
+                "expected_version": version,
+                "confirmed": True,
+                "stage": "contacted",
+                "next_action": next_action,
+                "due_date": due,
+            }
+
+            def updated(result, update_error):
+                if (update_error or not isinstance(result, dict)
+                        or result.get("id") != opportunity_id
+                        or result.get("version") != version + 1
+                        or result.get("stage") != "contacted"):
+                    QMessageBox.warning(
+                        self, "Opportunity update not verified",
+                        "The email record was saved, but the stage update was not "
+                        "confirmed. Inspect the opportunity before retrying.\n" +
+                        str(update_error or "Unexpected response")[:240]
+                    )
+                    return
+                # Exact readback: do not claim a new stage solely from an ACK.
+                def verified(latest, check_error):
+                    entries = ((latest or {}).get("sections") or {}).get("opportunities") or {}
+                    records = entries.get("items") or []
+                    exact = [r for r in records if isinstance(r, dict)
+                             and r.get("opportunity_id") == opportunity_id
+                             and r.get("company_id") == company_id
+                             and r.get("stage") == "contacted"
+                             and r.get("version") == version + 1]
+                    if check_error or (latest or {}).get("company", {}).get("id") != company_id or len(exact) != 1:
+                        QMessageBox.warning(self, "Stage readback unavailable",
+                                            "Refresh the company dossier to check the stage. "
+                                            "Do not repeat the update blindly.")
+                        return
+                    if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                            and self.crm_dossier_company_id == company_id):
+                        self.refresh_company_dossier()
+                    if hasattr(self, "crm_pipeline_table"):
+                        self.load_pipeline()
+
+                self.bridge.call("crm-company-dossier", company_id, callback=verified)
+
+            self.bridge.call("crm-update-opportunity", payload=payload, callback=updated)
+
+        self.bridge.call("crm-company-dossier", company_id, callback=loaded)
 
     def _m03_mail_groups(self):
         """Parse visible lists; Node remains the address-validation authority."""
@@ -19730,7 +19953,7 @@ class EnkyronWindow(QMainWindow):
                     display_date(entry.get("recorded_at")),
                     category,
                     summary,
-                    entry.get("actor_local") or ""
+                    self.crm_operator_display(entry.get("actor_local")) or ""
                 ]):
                     self.crm_activity_table.setItem(
                         row, column, QTableWidgetItem(str(value))
@@ -19759,7 +19982,7 @@ class EnkyronWindow(QMainWindow):
             body = (
                 "OPERATOR-REPORTED {}\nRecorded by: {}\n\n{}".format(
                     entry.get("activity_type") or "note",
-                    entry.get("actor_local") or "Unknown",
+                    self.crm_operator_display(entry.get("actor_local")) or "Unknown",
                     entry.get("detail") or ""
                 )
             )
@@ -19773,7 +19996,7 @@ class EnkyronWindow(QMainWindow):
                 "Previous due: {}\n"
                 "New due: {}"
             ).format(
-                entry.get("actor_local") or "Unknown",
+                self.crm_operator_display(entry.get("actor_local")) or "Unknown",
                 entry.get("old_stage") or "—",
                 entry.get("new_stage") or "—",
                 entry.get("old_next_action") or "—",
@@ -19881,10 +20104,15 @@ class EnkyronWindow(QMainWindow):
             else "Research candidate"
         )
         owner = (existing or {}).get("owner_local")
+        owner_display = self.crm_operator_display(owner) if owner else None
         title = QLabel("{}: {}{}".format(
             record_type, prospect.get("company_name") or "Unknown",
-            "\nLocal owner: {}".format(owner) if owner else ""
+            "\nCommercial owner: {}".format(owner_display) if owner_display else ""
         ))
+        title.setToolTip(
+            "Professional name from My account; the internal technical owner "
+            "and audit trail are unchanged."
+        )
         title.setTextFormat(Qt.TextFormat.PlainText)
         title.setWordWrap(True)
         layout.addWidget(title)
@@ -20151,12 +20379,14 @@ class EnkyronWindow(QMainWindow):
                     "The prospect preview does not match the requested record."
                 )
                 return
-            dialog = QDialog(self)
+            dialog = make_workspace_window(
+                "ENKYRON · Create company from research",
+                size=(760, 620),
+                minimum=(620, 500)
+            )
             dialog.rejected.connect(
                 lambda: setattr(self, "crm_invoice_link_return_proposal_id", None)
             )
-            dialog.setWindowTitle("ENKYRON · Create company from research")
-            dialog.setMinimumWidth(620)
             layout = QVBoxLayout(dialog)
             layout.addWidget(section_title("CREATE / LINK COMPANY FROM RESEARCH"))
             source = data["prospect"]
@@ -20203,9 +20433,11 @@ class EnkyronWindow(QMainWindow):
             layout.addWidget(warning)
             form = QFormLayout()
             candidate_name = QLineEdit(str(source.get("company_name") or ""))
-            candidate_name.setReadOnly(True)
+            candidate_name.setMaxLength(160)
             candidate_website = QLineEdit(str(source.get("website") or ""))
-            candidate_website.setReadOnly(True)
+            candidate_website.setMaxLength(500)
+            self.crm_review_name_input = candidate_name
+            self.crm_review_website_input = candidate_website
             form.addRow("Company name", candidate_name)
             form.addRow("Website", candidate_website)
             self.crm_review_choice = QComboBox()
@@ -20236,6 +20468,17 @@ class EnkyronWindow(QMainWindow):
                     {"mode": "existing", "company_id": selected_id}
                 )
             form.addRow("Association decision", self.crm_review_choice)
+
+            def update_review_fields():
+                choice = self.crm_review_choice.currentData() or {}
+                creating = choice.get("mode") == "create"
+                candidate_name.setEnabled(creating)
+                candidate_website.setEnabled(creating)
+
+            self.crm_review_choice.currentIndexChanged.connect(
+                lambda _index: update_review_fields()
+            )
+            update_review_fields()
             self.crm_review_note = QPlainTextEdit()
             self.crm_review_note.setPlaceholderText(
                 "Document your human verification and reasons for matching "
@@ -20262,7 +20505,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_review_id = candidate_id
             self.crm_review_digest = data["source_digest"]
             self.crm_review_dialog = dialog
-            dialog.open()
+            dialog.show()
 
         self.bridge.call("crm-prospect-review", candidate_id, callback=received)
 
@@ -20300,6 +20543,9 @@ class EnkyronWindow(QMainWindow):
         }
         if decision["mode"] == "existing":
             payload["company_id"] = decision["company_id"]
+        else:
+            payload["company_name"] = self.crm_review_name_input.text().strip()
+            payload["website"] = self.crm_review_website_input.text().strip()
         self.crm_review_submit.setEnabled(False)
 
         def received(data, error):
@@ -21061,17 +21307,40 @@ class EnkyronWindow(QMainWindow):
             "ticket-status", payload=payload, callback=completed
         )
 
-    def ticket_operator_display(self, account):
-        """Display the local personal name only for its matching OS principal."""
+    def crm_operator_display(self, account):
+        """Presentation only: use My account for the current Linux operator.
+
+        Retain original actor IDs in PostgreSQL, revision checks, event history
+        and every backend payload. Never attribute a different operator's
+        records to the currently signed-in profile.
+        """
         technical = str(account or "").strip()
         if not technical:
-            return "Unassigned"
+            return "Unknown operator"
         profile = self.operator_profile_state or {}
-        if profile.get("local_operator") == technical:
+        profile_login = profile.get("local_operator")
+        # Debian desktop fallback when the profile hasn't loaded yet.
+        # This is ONLY used to suppress a technical login on screen, never
+        # to establish authority or substitute another user's audit identity.
+        try:
+            import pwd
+            session_login = pwd.getpwuid(os.getuid()).pw_name
+        except (ImportError, KeyError, OSError):
+            session_login = None
+        if technical == profile_login or (
+                session_login is not None and technical == session_login):
             display = (profile.get("current") or {}).get("display_name")
             if isinstance(display, str) and display.strip():
                 return display.strip()
+            return "Current operator (profile unavailable)"
         return technical
+
+    def ticket_operator_display(self, account):
+        """Show a professional name; keep assignment and audit IDs intact."""
+        technical = str(account or "").strip()
+        if not technical:
+            return "Unassigned"
+        return self.crm_operator_display(technical)
 
     def _refresh_ticket_identity_labels(self):
         ticket = self.current_ticket

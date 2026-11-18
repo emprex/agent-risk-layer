@@ -85,3 +85,44 @@ test('transactional link prevents stale record, already linked and duplicate new
     ['local:ci-operator','legacy_one',companyId]);
   assert.match((await run('existing',{notFound:true})).error.message,/company not found/);
 });
+
+
+test('reviewed CRM identity is saved while original prospect remains unchanged',async()=>{
+  const input={...valid,company_name:'Reviewed Protocol',
+    website:'https://reviewed.invalid/'};
+  const reviewed=validateProspectLink(input);
+  assert.equal(reviewed.company_name,'Reviewed Protocol');
+  assert.equal(reviewed.website,'https://reviewed.invalid/');
+  assert.throws(()=>validateProspectLink({
+    ...input,mode:'existing',company_id:companyId
+  }),/CRM/);
+
+  const calls=[];
+  const client={
+    async query(sql,params=[]){
+      calls.push({sql,params});
+      if(sql.includes('FROM sales_prospects'))return {rows:[prospect]};
+      if(sql.includes('FROM enkyron_crm_prospect_links'))return {rows:[]};
+      if(sql.includes('SELECT id,name,website'))return {rows:[]};
+      return {rows:[]};
+    },
+    release(){}
+  };
+  const result=await associateProspect(
+    {connect:async()=>client},input,'ci-operator'
+  );
+  assert.equal(result.company_created,true);
+  const matching=calls.find(c=>c.sql.includes('SELECT id,name,website'));
+  assert.deepEqual(matching.params.slice(1),
+    ['Reviewed Protocol','reviewed.invalid']);
+  const created=calls.find(c=>c.sql.startsWith(
+    'INSERT INTO enkyron_crm_companies'));
+  assert.equal(created.params[2],'Reviewed Protocol');
+  assert.equal(created.params[3],'https://reviewed.invalid/');
+  const linked=calls.find(c=>c.sql.startsWith(
+    'INSERT INTO enkyron_crm_prospect_links'));
+  assert.equal(linked.params[4],digest);
+  assert.ok(calls.some(c=>c.sql==='COMMIT'));
+  assert.ok(!calls.some(c=>c.sql.startsWith(
+    'UPDATE sales_prospects')));
+});

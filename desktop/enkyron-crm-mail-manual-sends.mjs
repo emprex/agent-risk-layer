@@ -1,6 +1,7 @@
 // UX-14: operator testimony of an externally sent email tied to an exact local
 // draft revision. NOT a Gmail/SMTP integration and NOT proof of delivery.
 import {randomUUID} from 'node:crypto';
+import {syncConfirmedOutreachFollowup} from './enkyron-crm-confirmed-outreach-followup.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function operatorScope(actor){
@@ -65,9 +66,25 @@ export async function recordManualSend(pool,input,actor,options={}){
         data.provider,data.provider_message_id,data.sender_email,draft.recipient_email,
         data.sent_at,owner.name]
     );
+    // A recorded external send and its eligible CRM follow-up are committed
+    // together. A follow-up failure does not erase the operator's send record.
+    let followup;
+    await client.query('SAVEPOINT crm_outreach_followup');
+    try{
+      followup=await syncConfirmedOutreachFollowup(client,{
+        workspaceKey:owner.key,actor:owner.name,draftId:data.draft_id,
+        sentAt:data.sent_at,proofKind:'external_operator_reported',uuid
+      });
+      await client.query('RELEASE SAVEPOINT crm_outreach_followup');
+    }catch(error){
+      await client.query('ROLLBACK TO SAVEPOINT crm_outreach_followup');
+      followup={updated:false,reason:'crm_followup_error'};
+    }
     await client.query('COMMIT');
-    return {id,draft_id:data.draft_id,draft_revision:data.expected_revision,
-      notice:'Operator-reported external send recorded. No provider verification or email transmission.'};
+    return {id,draft_id:data.draft_id,draft_revision:data.expected_revision,followup,
+      notice:'Operator-reported external send recorded (not provider-verified). '+
+        (followup.updated?'CRM opportunity and seven-day follow-up updated.':
+        'CRM follow-up not updated; review company association if needed.')};
   }catch(error){
     await client.query('ROLLBACK').catch(()=>{});
     if(error?.code==='23505')throw new Error('CRM manual send reference already recorded');

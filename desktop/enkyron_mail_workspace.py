@@ -8,12 +8,13 @@ from datetime import datetime
 from html import escape
 
 if __package__:
-    from .enkyron_mail_html import safe_mail_html
+    from .enkyron_mail_html import safe_mail_html, _mail_image_url
 else:
-    from enkyron_mail_html import safe_mail_html
+    from enkyron_mail_html import safe_mail_html, _mail_image_url
 
-from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice, QMimeData, QPoint, QRect, QSize
-from PySide6.QtGui import QFont, QImageReader, QPixmap, QDrag, QPainter, QColor, QBrush
+from PySide6.QtCore import Qt, Signal, QBuffer, QByteArray, QIODevice, QMimeData, QPoint, QRect, QSize, QUrl
+from PySide6.QtGui import QFont, QImageReader, QPixmap, QDrag, QPainter, QColor, QBrush, QTextDocument, QImage
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
@@ -101,6 +102,92 @@ class MailThreadList(QListWidget):
         drag.setPixmap(self.compact_drag_preview(selected[0]))
         drag.setHotSpot(QPoint(13, 21))
         drag.exec(Qt.DropAction.MoveAction)
+
+
+class InlineMailBrowser(QTextBrowser):
+    """ENKYRON_INLINE_MAIL_IMAGES_V1: nonblocking HTTPS images, no active HTML.
+
+    External image requests can disclose an open and the user's IP to senders.
+    No cookies, referrer, link navigation, or redirects are supplied.
+    """
+    MAX_IMAGES = 12
+    MAX_BYTES = 1_500_000
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._image_network = QNetworkAccessManager(self)
+        self._image_pending = {}
+        self._image_seen = set()
+        self._image_cache = {}
+
+    def reset_remote_images(self):
+        for reply in list(self._image_pending.values()):
+            reply.abort()
+            reply.deleteLater()
+        self._image_pending.clear()
+        self._image_seen.clear()
+        self._image_cache.clear()
+
+    def loadResource(self, kind, name):
+        if kind != QTextDocument.ResourceType.ImageResource:
+            return super().loadResource(kind, name)
+        url = name.toString() if isinstance(name, QUrl) else str(name)
+        if _mail_image_url(url) is None:
+            return None
+        if url in self._image_cache:
+            return self._image_cache[url]
+        if url in self._image_seen or len(self._image_seen) >= self.MAX_IMAGES:
+            return None
+        self._image_seen.add(url)
+        request = QNetworkRequest(QUrl(url))
+        request.setRawHeader(b'User-Agent', b'ENKYRON-Mail-Image/1.0')
+        request.setRawHeader(b'Accept', b'image/png,image/jpeg,image/gif,image/webp')
+        request.setAttribute(
+            QNetworkRequest.Attribute.RedirectPolicyAttribute,
+            QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
+        request.setTransferTimeout(8000)
+        reply = self._image_network.get(request)
+        self._image_pending[url] = reply
+        reply.readyRead.connect(lambda r=reply: r.abort()
+                                if r.bytesAvailable() > self.MAX_BYTES else None)
+        reply.finished.connect(lambda u=url, r=reply: self._finish_image(u, r))
+        return None
+
+    def _finish_image(self, url, reply):
+        if self._image_pending.get(url) is not reply:
+            reply.deleteLater()
+            return
+        self._image_pending.pop(url, None)
+        try:
+            if reply.error() != QNetworkReply.NetworkError.NoError:
+                return
+            if reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute) != 200:
+                return
+            length = reply.bytesAvailable()
+            if length <= 0 or length > self.MAX_BYTES:
+                return
+            raw = reply.readAll()
+            if len(raw) > self.MAX_BYTES:
+                return
+            buffer = QBuffer()  # local memory only; never write remote data
+            buffer.setData(raw)
+            buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+            reader = QImageReader(buffer)
+            dimensions = reader.size()
+            if not dimensions.isValid() or dimensions.width() > 4096 or dimensions.height() > 4096:
+                return
+            image = reader.read()
+            if image.isNull() or image.width() < 2 or image.height() < 2:
+                return
+            if image.width() > 700:
+                image = image.scaledToWidth(700, Qt.TransformationMode.SmoothTransformation)
+            self._image_cache[url] = image
+            self.document().addResource(
+                QTextDocument.ResourceType.ImageResource, QUrl(url), image)
+            self.document().markContentsDirty(0, self.document().characterCount())
+            self.viewport().update()
+        finally:
+            reply.deleteLater()
 
 
 class MailFolderTree(QTreeWidget):
@@ -257,7 +344,7 @@ def format_mail_message_cards(messages):
             notices.append("HTML preview only — original message is stored "
                            "in NEMORYTH; showing the first 20,000 characters")
         if formatted:
-            notices.append("Remote images and active links are blocked.")
+            notices.append("HTTPS images load inline; links remain inactive. External image servers may detect opens.")
         if item.get("archive_state") == "incomplete":
             notices.append("Archive incomplete — source verification required")
         try:
@@ -587,7 +674,7 @@ class MailInboxView(QWidget):
         self.meta.setWordWrap(True)
         self.meta.setStyleSheet("color: #60768a;")
         right_layout.addWidget(self.meta)
-        self.body = QTextBrowser()
+        self.body = InlineMailBrowser()
         self.body.setObjectName("enkyronMailPlainTextPreview")
         self.body.setAccessibleName("Read-only conversation; external links disabled")
         self.body.setOpenExternalLinks(False)
@@ -1524,6 +1611,7 @@ class MailInboxView(QWidget):
         self.attachment_image_label.clear()
         self.attachment_image_scroll.hide()
         self.body.show()
+        self.body.reset_remote_images()
         self.body.setHtml(format_mail_message_cards(messages))
         self.meta.setText(
             "{} messages · Sent + Inbox · Verified conversation".format(
@@ -2205,7 +2293,7 @@ class MailInboxView(QWidget):
         self.reply_target.clear()
 
     def show_messages(self, mailbox, thread_id, messages):
-        """Render only plain text; no HTML, resources or attachment downloads."""
+        """Render bounded HTML and HTTPS inline images; no active content."""
         if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id or not isinstance(messages, list)):
             return False
@@ -2217,10 +2305,12 @@ class MailInboxView(QWidget):
         self.body.show()
         cards = format_mail_message_cards(messages)
         if cards:
+            self.body.reset_remote_images()
             self.body.setHtml(cards)
         else:
+            self.body.reset_remote_images()
             self.body.setPlainText("No messages in this conversation.")
-        self.meta.setText("{} message(s) · Safe mail preview · No remote content".format(
+        self.meta.setText("{} message(s) · Safe mail preview · HTTPS images may load automatically".format(
             len(messages[:50])))
         self.reader_stack.setCurrentIndex(1)
         self.reply_button.setText("Reply")

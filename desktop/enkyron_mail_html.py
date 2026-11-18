@@ -1,13 +1,15 @@
 """Bounded, inert HTML email preview for the native ENKYRON reader.
 
 Never pass the original provider HTML to QTextBrowser.setHtml. Only generated
-tags from a tiny allowlist are returned. No CSS, src/href attributes, active
-links, scripts, remote images, fonts, embedded media or external resources.
+tags from a tiny allowlist are returned. No active CSS or arbitrary src/href attributes, active
+links, scripts, fonts, embedded media or external resources. Up to 12 bounded HTTPS
+image references are emitted for the separate asynchronous Qt image loader.
 The original message remains unchanged in the PostgreSQL archive.
 """
 from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
+import ipaddress
 
 
 _KEEP = frozenset({
@@ -41,6 +43,35 @@ def _display_link(value):
     return value.translate(_BIDI)
 
 
+def _mail_image_url(value):
+    """Strict URL screen before Qt networking; no credentials, ports or IP literals."""
+    if not isinstance(value, str) or not (8 <= len(value) <= 1500):
+        return None
+    if any(ord(ch) < 33 or ord(ch) == 127 for ch in value):
+        return None
+    try:
+        parsed = urlsplit(value)
+        host = (parsed.hostname or "").rstrip(".").lower()
+        if (parsed.scheme.lower() != "https" or not host or
+                parsed.username is not None or parsed.password is not None or
+                parsed.port not in (None, 443) or
+                host == "localhost" or host.endswith((".localhost", ".local", ".internal")) or
+                "." not in host):
+            return None
+        try:
+            ipaddress.ip_address(host)
+            return None
+        except ValueError:
+            pass
+        if not all(part and all(c.isalnum() or c == '-' for c in part)
+                   and not part.startswith('-') and not part.endswith('-')
+                   for part in host.split('.')):
+            return None
+    except ValueError:
+        return None
+    return value.split('#', 1)[0]
+
+
 class _SafeEmailHTML(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -49,6 +80,7 @@ class _SafeEmailHTML(HTMLParser):
         self.blocked_tag = None
         self.blocked_nesting = 0
         self.links = []
+        self.image_count = 0
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
@@ -63,8 +95,16 @@ class _SafeEmailHTML(HTMLParser):
         if tag == "img":
             alt = next((v for k, v in attrs if k.lower() == "alt"), None)
             alt = (alt or "").strip().translate(_BIDI)[:100]
-            label = "[Image blocked: " + alt + "]" if alt else "[Image blocked]"
-            self.result.append("<em>" + escape(label, quote=True) + "</em>")
+            src = next((v for k, v in attrs if k.lower() == "src"), None)
+            # ENKYRON_INLINE_MAIL_IMAGES_V1: HTTPS only, no raw HTML or local URLs.
+            url = _mail_image_url(src)
+            if url and self.image_count < 12:
+                self.image_count += 1
+                self.result.append('<img src="' + escape(url, quote=True)
+                                   + '" alt="' + escape(alt, quote=True) + '">')
+            else:
+                label = "[Image unavailable: " + alt + "]" if alt else "[Image unavailable]"
+                self.result.append("<em>" + escape(label, quote=True) + "</em>")
             return
         if tag == "a":
             href = next((v for k, v in attrs if k.lower() == "href"), None)
