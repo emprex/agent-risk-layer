@@ -126,33 +126,47 @@ export async function prepareTicketSourceReview(pool,ticketId,{
   };
 }
 
-export async function readTicketControlQueue(pool,ticketId){
-  const {scope,binding}=await canonicalControlBinding(pool,ticketId);
-  const {getControlIntelligence}=await controlApi();
+export function shapeFullLocalControlQueue(page,scope){
+  assertSnapshot(page?.systemSnapshot?.id,scope);
+  if(page?.total!==108 || page?.hasMore!==false ||
+     page?.limit!==108 || page?.offset!==0 ||
+     !Array.isArray(page.items) || page.items.length!==108)
+    refused('incomplete canonical 108-control registry');
   const items=[], seen=new Set();
-  for(let offset=0;offset<150;offset+=50){
-    const page=await getControlIntelligence({
-      projectId:binding.projectId,userId:binding.userId,limit:50,offset});
-    assertSnapshot(page?.systemSnapshot?.id,scope);
-    if(page.total!==108 || !Array.isArray(page.items))refused('incomplete canonical 108-control registry');
-    for(const original of page.items){
-      const item=safeControlItem(original);
-      if(seen.has(item.control_id))refused('duplicate canonical control ID');
-      seen.add(item.control_id);items.push(item);
-    }
-    if(!page.hasMore)break;
+  for(const original of page.items){
+    const item=safeControlItem(original);
+    if(seen.has(item.control_id))refused('duplicate canonical control ID');
+    seen.add(item.control_id);
+    items.push(item);
   }
   if(items.length!==108)refused('partial current-snapshot control queue');
-  const after=await readLinkedAssessmentContext(pool,ticketId);
-  if(after.snapshot_id!==scope.snapshot_id || after.target_sha!==scope.target_sha)
-    refused('target changed during review');
   const stages=Object.fromEntries([...VALID_STAGE].map(stage=>
     [stage,items.filter(item=>item.stage===stage).length]));
-  return {available:true,ticket_id:ticketId,project_id:scope.project_id,
+  return {available:true,project_id:scope.project_id,
     assessment_id:scope.assessment_id,snapshot_id:scope.snapshot_id,
     target_sha:scope.target_sha,total:108,stages,items,
     human_review_required:true,tests_executed:0,
     notice:'Select one control. No applicability decision is inferred or recorded by inspection.'};
+}
+
+export async function readTicketControlQueue(pool,ticketId){
+  const {scope,binding}=await canonicalControlBinding(pool,ticketId);
+  const [{getControlIntelligence},{LOCAL_OPERATOR_FULL_QUEUE}]=await Promise.all([
+    controlApi(), import('../src/control-intelligence-core.js')
+  ]);
+  // One full canonical graph derivation. The Symbol is an in-process
+  // capability, not a public API flag; the core still enforces role access,
+  // snapshot integrity and the public 50-control pagination limit.
+  const page=await getControlIntelligence({
+    projectId:binding.projectId,userId:binding.userId,limit:108,offset:0,
+    [LOCAL_OPERATOR_FULL_QUEUE]:true
+  });
+  const queue=shapeFullLocalControlQueue(page,scope);
+  const after=await readLinkedAssessmentContext(pool,ticketId);
+  if(after.snapshot_id!==scope.snapshot_id || after.target_sha!==scope.target_sha ||
+     after.project_id!==scope.project_id || after.assessment_id!==scope.assessment_id)
+    refused('target changed during review');
+  return {...queue,ticket_id:ticketId};
 }
 
 export async function readTicketControlDetail(pool,payload){
