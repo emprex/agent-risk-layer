@@ -15,6 +15,35 @@ const SHA = /^[0-9a-f]{40}$/;
 
 function invalid(message) { throw new Error('Local assessment ' + message); }
 
+// Surface a bounded, non-secret reason instead of erasing all bootstrap errors.
+// The subprocess can exit after a PostgreSQL/migration error or a timeout.
+// Never echo raw stderr: it may contain paths, credentials or connection strings.
+export function describeAssessmentBootstrapError(error) {
+  if (error?.killed || error?.code === 'ETIMEDOUT' || error?.signal === 'SIGTERM')
+    return 'canonical bootstrap timed out after 80 seconds; no ticket link was made. Check the existing canonical state before retrying.';
+  const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
+  const messages = [...stderr.matchAll(/^\s*-\s+([^\r\n]{1,500})$/gm)]
+    .map(match => match[1]);
+  const reason = messages.at(-1) || '';
+  if (/Migration checksum mismatch:\s*([\w.-]+\.sql)/i.test(reason))
+    return 'canonical bootstrap blocked by a PostgreSQL migration checksum mismatch: '
+      + reason.match(/Migration checksum mismatch:\s*([\w.-]+\.sql)/i)[1]
+      + '. No migration was repaired automatically.';
+  if (/DATABASE_URL is required/i.test(reason))
+    return 'canonical runner has no DATABASE_URL in its environment; no ticket link was made.';
+  if (/password authentication failed|no pg_hba\.conf entry|role .* does not exist/i.test(reason))
+    return 'canonical runner PostgreSQL authentication failed; check its DATABASE_URL target and local role.';
+  if (/ECONNREFUSED|connection refused|timeout expired|Connection terminated unexpectedly/i.test(reason))
+    return 'canonical runner cannot connect to PostgreSQL; verify the configured database endpoint.';
+  if (/permission denied/i.test(reason))
+    return 'canonical runner encountered a permission denial; review its database or filesystem privileges.';
+  if (/relation .* does not exist|column .* does not exist/i.test(reason))
+    return 'canonical runner encountered a missing PostgreSQL schema object; review schema/migration status without applying migrations automatically.';
+  return 'canonical bootstrap failed before the ticket could be linked (subprocess exit code '
+    + (Number.isInteger(error?.code) ? error.code : 'unknown')
+    + '). No automatic retry. Inspect local runner diagnostics to identify the cause.';
+}
+
 export function validateAssessmentSelection(input, confirmed = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
       typeof input.ticket_id !== 'string' || !UUID.test(input.ticket_id) ||
@@ -232,9 +261,10 @@ export async function linkOrCreateTicketAssessment(pool, input, actor) {
         [path.join(REPO_ROOT,'src/agent/arl-local-assessment-runner.mjs'),
           target.repositoryPath,'show assessment context'],
         {cwd:REPO_ROOT,timeout:80000,maxBuffer:2*1024*1024,
-          env:{...process.env,ARL_EXPECTED_TARGET_SHA:expectedSha,ARL_AI_ADVISORY:'0'}});
-    } catch {
-      invalid('canonical creation failed or timed out; no ticket link was recorded. Inspect existing state before retrying');
+          env:{...process.env,ARL_EXPECTED_TARGET_SHA:expectedSha,
+            ARL_AI_ADVISORY:'0',ARL_BOOTSTRAP_ONLY:'1'}});
+    } catch (error) {
+      invalid(describeAssessmentBootstrapError(error));
     }
     // Never take the CLI text as authority; verify the actual PostgreSQL
     // project, current snapshot and exact Git binding before any ticket write.
