@@ -16,6 +16,7 @@ try {
   if (error?.code !== 'ENOENT') throw error;
 }
 
+const bootstrapOnly = process.env.ARL_BOOTSTRAP_ONLY === '1';
 const repositoryArgument = String(process.argv[2] || '').trim();
 const openDashboardInBrowser = process.env.ARL_OPERATOR_OPEN_DASHBOARD === '1';
 if (openDashboardInBrowser && process.argv.length !== 3) {
@@ -141,6 +142,19 @@ try {
       frozenInspection:
         buildFrozenInspectionTransport(frozen)
     });
+  }
+
+  // ENKYRON's onboarding needs only canonical identity + initial snapshot.
+  // Never run the full 108-control assessment workflow during ticket linking:
+  // that workflow is slower, has separate authority gates, and can time out.
+  if (bootstrapOnly) {
+    console.log([
+      'ARL LOCAL ASSESSMENT BOOTSTRAP COMPLETE',
+      'Frozen Git SHA: ' + expectedRevision,
+      'Canonical context and initial snapshot created or verified.',
+      'No active tests, evidence acceptance, findings or verdicts recorded.'
+    ].join('\n'));
+    process.exit(0);
   }
 
   const deliverableCommand =
