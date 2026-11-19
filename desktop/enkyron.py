@@ -6520,6 +6520,10 @@ class EnkyronWindow(QMainWindow):
         if not self.bridge.shutdown():
             event.ignore()
             return
+        # Scope review is now an unparented, movable operator window.
+        # Close it with ENKYRON to avoid an orphaned sensitive review form.
+        if self.scope_review_dialog is not None:
+            self.scope_review_dialog.close()
         super().closeEvent(event)
 
     def save_mission_board_action(self, action, details):
@@ -21038,7 +21042,8 @@ class EnkyronWindow(QMainWindow):
             dialog.reject()
         dialog = ScopeReviewDialog(self, self.bridge, ticket_id)
         self.scope_review_dialog = dialog
-        dialog.open()
+        # show() preserves NonModal; QDialog.open() would re-enable modality.
+        dialog.show()
         dialog.load()
 
     def open_ticket_triage(self):
