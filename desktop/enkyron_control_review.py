@@ -134,6 +134,7 @@ class ControlReviewDialog(QDialog):
     def load_queue(self, select_next=False):
         if self.busy:
             return
+        started_at = time.monotonic()
         self.busy = True
         self.sequence += 1
         sequence = self.sequence
@@ -207,9 +208,9 @@ class ControlReviewDialog(QDialog):
             self.status.setText(
                 "{} controls · {} need human applicability review · "
                 "{} evidence checklists prepared by ARL. "
-                "Snapshot {}. No tests authorised.".format(
+                "Snapshot {}. No tests authorised. Queue loaded in {:.1f}s.".format(
                     data["total"], pending, len(self.preparation_by_id),
-                    data["snapshot_id"]
+                    data["snapshot_id"], time.monotonic() - started_at
                 )
             )
             if select_next:
@@ -227,6 +228,7 @@ class ControlReviewDialog(QDialog):
         self.bridge.call("control-queue", self.ticket_id, callback=loaded)
 
     def select_control(self, current, _previous):
+        started_at = time.monotonic()
         self.sequence += 1
         sequence = self.sequence
         self.detail = None
@@ -259,7 +261,9 @@ class ControlReviewDialog(QDialog):
                 return
             self.detail = data
             self.detail_cache[control_id] = data
-            self.title.setText("{} · {}".format(control_id, data.get("title", "")))
+            self.title.setText("{} · {} (detail {:.1f}s)".format(
+                control_id, data.get("title", ""), time.monotonic() - started_at
+            ))
             preparation = self.preparation_by_id.get(control_id) or {}
             requirements = preparation.get("required_evidence") or []
             route_labels = {
