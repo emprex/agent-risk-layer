@@ -27,6 +27,7 @@ class ControlReviewDialog(QDialog):
         self.detail = None
         self.preparation_by_id = {}
         self.detail_cache = {}
+        self.prefetch_inflight = set()
         self.sequence = 0
         self.busy = False
         self.recorded_any = False
@@ -145,6 +146,7 @@ class ControlReviewDialog(QDialog):
         self.detail = None
         self.preparation_by_id = {}
         self.detail_cache = {}
+        self.prefetch_inflight.clear()
         self.controls.blockSignals(True)
         self.controls.clear()
         self.controls.blockSignals(False)
@@ -264,6 +266,7 @@ class ControlReviewDialog(QDialog):
             self.title.setText("{} · {} (detail {:.1f}s)".format(
                 control_id, data.get("title", ""), time.monotonic() - started_at
             ))
+            self._prefetch_next_control(control_id)
             preparation = self.preparation_by_id.get(control_id) or {}
             requirements = preparation.get("required_evidence") or []
             route_labels = {
@@ -328,6 +331,49 @@ class ControlReviewDialog(QDialog):
                 payload={"ticket_id": self.ticket_id, "control_id": control_id},
                 callback=loaded,
             )
+
+    def _prefetch_next_control(self, current_id):
+        """Read only the next pending KB during human review; never pre-decide."""
+        context = self.context or {}
+        items = context.get("items") or []
+        current_index = next(
+            (i for i, item in enumerate(items)
+             if item.get("control_id") == current_id), -1
+        )
+        if current_index < 0:
+            return
+        next_item = next(
+            (item for item in items[current_index + 1:]
+             if item.get("stage") == "applicability"), None
+        )
+        if next_item is None:
+            return
+        next_id = next_item["control_id"]
+        if next_id in self.detail_cache or next_id in self.prefetch_inflight:
+            return
+        self.prefetch_inflight.add(next_id)
+        expected_snapshot = context.get("snapshot_id")
+        expected_sha = context.get("target_sha")
+
+        def received(data, error):
+            self.prefetch_inflight.discard(next_id)
+            if (error or not self.same_ticket() or
+                    self.context is not context or
+                    not isinstance(data, dict) or
+                    data.get("available") is not True or
+                    data.get("control_id") != next_id or
+                    data.get("snapshot_id") != expected_snapshot or
+                    data.get("target_sha") != expected_sha or
+                    data.get("stage") != "applicability"):
+                return
+            # Backend optimistic-concurrency digest is verified again on save.
+            self.detail_cache[next_id] = data
+
+        self.bridge.call(
+            "control-detail",
+            payload={"ticket_id": self.ticket_id, "control_id": next_id},
+            callback=received,
+        )
 
     def selected_facts(self):
         return [
@@ -435,7 +481,7 @@ class ControlReviewDialog(QDialog):
         stages["applicability"] -= 1
         stages[next_stage] += 1
         # Never trust cached, pre-decision control detail after a write.
-        self.detail_cache.clear()
+        self.detail_cache.pop(result["control_id"], None)
         self.detail = None
         self.save.setEnabled(False)
         self.status.setText(
