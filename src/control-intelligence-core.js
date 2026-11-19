@@ -6,10 +6,7 @@ import { runtimeApprovalActionDigest } from './access-control.js';
 import { effectiveEvidenceTrust, evidenceTrustRows } from './control-evidence-effective-trust.js';
 import { ARCHITECTURE_FACTS, suggestControls, suggestionProfile } from './control-suggestions.js';
 import { isLocalCliModeEnabled } from './agent/local-cli-mode.mjs';
-
-// Non-serialisable in-process capability: HTTP/JSON callers cannot opt into
-// the private 108-control desktop queue; public pagination stays capped at 50.
-export const LOCAL_OPERATOR_FULL_QUEUE = Symbol('arl-local-operator-full-control-queue');
+import { LOCAL_OPERATOR_FULL_QUEUE } from './agent/local-operator-full-queue.mjs';
 
 const VIEW_ROLES = new Set(['viewer','analyst','developer','admin','owner']);
 const RECORD_ROLES = new Set(['analyst','developer','admin','owner']);
