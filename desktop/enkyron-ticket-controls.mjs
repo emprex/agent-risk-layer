@@ -15,6 +15,8 @@ export function validateControlReviewRequest(payload,{decision=false}={}) {
     refused('an exact ticket and ARL-KB-001 through ARL-KB-108 are required');
   }
   if(decision){
+    if(Object.hasOwn(payload,'correction') && typeof payload.correction!=='boolean')
+      refused('correction must be an explicit boolean');
     if(payload.confirmed!==true || !DECISIONS.has(payload.decision) ||
        typeof payload.reason!=='string' || payload.reason.trim().length<20 ||
        payload.reason.length>1800 || !DIGEST.test(payload.evaluation_digest||'') ||
@@ -169,6 +171,22 @@ export async function readTicketControlQueue(pool,ticketId){
   return {...queue,ticket_id:ticketId};
 }
 
+/**
+ * A human can amend an applicability revision before ANY downstream control
+ * activity. Historical revision rows are never rewritten or deleted.
+ * This is NOT a way to override observed tests, evidence or findings.
+ */
+export function canCorrectApplicability(detail){
+  if(detail?.chain?.currentStage!=='test' ||
+     detail?.applicability?.status!=='applicable' ||
+     !Array.isArray(detail?.applicability?.history) ||
+     detail.applicability.history.length<1)return false;
+  const downstream=['tests','testHistory','evidence','evidenceHistory',
+    'findings','remediation','runtimeDecisions','approvals','retests'];
+  return downstream.every(key=>
+    detail[key]===undefined || (Array.isArray(detail[key]) && detail[key].length===0));
+}
+
 export async function readTicketControlDetail(pool,payload){
   const {ticketId,controlId}=validateControlReviewRequest(payload);
   const {scope,binding}=await canonicalControlBinding(pool,ticketId);
@@ -188,7 +206,8 @@ export async function readTicketControlDetail(pool,payload){
     stage,chain_status:String(detail.chain.chainStatus||'').slice(0,100),
     next_action:String(detail.chain.nextAction||'').slice(0,900),
     applicability_status:String(detail.applicability?.status||'unknown').slice(0,50),
-    applicability_reason:String(detail.applicability?.reason||'').slice(0,1200),
+    applicability_reason:String(detail.applicability?.reason||'').slice(0,1800),
+    correction_allowed:canCorrectApplicability(detail),
     evaluation_digest:String(detail.applicability?.evaluationDigest||''),
     check_objective:String(detail.testDefinition?.objective||'').slice(0,1500),
     check_method:String(detail.testDefinition?.method||'').slice(0,1200),
@@ -210,9 +229,14 @@ export async function recordTicketControlApplicability(pool,payload,actor){
      ticket.assigned_to!==actor || ticket.assessor_name!==actor)
     refused('active ticket assignment and original accountable operator required');
   const current=await readTicketControlDetail(pool,payload);
+  const correction=payload.correction===true;
+  const allowedStage=current.stage==='applicability' ||
+    (correction && current.stage==='test' && current.correction_allowed===true);
   if(current.snapshot_id!==payload.snapshot_id ||
      current.evaluation_digest!==payload.evaluation_digest ||
-     current.stage!=='applicability')refused('stale review or control no longer at applicability');
+     !allowedStage)refused('stale review, downstream activity or correction not authorised');
+  if(current.stage==='test' && payload.reason.trim()===current.applicability_reason.trim())
+    refused('correction must change the recorded explanation');
   if(payload.architecture_fact_ids.some(f=>!current.confirmed_facts.includes(f)))
     refused('facts must be confirmed in the current canonical snapshot');
   const {scope,binding}=await canonicalControlBinding(pool,ticketId);
@@ -233,7 +257,10 @@ export async function recordTicketControlApplicability(pool,payload,actor){
     refused('canonical review write could not be verified; inspect current state');
   return {saved:true,control_id:controlId,
     snapshot_id:scope.snapshot_id,decision:recorded.evaluation.decision,
+    correction,
     revision_id:recorded.evaluation.id,
     next_stage:recorded.controlStatus?.currentStage||'unknown',
-    notice:'Canonical human applicability revision recorded. No evidence accepted, test run or verdict decided.'};
+    notice:correction
+      ? 'Corrective applicability revision appended; original preserved in canonical history. No evidence accepted, test run or verdict decided.'
+      : 'Canonical human applicability revision recorded. No evidence accepted, test run or verdict decided.'};
 }
