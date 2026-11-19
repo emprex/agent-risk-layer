@@ -1,0 +1,36 @@
+name: ENKYRON Control Applicability UI Regression
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/enkyron_control_review.py'
+      - 'tests/test_enkyron_control_review_gui.py'
+      - '.github/workflows/enkyron-control-review-smoke.yml'
+  push:
+    branches:
+      - 'fix/enkyron-control-review-dialog-latency-20261119'
+    paths:
+      - 'desktop/enkyron_control_review.py'
+      - 'tests/test_enkyron_control_review_gui.py'
+      - '.github/workflows/enkyron-control-review-smoke.yml'
+
+jobs:
+  native-control-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libegl1 libopengl0 libxkbcommon0
+      - name: Install PySide6
+        run: |
+          python3 -m venv "$RUNNER_TEMP/qt"
+          "$RUNNER_TEMP/qt/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Compile and run long-dialog and fast-next regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/qt/bin/python" -m py_compile desktop/enkyron_control_review.py
+          "$RUNNER_TEMP/qt/bin/python" -m unittest discover -s tests -p 'test_enkyron_control_review_gui.py' -v
