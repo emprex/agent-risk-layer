@@ -106,6 +106,29 @@ class ControlReviewGuiTest(unittest.TestCase):
         self.assertIn("103 still need", self.view.status.text())
 
 
+    def test_queue_load_shows_backend_per_stage_timings(self):
+        self.view.show()
+        self.view.load_queue()
+        self.assertEqual(self.bridge.calls[-1][0], "control-queue")
+        items = [
+            {"control_id": f"ARL-KB-{n:03d}", "title": f"Control {n}",
+             "stage": "applicability"}
+            for n in range(1, 109)
+        ]
+        self.bridge.calls[-1][2]["callback"]({
+            "available": True, "total": 108, "items": items,
+            "snapshot_id": "sys_example", "target_sha": "a" * 40,
+            "stages": {"applicability": 108, "test": 0},
+            "load_timings_ms": {
+                "scope_binding": 1250, "canonical_graph": 8700,
+                "evidence_preparation": 420, "final_verification": 1130,
+            },
+        }, None)
+        self.assertIn("binding 1.2s", self.view.status.text())
+        self.assertIn("graph 8.7s", self.view.status.text())
+        self.assertIn("checklists 0.4s", self.view.status.text())
+        self.assertIn("final check 1.1s", self.view.status.text())
+
     def test_kb013_advances_to_014_not_pending_012(self):
         self.view.show()
         items = [
