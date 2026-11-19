@@ -63,35 +63,19 @@ try {
 process.chdir(productRoot);
 
 try {
+  // Load only the trusted identity/inspection/snapshot code before
+  // ENKYRON onboarding. Assessment, reporting and AI modules are not
+  // necessary to link a Git target and can add substantial startup cost.
   const [
     { resolveLocalAssessmentContext, findExistingLocalAssessmentContext },
     { inspectFrozenRepository },
     { buildFrozenInspectionTransport },
-    { ensureInitialAssessmentSnapshot },
-    { runLocalAssessment },
-    {
-      buildCustomerAssessmentDeliverable,
-      detectCustomerAssessmentDeliverableCommand,
-      publicCustomerAssessmentDeliverable,
-      writeCustomerAssessmentDeliverable
-    },
-    { runArlAgent },
-    {
-      explainAssessmentState
-    },
-    {
-      isAssessmentStateExplanationRequest
-    }
+    { ensureInitialAssessmentSnapshot }
   ] = await Promise.all([
     import('./local-assessment-context.mjs'),
     import('./tools/inspect-frozen-repository.mjs'),
     import('./frozen-inspection-transport.mjs'),
-    import('./initial-assessment-snapshot.mjs'),
-    import('./local-assessment-workflow.mjs'),
-    import('./customer-assessment-deliverable.mjs'),
-    import('./arl-operational-orchestrator.mjs'),
-    import('./ai/assessment-explainer.mjs'),
-    import('./ai/advisory-context.mjs')
+    import('./initial-assessment-snapshot.mjs')
   ]);
 
   // Opening an existing local dashboard is strictly non-provisioning.
@@ -156,6 +140,25 @@ try {
     ].join('\n'));
     process.exit(0);
   }
+
+  const [
+    { runLocalAssessment },
+    {
+      buildCustomerAssessmentDeliverable,
+      detectCustomerAssessmentDeliverableCommand,
+      publicCustomerAssessmentDeliverable,
+      writeCustomerAssessmentDeliverable
+    },
+    { runArlAgent },
+    { explainAssessmentState },
+    { isAssessmentStateExplanationRequest }
+  ] = await Promise.all([
+    import('./local-assessment-workflow.mjs'),
+    import('./customer-assessment-deliverable.mjs'),
+    import('./arl-operational-orchestrator.mjs'),
+    import('./ai/assessment-explainer.mjs'),
+    import('./ai/advisory-context.mjs')
+  ]);
 
   const deliverableCommand =
     detectCustomerAssessmentDeliverableCommand(request);
