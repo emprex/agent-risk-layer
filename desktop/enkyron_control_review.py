@@ -118,6 +118,13 @@ class ControlReviewDialog(QDialog):
         self.reason.setMaximumHeight(115)
         self.reason.textChanged.connect(self.validate_save)
         side_l.addWidget(self.reason)
+        self.reason_feedback = QLabel(
+            "Paste only your human rationale here (20–1800 characters), "
+            "not the entire control checklist."
+        )
+        self.reason_feedback.setWordWrap(True)
+        self.reason_feedback.setObjectName("subtle")
+        side_l.addWidget(self.reason_feedback)
         self.confirm = QCheckBox(
             "I reviewed this exact control and confirm this is my own applicability decision."
         )
@@ -413,6 +420,25 @@ class ControlReviewDialog(QDialog):
         detail = self.detail or {}
         decision = self.decision.currentData()
         reason = self.reason.toPlainText().strip()
+        length = len(reason)
+        if length > 1800:
+            self.reason_feedback.setText(
+                "Justification too long: {} / 1800 characters. "
+                "Remove {} characters. Paste only the specific human rationale, "
+                "not the control checklist.".format(length, length - 1800)
+            )
+            self.reason_feedback.setStyleSheet("color: #a11b1b; font-weight: 600;")
+        elif length < 20:
+            self.reason_feedback.setText(
+                "Justification: {} / 1800 characters. "
+                "At least 20 characters required.".format(length)
+            )
+            self.reason_feedback.setStyleSheet("")
+        else:
+            self.reason_feedback.setText(
+                "Justification: {} / 1800 characters.".format(length)
+            )
+            self.reason_feedback.setStyleSheet("")
         correction = (detail.get("stage") == "test" and
                       detail.get("correction_allowed") is True)
         reviewable = detail.get("stage") == "applicability" or correction
