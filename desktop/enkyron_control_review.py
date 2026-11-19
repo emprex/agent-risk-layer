@@ -222,12 +222,24 @@ class ControlReviewDialog(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, control_id)
                 self.controls.addItem(item)
             pending = (data.get("stages") or {}).get("applicability", 0)
+            timings = data.get("load_timings_ms") or {}
+            timing_note = ""
+            keys = ("scope_binding", "canonical_graph",
+                    "evidence_preparation", "final_verification")
+            if (isinstance(timings, dict) and
+                    all(isinstance(timings.get(key), (int, float))
+                        and not isinstance(timings.get(key), bool)
+                        and 0 <= timings[key] <= 600000 for key in keys)):
+                timing_note = (
+                    " [binding {:.1f}s, graph {:.1f}s, "
+                    "checklists {:.1f}s, final check {:.1f}s]"
+                ).format(*(timings[key] / 1000 for key in keys))
             self.status.setText(
                 "{} controls · {} need human applicability review · "
                 "{} evidence checklists prepared by ARL. "
-                "Snapshot {}. No tests authorised. Queue loaded in {:.1f}s.".format(
+                "Snapshot {}. No tests authorised. Queue loaded in {:.1f}s.{}".format(
                     data["total"], pending, len(self.preparation_by_id),
-                    data["snapshot_id"], time.monotonic() - started_at
+                    data["snapshot_id"], time.monotonic() - started_at, timing_note
                 )
             )
             if select_next:
