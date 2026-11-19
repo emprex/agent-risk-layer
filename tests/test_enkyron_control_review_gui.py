@@ -136,6 +136,82 @@ class ControlReviewGuiTest(unittest.TestCase):
         }, None)
         self.assertIn("ARL-KB-007", self.view.detail_cache)
 
+    def test_recorded_control_can_be_corrected_without_overwriting_history(self):
+        self.view.show()
+        items = [
+            {"control_id": f"ARL-KB-{n:03d}", "stage": "test"}
+            for n in range(1, 109)
+        ]
+        self.view.context = {
+            "snapshot_id": "sys_example", "target_sha": "a" * 40,
+            "items": items,
+            "stages": {"applicability": 0, "test": 108},
+        }
+        for n in range(1, 109):
+            item = QListWidgetItem(f"ARL-KB-{n:03d}")
+            item.setData(Qt.ItemDataRole.UserRole, f"ARL-KB-{n:03d}")
+            self.view.controls.addItem(item)
+        self.view.controls.setCurrentRow(7)
+        self.assertEqual(self.bridge.calls[-1][0], "control-detail")
+        self.bridge.calls[-1][2]["callback"]({
+            "available": True, "control_id": "ARL-KB-008",
+            "snapshot_id": "sys_example", "target_sha": "a" * 40,
+            "title": "Personal data", "category": "Governance",
+            "stage": "test", "applicability_status": "applicable",
+            "applicability_reason": "Wrong KB-009 explanation pasted here.",
+            "evaluation_digest": "a" * 64,
+            "correction_allowed": True,
+        }, None)
+        self.assertIn("corrected", self.view.save.text())
+        self.assertFalse(self.view.save.isEnabled())  # unchanged reason
+        self.view.reason.setPlainText("Corrected KB-008 specific privacy rationale.")
+        self.view.confirm.setChecked(True)
+        self.assertTrue(self.view.save.isEnabled())
+        self.view.confirm_decision = lambda *_: True
+        self.view.save_decision()
+        self.assertEqual(self.bridge.calls[-1][0], "control-applicability-save")
+        payload = self.bridge.calls[-1][2]["payload"]
+        self.assertEqual(payload["control_id"], "ARL-KB-008")
+        self.assertEqual(payload["decision"], "applicable")
+        self.assertIs(payload["correction"], True)
+        self.bridge.calls[-1][2]["callback"]({
+            "saved": True, "correction": True,
+            "control_id": "ARL-KB-008", "snapshot_id": "sys_example",
+            "decision": "applicable", "next_stage": "test",
+            "revision_id": "cap_corrected",
+        }, None)
+        self.assertEqual(self.view.context["stages"]["test"], 108)
+        self.assertEqual(self.view.controls.currentRow(), 7)
+        self.assertIn("Corrective revision", self.view.status.text())
+        self.assertNotIn("control-queue", [c[0] for c in self.bridge.calls])
+        self.assertEqual(self.bridge.calls[-1][0], "control-detail")
+
+    def test_correction_can_revert_to_context_required_without_auto_testing(self):
+        self.view.show()
+        self.view.context = {
+            "snapshot_id": "sys_example",
+            "items": [
+                {"control_id": f"ARL-KB-{n:03d}",
+                 "stage": "test" if n <= 9 else "applicability"}
+                for n in range(1, 109)
+            ],
+            "stages": {"applicability": 99, "test": 9},
+        }
+        self.view.controls.addItem(QListWidgetItem("ARL-KB-008"))
+        self.view.controls.item(0).setData(
+            Qt.ItemDataRole.UserRole, "ARL-KB-008"
+        )
+        self.view._complete_corrective_revision({
+            "correction": True, "snapshot_id": "sys_example",
+            "control_id": "ARL-KB-008", "next_stage": "applicability",
+            "revision_id": "cap_context",
+        }, 0.1)
+        self.assertEqual(self.view.context["stages"]["applicability"], 100)
+        self.assertEqual(self.view.context["stages"]["test"], 8)
+        self.assertEqual(self.view.context["items"][7]["stage"], "applicability")
+        self.assertIn("Prior revision preserved", self.view.status.text())
+        self.assertNotIn("control-queue", [c[0] for c in self.bridge.calls])
+
     def test_stale_snapshot_requires_canonical_reload(self):
         self.view.show()
         self.view.context = {
