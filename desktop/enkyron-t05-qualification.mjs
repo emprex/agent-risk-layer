@@ -3,6 +3,7 @@
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {readLinkedAssessmentContext} from './enkyron-ticket-assessment.mjs';
+import {intelligenceDigest} from '../src/canonical-intelligence-digest.mjs';
 
 const TICKET=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const KB=/^ARL-KB-(?:00[1-9]|0[1-9][0-9]|10[0-8])$/;
@@ -105,8 +106,20 @@ function verifyCandidate(row,master,id){
      row.system_snapshot_id!==master.snapshot_id||
      row.verification_state!=='unverified' ||row.retention_status!=='active' ||
      !HEX.test(row.integrity_digest||'')||
+     typeof row.descriptor_json!=='string'||
      !String(row.source_reference||'').includes(master.target_sha))
     refuse('candidate is absent, stale, or outside frozen scope');
+  let stored;
+  try{stored=JSON.parse(row.descriptor_json);}catch{refuse('candidate descriptor invalid');}
+  if(!stored||stored.schema!=='arl.control-evidence.v2'||
+     stored.controlId!==id.control_id||
+     stored.projectId!==master.project_id||
+     stored.systemSnapshotId!==master.snapshot_id||
+     stored.sourceType!==row.source_type||
+     stored.sourceReference!==row.source_reference||
+     stored.verificationState!=='unverified'||
+     intelligenceDigest(stored)!==row.integrity_digest)
+    refuse('candidate descriptor integrity or identity does not match canonical record');
   return existingCriteria(row);
 }
 
@@ -116,7 +129,8 @@ async function current(pool,id,masterReader,scopeReader) {
   verifyScope(master,scope,id);
   const rows=(await pool.query(
     'SELECT id,project_id,system_snapshot_id,entry_id,source_type,'+
-    'source_reference,limitations,integrity_digest,verification_state,retention_status '+
+    'source_reference,limitations,integrity_digest,descriptor_json,'+
+    'verification_state,retention_status '+
     'FROM control_evidence_items WHERE id=$1 AND project_id=$2 AND '+
     'system_snapshot_id=$3 AND entry_id=$4',
     [id.evidence_id,master.project_id,master.snapshot_id,id.control_id])).rows;
