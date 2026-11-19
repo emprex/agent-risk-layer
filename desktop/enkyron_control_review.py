@@ -263,6 +263,13 @@ class ControlReviewDialog(QDialog):
                 return
             self.detail = data
             self.detail_cache[control_id] = data
+            self.save.setText("Record human applicability decision")
+            if data.get("stage") == "test" and data.get("correction_allowed") is True:
+                self.decision.setCurrentIndex(
+                    self.decision.findData(data.get("applicability_status"))
+                )
+                self.reason.setPlainText(data.get("applicability_reason", ""))
+                self.save.setText("Record corrected applicability revision")
             self.title.setText("{} · {} (detail {:.1f}s)".format(
                 control_id, data.get("title", ""), time.monotonic() - started_at
             ))
@@ -386,13 +393,17 @@ class ControlReviewDialog(QDialog):
         detail = self.detail or {}
         decision = self.decision.currentData()
         reason = self.reason.toPlainText().strip()
+        correction = (detail.get("stage") == "test" and
+                      detail.get("correction_allowed") is True)
+        reviewable = detail.get("stage") == "applicability" or correction
         allowed = (
-            not self.busy and self.same_ticket()
-            and detail.get("stage") == "applicability"
+            not self.busy and self.same_ticket() and reviewable
             and decision in ("applicable", "context_required", "not_applicable")
             and 20 <= len(reason) <= 1800
             and self.confirm.isChecked()
             and (decision != "not_applicable" or bool(self.selected_facts()))
+            and (not correction or
+                 reason != str(detail.get("applicability_reason", "")).strip())
         )
         self.save.setEnabled(bool(allowed))
 
@@ -451,6 +462,9 @@ class ControlReviewDialog(QDialog):
     def _advance_after_saved_revision(self, result, seconds):
         """Use the verified ARL response; avoid re-fetching 108 dossiers."""
         current = self.context or {}
+        if result.get("correction") is True:
+            self._complete_corrective_revision(result, seconds)
+            return
         items = current.get("items")
         stages = current.get("stages")
         next_stage = result.get("next_stage")
@@ -506,6 +520,51 @@ class ControlReviewDialog(QDialog):
         else:
             self.controls.setCurrentRow(next_row)
 
+    def _complete_corrective_revision(self, result, seconds):
+        """Update the current control stage, preserve queue and show the new revision."""
+        current = self.context or {}
+        items, stages = current.get("items"), current.get("stages")
+        next_stage = result.get("next_stage")
+        valid_stages = {
+            "applicability", "test", "evidence", "finding",
+            "remediation", "retest", "approval", "deployment_decision"
+        }
+        matches = [
+            (i, item) for i, item in enumerate(items or [])
+            if item.get("control_id") == result.get("control_id")
+        ]
+        if (result.get("snapshot_id") != current.get("snapshot_id") or
+                not isinstance(items, list) or len(items) != 108 or
+                not isinstance(stages, dict) or next_stage not in valid_stages or
+                len(matches) != 1 or matches[0][1].get("stage") != "test"):
+            self.load_queue()
+            return
+        row, item = matches[0]
+        item["stage"] = next_stage
+        if next_stage != "test":
+            if not isinstance(stages.get("test"), int) or stages["test"] < 1:
+                self.load_queue()
+                return
+            if not isinstance(stages.get(next_stage), int):
+                self.load_queue()
+                return
+            stages["test"] -= 1
+            stages[next_stage] += 1
+        self.detail_cache.pop(result["control_id"], None)
+        self.detail = None
+        self.save.setEnabled(False)
+        self.status.setText(
+            "Corrective revision {} saved for {} ({:.1f}s). "
+            "Prior revision preserved. No tests authorised.".format(
+                result["revision_id"], result["control_id"], seconds
+            )
+        )
+        # Re-read ONLY this KB from canonical ARL to verify the correction.
+        self.controls.blockSignals(True)
+        self.controls.setCurrentRow(-1)
+        self.controls.blockSignals(False)
+        self.controls.setCurrentRow(row)
+
     def save_decision(self):
         if not self.save.isEnabled() or not self.detail or not self.same_ticket():
             return
@@ -530,6 +589,7 @@ class ControlReviewDialog(QDialog):
             "reason": rationale,
             "architecture_fact_ids": facts,
             "confirmed": True,
+            "correction": control.get("stage") == "test",
         }
 
         def recorded(result, error):
