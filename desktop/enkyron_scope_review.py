@@ -211,13 +211,12 @@ class ScopeReviewDialog(QDialog):
                     ". Reload the current review before retrying."
                 )
                 return
-            self.status.setText(
-                "Recorded technical scope revision {} for {}. "
-                "No tests authorised; no Master or control verdict changed."
-                .format(result["revision"], result["snapshot_id"])
-            )
+            # The bridge returns saved=True only after its PostgreSQL COMMIT.
+            # Show the receipt in the main ticket and close this edit form;
+            # reopening is an explicit choice, not an invitation to duplicate
+            # an append-only scope revision.
             if callable(self.on_saved):
                 self.on_saved(result)
-            self.load()
+            self.accept()
 
         self.bridge.call("ticket-scope-save", payload=payload, callback=recorded)
