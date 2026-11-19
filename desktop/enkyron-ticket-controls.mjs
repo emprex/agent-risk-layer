@@ -1,6 +1,7 @@
 // Canonical per-control human applicability review for ENKYRON.
 // No artificial scope skips, no test execution, no automatic decisions.
 import {readLinkedAssessmentContext} from './enkyron-ticket-assessment.mjs';
+import {performance} from 'node:perf_hooks';
 
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const CONTROL=/^ARL-KB-(?:00[1-9]|0[1-9][0-9]|10[0-8])$/;
@@ -151,8 +152,11 @@ export function shapeFullLocalControlQueue(page,scope){
     notice:'Select one control. No applicability decision is inferred or recorded by inspection.'};
 }
 
-export async function readTicketControlQueue(pool,ticketId){
+export async function readTicketControlQueue(pool,ticketId,{withPreparation=false}={}){
+  if(typeof withPreparation!=='boolean') refused('invalid preparation selection');
+  const started=performance.now();
   const {scope,binding}=await canonicalControlBinding(pool,ticketId);
+  const scopeChecked=performance.now();
   const [{getControlIntelligence},{LOCAL_OPERATOR_FULL_QUEUE}]=await Promise.all([
     controlApi(), import('../src/agent/local-operator-full-queue.mjs')
   ]);
@@ -164,11 +168,32 @@ export async function readTicketControlQueue(pool,ticketId){
     [LOCAL_OPERATOR_FULL_QUEUE]:true
   });
   const queue=shapeFullLocalControlQueue(page,scope);
+  const graphChecked=performance.now();
+  let preparation=null;
+  if(withPreparation){
+    // Prepare from the SAME verified scope and canonical queue. The old combined
+    // path called readLinkedAssessmentContext four times, including four costly
+    // full Git status checks. One final fresh read below still catches drift.
+    const {prepareBoundControlDossiers}=await import('./enkyron-control-preparation.mjs');
+    preparation=await prepareBoundControlDossiers(pool,ticketId,scope,queue);
+  }
+  const preparationChecked=performance.now();
   const after=await readLinkedAssessmentContext(pool,ticketId);
   if(after.snapshot_id!==scope.snapshot_id || after.target_sha!==scope.target_sha ||
-     after.project_id!==scope.project_id || after.assessment_id!==scope.assessment_id)
+     after.project_id!==scope.project_id || after.assessment_id!==scope.assessment_id ||
+     after.target_reference!==scope.target_reference)
     refused('target changed during review');
-  return {...queue,ticket_id:ticketId};
+  const finished=performance.now();
+  const round=ms=>Math.round(ms*10)/10;
+  return {...queue,ticket_id:ticketId,
+    ...(withPreparation?{preparation}:{}),
+    load_timings_ms:{
+      scope_binding:round(scopeChecked-started),
+      canonical_graph:round(graphChecked-scopeChecked),
+      evidence_preparation:round(preparationChecked-graphChecked),
+      final_verification:round(finished-preparationChecked)
+    }
+  };
 }
 
 /**
