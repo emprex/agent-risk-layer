@@ -8,7 +8,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 try:
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import QTimer, Qt
     from PySide6.QtWidgets import (
         QApplication, QDialog, QDialogButtonBox, QListWidgetItem, QWidget,
     )
@@ -92,8 +92,7 @@ class ControlReviewGuiTest(unittest.TestCase):
         for n in range(1, 109):
             self.view.controls.addItem(QListWidgetItem(f"ARL-KB-{n:03d}"))
             self.view.controls.item(n - 1).setData(
-                self.view.controls.item(n - 1).data(256) or 256,
-                f"ARL-KB-{n:03d}",
+                Qt.ItemDataRole.UserRole, f"ARL-KB-{n:03d}",
             )
         self.view._advance_after_saved_revision({
             "snapshot_id": "sys_example", "control_id": "ARL-KB-005",
