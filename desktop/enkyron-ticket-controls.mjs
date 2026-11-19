@@ -152,7 +152,7 @@ export function shapeFullLocalControlQueue(page,scope){
 export async function readTicketControlQueue(pool,ticketId){
   const {scope,binding}=await canonicalControlBinding(pool,ticketId);
   const [{getControlIntelligence},{LOCAL_OPERATOR_FULL_QUEUE}]=await Promise.all([
-    controlApi(), import('../src/control-intelligence-core.js')
+    controlApi(), import('../src/agent/local-operator-full-queue.mjs')
   ]);
   // One full canonical graph derivation. The Symbol is an in-process
   // capability, not a public API flag; the core still enforces role access,
