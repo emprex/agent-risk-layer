@@ -105,6 +105,37 @@ class ControlReviewGuiTest(unittest.TestCase):
         self.assertNotIn("control-queue", [call[0] for call in self.bridge.calls])
         self.assertIn("103 still need", self.view.status.text())
 
+    def test_next_detail_prefetch_requires_matching_snapshot_and_sha(self):
+        self.view.show()
+        items = [
+            {"control_id": "ARL-KB-006", "stage": "applicability"},
+            {"control_id": "ARL-KB-007", "stage": "applicability"},
+        ]
+        self.view.context = {
+            "snapshot_id": "sys_example",
+            "target_sha": "a" * 40,
+            "items": items,
+        }
+        self.view._prefetch_next_control("ARL-KB-006")
+        self.assertEqual(len(self.bridge.calls), 1)
+        op, args, params = self.bridge.calls[0]
+        self.assertEqual(op, "control-detail")
+        self.assertEqual(params["payload"]["control_id"], "ARL-KB-007")
+        params["callback"]({
+            "available": True, "control_id": "ARL-KB-007",
+            "snapshot_id": "sys_wrong", "target_sha": "a" * 40,
+            "stage": "applicability",
+        }, None)
+        self.assertNotIn("ARL-KB-007", self.view.detail_cache)
+        self.view._prefetch_next_control("ARL-KB-006")
+        self.assertEqual(len(self.bridge.calls), 2)
+        self.bridge.calls[1][2]["callback"]({
+            "available": True, "control_id": "ARL-KB-007",
+            "snapshot_id": "sys_example", "target_sha": "a" * 40,
+            "stage": "applicability", "evaluation_digest": "a" * 64,
+        }, None)
+        self.assertIn("ARL-KB-007", self.view.detail_cache)
+
     def test_stale_snapshot_requires_canonical_reload(self):
         self.view.show()
         self.view.context = {
