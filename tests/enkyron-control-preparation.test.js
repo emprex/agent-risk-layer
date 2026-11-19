@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {
-  shapeControlPreparation,prepareTicketControlDossiers,readPreparedTicketControlQueue,
+  shapeControlPreparation,prepareBoundControlDossiers,
+  prepareTicketControlDossiers,readPreparedTicketControlQueue,
   shapeTicketStaticCandidatePreview,collectTicketStaticCandidates
 } from '../desktop/enkyron-control-preparation.mjs';
 
@@ -86,6 +87,47 @@ test('read-only preparation binds workflow and check definitions to exact projec
   });
   assert.equal(combined.preparation.dossiers.length,108);
   assert.equal(combined.items.length,108);
+});
+
+
+test('one verified scope and canonical queue shape 108 dossiers without extra Git reads',async()=>{
+  const calls=[];
+  const pool={query:async(sql,params)=>{
+    calls.push({sql,params});
+    return {rows};
+  }};
+  const result=await prepareBoundControlDossiers(pool,ticket,scope,queue);
+  assert.equal(result.controls_total,108);
+  assert.equal(result.dossiers.length,108);
+  assert.equal(result.ticket_id,ticket);
+  assert.equal(result.tests_executed,0);
+  assert.equal(result.decisions_recorded,0);
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].params,[scope.project_id,scope.snapshot_id]);
+  assert.ok(!/INSERT|UPDATE|DELETE/i.test(calls[0].sql));
+  await assert.rejects(
+    prepareBoundControlDossiers(pool,ticket,scope,{...queue,target_sha:'f'.repeat(40)}),
+    /snapshot/
+  );
+  assert.equal(calls.length,1,'mismatched SHA is rejected before database access');
+  await assert.rejects(
+    prepareBoundControlDossiers(pool,ticket,scope,{...queue,items:items.slice(1)}),
+    /complete canonical snapshot/
+  );
+});
+
+test('separate preparation rejects a changed target repository even at the same SHA',async()=>{
+  const expected={...scope,target_reference:'/home/operator/frozen-target'};
+  let read=0;
+  const pool={query:async()=>({rows})};
+  await assert.rejects(prepareTicketControlDossiers(pool,ticket,{
+    scopeReader:async()=>({
+      ...expected,target_reference:++read===1
+        ? expected.target_reference : '/home/operator/other-target'
+    }),
+    queueReader:async()=>queue
+  }),/changed during preparation/);
+  assert.equal(read,2);
 });
 
 test('queue/snapshot drift blocks preparation without persisting draft decisions',async()=>{
