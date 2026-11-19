@@ -21040,7 +21040,18 @@ class EnkyronWindow(QMainWindow):
                 dialog.activateWindow()
                 return
             dialog.reject()
-        dialog = ScopeReviewDialog(self, self.bridge, ticket_id)
+        def scope_recorded(result):
+            # A verified, committed revision is a receipt, not an active-test grant.
+            if self.current_id == ticket_id:
+                self.status.setText(
+                    "Technical scope review recorded — revision {}. "
+                    "Active tests remain NOT AUTHORISED."
+                    .format(result["revision"])
+                )
+
+        dialog = ScopeReviewDialog(
+            self, self.bridge, ticket_id, on_saved=scope_recorded
+        )
         self.scope_review_dialog = dialog
         # show() preserves NonModal; QDialog.open() would re-enable modality.
         dialog.show()
