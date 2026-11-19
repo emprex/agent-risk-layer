@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {validateControlReviewRequest,recordTicketControlApplicability,prepareTicketSourceReview}
+import {validateControlReviewRequest,recordTicketControlApplicability,prepareTicketSourceReview,shapeFullLocalControlQueue}
   from '../desktop/enkyron-ticket-controls.mjs';
 
 const ticket='3385aa99-e08a-4471-b8e5-9d0b36a8412b';
@@ -110,4 +110,40 @@ test('source preparation refuses mismatched SHA and changed assessment',async()=
     inspector:verified,
     scopeReader:async()=>({...scope,snapshot_id:++calls===1?'sys_2':'sys_changed'})
   }),/changed while the source was inspected/);
+});
+
+test('single canonical local read produces exactly 108 validated control stages',()=>{
+  const scope={snapshot_id:'sys_example',project_id:'prj_1',assessment_id:'asm_1',
+    target_sha:'a'.repeat(40)};
+  const items=Array.from({length:108},(_,i)=>({
+    controlId:'ARL-KB-'+String(i+1).padStart(3,'0'),
+    controlTitle:'Canonical control '+(i+1),
+    currentStage:i<6?'test':'applicability'
+  }));
+  const response={systemSnapshot:{id:scope.snapshot_id},
+    total:108,items,hasMore:false,limit:108,offset:0};
+  const queue=shapeFullLocalControlQueue(response,scope);
+  assert.equal(queue.total,108);
+  assert.equal(queue.stages.test,6);
+  assert.equal(queue.stages.applicability,102);
+  assert.equal(queue.snapshot_id,scope.snapshot_id);
+  assert.equal(queue.tests_executed,0);
+  assert.equal(queue.human_review_required,true);
+  for(const change of [
+    {limit:50},{hasMore:true},{offset:50},{total:107},
+    {items:items.slice(0,107)},
+    {items:[items[0],...items.slice(0,107)]},
+    {items:[{...items[0],currentStage:'passed'},...items.slice(1)]},
+    {systemSnapshot:{id:'sys_changed'}}
+  ]){
+    assert.throws(()=>shapeFullLocalControlQueue({...response,...change},scope),
+      /Control review/);
+  }
+});
+
+test('trusted local full-queue capability is a non-serialisable symbol',async()=>{
+  const {LOCAL_OPERATOR_FULL_QUEUE}=await import('../src/control-intelligence-core.js');
+  assert.equal(typeof LOCAL_OPERATOR_FULL_QUEUE,'symbol');
+  assert.equal(JSON.stringify({[LOCAL_OPERATOR_FULL_QUEUE]:true}), '{}');
+  assert.equal(JSON.parse('{"LOCAL_OPERATOR_FULL_QUEUE":true}')[LOCAL_OPERATOR_FULL_QUEUE], undefined);
 });
