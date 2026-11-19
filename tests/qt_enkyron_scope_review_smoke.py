@@ -2,6 +2,7 @@
 import unittest
 from unittest.mock import patch
 
+from PySide6.QtCore import Qt, QPoint
 from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 from desktop.enkyron_scope_review import ScopeReviewDialog
 
@@ -48,10 +49,22 @@ class ScopeReviewSmoke(unittest.TestCase):
         owner = Owner()
         bridge = Bridge()
         dialog = ScopeReviewDialog(owner, bridge, TICKET)
-        dialog.open()
+        dialog.show()
         dialog.load()
         self.app.processEvents()
         self.assertTrue(dialog.isVisible())
+        self.assertIsNone(dialog.parentWidget())
+        self.assertEqual(dialog.windowType(), Qt.WindowType.Window)
+        self.assertEqual(dialog.windowModality(), Qt.WindowModality.NonModal)
+        self.assertFalse(dialog.isModal())
+        self.assertTrue(dialog.windowFlags() & Qt.WindowType.WindowMinMaxButtonsHint)
+        self.assertTrue(dialog.windowFlags() & Qt.WindowType.WindowCloseButtonHint)
+        main_pos = owner.pos()
+        dialog.move(QPoint(110, 90))
+        self.app.processEvents()
+        self.assertEqual(owner.pos(), main_pos)
+        self.assertEqual(dialog.pos(), QPoint(110, 90))
+        self.assertTrue(dialog.same_ticket())
         self.assertEqual(bridge.operations[0][0], "ticket-scope-review")
         self.assertTrue(dialog.save.isEnabled())
         self.assertFalse(dialog.confirm.isChecked())
@@ -66,6 +79,8 @@ class ScopeReviewSmoke(unittest.TestCase):
         ):
             dialog.record()
         self.assertEqual(len(bridge.operations), 1)
+        owner.current_id = "other-ticket"
+        self.assertFalse(dialog.same_ticket())
         dialog.close()
         owner.close()
 
