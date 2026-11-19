@@ -4,9 +4,10 @@ All data and decisions travel through the canonical ARL backend. There is no
 synthetic PASS, no test authorisation, no invented applicability or evidence.
 """
 from PySide6.QtCore import Qt
+import time
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel, QListWidget,
-    QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QSplitter,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout,
+    QLabel, QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QSplitter,
     QVBoxLayout, QWidget,
 )
 
@@ -28,6 +29,8 @@ class ControlReviewDialog(QDialog):
         self.detail_cache = {}
         self.sequence = 0
         self.busy = False
+        self.recorded_any = False
+        self.finished.connect(self._refresh_parent_on_close)
         self.setWindowTitle("ENKYRON · 108-control assessment review")
         self.resize(1040, 710)
         self.setMinimumSize(850, 570)
@@ -343,6 +346,116 @@ class ControlReviewDialog(QDialog):
         )
         self.save.setEnabled(bool(allowed))
 
+
+    def confirm_decision(self, control, decision, rationale):
+        """Review full rationale in a scrollable field; keep Yes/No on screen."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Confirm canonical human applicability")
+        layout = QVBoxLayout(dialog)
+        headline = QLabel(
+            "Control: {}\\nDecision: {}\\nSnapshot: {}".format(
+                control["control_id"], decision, control["snapshot_id"]
+            )
+        )
+        headline.setWordWrap(True)
+        layout.addWidget(headline)
+        layout.addWidget(QLabel("Human rationale — review before recording:"))
+        rationale_view = QPlainTextEdit(dialog)
+        rationale_view.setReadOnly(True)
+        rationale_view.setPlainText(rationale)
+        layout.addWidget(rationale_view, 1)
+        warning = QLabel(
+            "This records an append-only human decision. No evidence is "
+            "accepted and no test is authorised. Proceed?"
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes |
+            QDialogButtonBox.StandardButton.No, parent=dialog
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Yes).clicked.connect(dialog.accept)
+        no = buttons.button(QDialogButtonBox.StandardButton.No)
+        no.clicked.connect(dialog.reject)
+        no.setDefault(True)
+        no.setFocus()
+        layout.addWidget(buttons)
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen:
+            geometry = screen.availableGeometry()
+            dialog.resize(
+                min(650, max(350, geometry.width() - 100)),
+                min(460, max(260, geometry.height() - 120)),
+            )
+        else:
+            dialog.resize(600, 420)
+        return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def _refresh_parent_on_close(self, _code):
+        """Refresh the heavier evidence workplan once, not after every control."""
+        if (self.recorded_any and callable(self.on_recorded) and
+                self.parent() is not None and
+                self.parent().current_id == self.ticket_id):
+            self.on_recorded()
+
+    def _advance_after_saved_revision(self, result, seconds):
+        """Use the verified ARL response; avoid re-fetching 108 dossiers."""
+        current = self.context or {}
+        items = current.get("items")
+        stages = current.get("stages")
+        next_stage = result.get("next_stage")
+        allowed_stages = {
+            "applicability", "test", "evidence", "finding", "remediation",
+            "retest", "approval", "deployment_decision",
+        }
+        if (result.get("snapshot_id") != current.get("snapshot_id") or
+                not isinstance(items, list) or len(items) != 108 or
+                not isinstance(stages, dict) or
+                next_stage not in allowed_stages or
+                next_stage == "applicability" or
+                result.get("decision") not in
+                ("applicable", "not_applicable", "context_required")):
+            self.load_queue(select_next=True)
+            return
+        matches = [
+            item for item in items if
+            item.get("control_id") == result.get("control_id")
+        ]
+        if (len(matches) != 1 or matches[0].get("stage") != "applicability" or
+                not isinstance(stages.get("applicability"), int) or
+                stages["applicability"] < 1 or
+                not isinstance(stages.get(next_stage), int)):
+            self.load_queue(select_next=True)
+            return
+        matches[0]["stage"] = next_stage
+        stages["applicability"] -= 1
+        stages[next_stage] += 1
+        # Never trust cached, pre-decision control detail after a write.
+        self.detail_cache.clear()
+        self.detail = None
+        self.save.setEnabled(False)
+        self.status.setText(
+            "Recorded {} for {} · revision {} ({:.1f}s). "
+            "{} still need applicability review. "
+            "Use Reload for a fresh canonical 108-control queue.".format(
+                result["decision"], result["control_id"],
+                result["revision_id"], seconds, stages["applicability"]
+            )
+        )
+        next_row = next(
+            (i for i, item in enumerate(items)
+             if item.get("stage") == "applicability"), None
+        )
+        if next_row is None:
+            self.controls.setCurrentRow(-1)
+            self.title.setText("All 108 applicability reviews recorded")
+            self.info.setPlainText(
+                "This completes applicability only. Evidence and control "
+                "outcomes are still subject to independent verification."
+            )
+        else:
+            self.controls.setCurrentRow(next_row)
+
     def save_decision(self):
         if not self.save.isEnabled() or not self.detail or not self.same_ticket():
             return
@@ -350,19 +463,9 @@ class ControlReviewDialog(QDialog):
         decision = self.decision.currentData()
         rationale = self.reason.toPlainText().strip()
         facts = self.selected_facts()
-        confirmation = QMessageBox.question(
-            self, "Confirm canonical human applicability",
-            "Control: {}\nDecision: {}\nSnapshot: {}\n\n"
-            "Reason:\n{}\n\n"
-            "This records an append-only human decision. "
-            "No evidence is accepted and no test is authorised. Proceed?".format(
-                control["control_id"], decision, control["snapshot_id"], rationale
-            ),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if confirmation != QMessageBox.StandardButton.Yes:
+        if not self.confirm_decision(control, decision, rationale):
             return
+        started_at = time.monotonic()
         self.busy = True
         self.save.setEnabled(False)
         self.refresh.setEnabled(False)
@@ -392,14 +495,10 @@ class ControlReviewDialog(QDialog):
                 )
                 self.validate_save()
                 return
-            self.status.setText(
-                "Recorded {} for {} · revision {}. No test executed.".format(
-                    result["decision"], result["control_id"], result["revision_id"]
-                )
+            self.recorded_any = True
+            self._advance_after_saved_revision(
+                result, time.monotonic() - started_at
             )
-            if callable(self.on_recorded):
-                self.on_recorded()
-            self.load_queue(select_next=True)
 
         self.bridge.call(
             "control-applicability-save", payload=payload, callback=recorded
