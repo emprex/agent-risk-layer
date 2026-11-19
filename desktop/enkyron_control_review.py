@@ -12,6 +12,21 @@ from PySide6.QtWidgets import (
 )
 
 
+def next_pending_control_row(items, after_control_id):
+    """Next pending KB after the reviewed one; wrap once, never jump backwards early."""
+    if not isinstance(items, list) or not items:
+        return None
+    anchor = next(
+        (i for i, entry in enumerate(items)
+         if entry.get("control_id") == after_control_id), -1
+    )
+    # Skip the current row even if context_required legitimately keeps it pending.
+    order = list(range(anchor + 1, len(items))) + list(range(0, anchor))
+    return next(
+        (i for i in order if items[i].get("stage") == "applicability"), None
+    )
+
+
 class ControlReviewDialog(QDialog):
     """One ticket, one canonical snapshot, one explicit human decision at a time."""
 
@@ -216,10 +231,12 @@ class ControlReviewDialog(QDialog):
                 )
             )
             if select_next:
-                row = next(
-                    (i for i, entry in enumerate(items)
-                     if entry.get("stage") == "applicability"), 0
-                )
+                row = next_pending_control_row(items, self.selected_control_id)
+                if row is None:
+                    row = next(
+                        (i for i, entry in enumerate(items)
+                         if entry.get("control_id") == self.selected_control_id), 0
+                    )
             else:
                 row = next(
                     (i for i, entry in enumerate(items)
@@ -343,19 +360,10 @@ class ControlReviewDialog(QDialog):
         """Read only the next pending KB during human review; never pre-decide."""
         context = self.context or {}
         items = context.get("items") or []
-        current_index = next(
-            (i for i, item in enumerate(items)
-             if item.get("control_id") == current_id), -1
-        )
-        if current_index < 0:
+        next_row = next_pending_control_row(items, current_id)
+        if next_row is None:
             return
-        next_item = next(
-            (item for item in items[current_index + 1:]
-             if item.get("stage") == "applicability"), None
-        )
-        if next_item is None:
-            return
-        next_id = next_item["control_id"]
+        next_id = items[next_row]["control_id"]
         if next_id in self.detail_cache or next_id in self.prefetch_inflight:
             return
         self.prefetch_inflight.add(next_id)
@@ -460,7 +468,7 @@ class ControlReviewDialog(QDialog):
             self.on_recorded()
 
     def _advance_after_saved_revision(self, result, seconds):
-        """Use the verified ARL response; avoid re-fetching 108 dossiers."""
+        """Advance from the SAVED KB, not the first pending KB in the register."""
         current = self.context or {}
         if result.get("correction") is True:
             self._complete_corrective_revision(result, seconds)
@@ -468,55 +476,70 @@ class ControlReviewDialog(QDialog):
         items = current.get("items")
         stages = current.get("stages")
         next_stage = result.get("next_stage")
+        decision = result.get("decision")
         allowed_stages = {
             "applicability", "test", "evidence", "finding", "remediation",
             "retest", "approval", "deployment_decision",
         }
+        remains_pending = (
+            next_stage == "applicability" and decision == "context_required"
+        )
         if (result.get("snapshot_id") != current.get("snapshot_id") or
                 not isinstance(items, list) or len(items) != 108 or
                 not isinstance(stages, dict) or
                 next_stage not in allowed_stages or
-                next_stage == "applicability" or
-                result.get("decision") not in
-                ("applicable", "not_applicable", "context_required")):
+                (next_stage == "applicability" and not remains_pending) or
+                decision not in ("applicable", "not_applicable", "context_required")):
             self.load_queue(select_next=True)
             return
         matches = [
-            item for item in items if
-            item.get("control_id") == result.get("control_id")
+            (i, item) for i, item in enumerate(items)
+            if item.get("control_id") == result.get("control_id")
         ]
-        if (len(matches) != 1 or matches[0].get("stage") != "applicability" or
+        if (len(matches) != 1 or matches[0][1].get("stage") != "applicability" or
                 not isinstance(stages.get("applicability"), int) or
                 stages["applicability"] < 1 or
                 not isinstance(stages.get(next_stage), int)):
             self.load_queue(select_next=True)
             return
-        matches[0]["stage"] = next_stage
-        stages["applicability"] -= 1
-        stages[next_stage] += 1
-        # Never trust cached, pre-decision control detail after a write.
+        current_row, item = matches[0]
+        if not remains_pending:
+            item["stage"] = next_stage
+            stages["applicability"] -= 1
+            stages[next_stage] += 1
+        # An accepted context_required revision retains the applicability stage,
+        # but its reason/digest have changed: never display cached details.
         self.detail_cache.pop(result["control_id"], None)
         self.detail = None
         self.save.setEnabled(False)
+        note = (
+            "Architecture context still required; this control remains pending. "
+            if remains_pending else ""
+        )
         self.status.setText(
             "Recorded {} for {} · revision {} ({:.1f}s). "
-            "{} still need applicability review. "
+            "{}{} still need applicability review. "
             "Use Reload for a fresh canonical 108-control queue.".format(
-                result["decision"], result["control_id"],
-                result["revision_id"], seconds, stages["applicability"]
+                decision, result["control_id"], result["revision_id"],
+                seconds, note, stages["applicability"]
             )
         )
-        next_row = next(
-            (i for i, item in enumerate(items)
-             if item.get("stage") == "applicability"), None
-        )
+        next_row = next_pending_control_row(items, result["control_id"])
         if next_row is None:
-            self.controls.setCurrentRow(-1)
-            self.title.setText("All 108 applicability reviews recorded")
-            self.info.setPlainText(
-                "This completes applicability only. Evidence and control "
-                "outcomes are still subject to independent verification."
-            )
+            if stages["applicability"] > 0:
+                # Only the just-recorded, still context_required KB remains.
+                # Force a fresh detail so its new explanation is displayed.
+                self.controls.blockSignals(True)
+                self.controls.setCurrentRow(-1)
+                self.controls.blockSignals(False)
+                self.controls.setCurrentRow(current_row)
+            else:
+                self.controls.setCurrentRow(-1)
+                self.title.setText("All 108 applicability reviews recorded")
+                self.info.setPlainText(
+                    "This completes applicability only. Evidence and control "
+                    "outcomes are still subject to independent verification."
+                )
         else:
             self.controls.setCurrentRow(next_row)
 
