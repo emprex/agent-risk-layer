@@ -6,8 +6,29 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {
   validateAssessmentSelection,frozenLocalTarget,linkOrCreateTicketAssessment,
-  readLinkedAssessmentContext
+  readLinkedAssessmentContext,describeAssessmentBootstrapError
 } from '../desktop/enkyron-ticket-assessment.mjs';
+
+test('bootstrap failure is classified without exposing raw subprocess stderr',()=>{
+  const auth={code:2,stderr:'ARL LOCAL ASSESSMENT FAILED\n\n- password authentication failed for user \"emprex\"\n'};
+  assert.match(describeAssessmentBootstrapError(auth),/PostgreSQL authentication failed/);
+  assert.doesNotMatch(describeAssessmentBootstrapError(auth),/emprex/);
+
+  const mismatch={code:2,stderr:'ARL LOCAL ASSESSMENT FAILED\n\n- Migration checksum mismatch: 021_old.sql\n'};
+  assert.match(describeAssessmentBootstrapError(mismatch),/021_old.sql/);
+
+  const failed={code:2,stderr:'- password=very-secret\n'};
+  assert.doesNotMatch(describeAssessmentBootstrapError(failed),/very-secret/);
+
+  assert.match(describeAssessmentBootstrapError({killed:true,signal:'SIGTERM'}),/timed out/);
+});
+
+test('ticket bootstrap is explicitly isolated from the full assessment workflow',()=>{
+  const source=fs.readFileSync(new URL('../src/agent/arl-local-assessment-runner.mjs',import.meta.url),'utf8');
+  assert.match(source,/if \(bootstrapOnly\) \{/);
+  assert.match(source,/process\.exit\(0\)/);
+  assert.match(source,/No active tests, evidence acceptance, findings or verdicts recorded/);
+});
 
 const ticket='3385aa99-e08a-4471-b8e5-9d0b36a8412b';
 const sha='129a20f42321742229ba78c3f1b13ea925ea7622';
