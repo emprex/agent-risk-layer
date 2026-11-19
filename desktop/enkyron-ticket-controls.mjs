@@ -230,8 +230,9 @@ export async function recordTicketControlApplicability(pool,payload,actor){
     refused('active ticket assignment and original accountable operator required');
   const current=await readTicketControlDetail(pool,payload);
   const correction=payload.correction===true;
-  const allowedStage=current.stage==='applicability' ||
-    (correction && current.stage==='test' && current.correction_allowed===true);
+  const allowedStage=correction
+    ? (current.stage==='test' && current.correction_allowed===true)
+    : current.stage==='applicability';
   if(current.snapshot_id!==payload.snapshot_id ||
      current.evaluation_digest!==payload.evaluation_digest ||
      !allowedStage)refused('stale review, downstream activity or correction not authorised');
