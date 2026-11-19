@@ -105,6 +105,93 @@ class ControlReviewGuiTest(unittest.TestCase):
         self.assertNotIn("control-queue", [call[0] for call in self.bridge.calls])
         self.assertIn("103 still need", self.view.status.text())
 
+
+    def test_kb013_advances_to_014_not_pending_012(self):
+        self.view.show()
+        items = [
+            {"control_id": f"ARL-KB-{n:03d}",
+             "stage": "applicability" if n >= 12 else "test"}
+            for n in range(1, 109)
+        ]
+        self.view.context = {
+            "snapshot_id": "sys_example",
+            "items": items,
+            "stages": {"applicability": 97, "test": 11},
+        }
+        for n in range(1, 109):
+            item = QListWidgetItem(f"ARL-KB-{n:03d}")
+            item.setData(Qt.ItemDataRole.UserRole, f"ARL-KB-{n:03d}")
+            self.view.controls.addItem(item)
+        self.view.controls.setCurrentRow(12)  # Human selected KB-013.
+        self.view._advance_after_saved_revision({
+            "snapshot_id": "sys_example", "control_id": "ARL-KB-013",
+            "decision": "applicable", "revision_id": "cap_013",
+            "next_stage": "test",
+        }, 0.2)
+        self.assertEqual(self.view.controls.currentRow(), 13)  # KB-014.
+        self.assertEqual(items[11]["stage"], "applicability")  # KB-012 stays.
+        self.assertEqual(items[12]["stage"], "test")
+        self.assertNotIn("control-queue", [c[0] for c in self.bridge.calls])
+
+    def test_context_required_records_without_reloading_or_losing_stage(self):
+        self.view.show()
+        items = [
+            {"control_id": f"ARL-KB-{n:03d}",
+             "stage": "applicability" if n >= 12 else "test"}
+            for n in range(1, 109)
+        ]
+        self.view.context = {
+            "snapshot_id": "sys_example",
+            "items": items,
+            "stages": {"applicability": 97, "test": 11},
+        }
+        for n in range(1, 109):
+            item = QListWidgetItem(f"ARL-KB-{n:03d}")
+            item.setData(Qt.ItemDataRole.UserRole, f"ARL-KB-{n:03d}")
+            self.view.controls.addItem(item)
+        self.view.controls.setCurrentRow(11)  # KB-012.
+        self.view._advance_after_saved_revision({
+            "snapshot_id": "sys_example", "control_id": "ARL-KB-012",
+            "decision": "context_required", "revision_id": "cap_012",
+            "next_stage": "applicability",
+        }, 0.2)
+        self.assertEqual(self.view.controls.currentRow(), 12)  # KB-013.
+        self.assertEqual(items[11]["stage"], "applicability")
+        self.assertEqual(self.view.context["stages"]["applicability"], 97)
+        self.assertIn("Architecture context still required", self.view.status.text())
+        self.assertNotIn("control-queue", [c[0] for c in self.bridge.calls])
+
+    def test_next_pending_wraps_only_after_reaching_end(self):
+        from desktop.enkyron_control_review import next_pending_control_row
+        items = [
+            {"control_id": f"ARL-KB-{n:03d}",
+             "stage": "applicability" if n in (12, 13, 14) else "test"}
+            for n in range(1, 109)
+        ]
+        self.assertEqual(next_pending_control_row(items, "ARL-KB-013"), 13)
+        self.assertEqual(next_pending_control_row(items, "ARL-KB-014"), 11)
+        items[11]["stage"] = "test"
+        items[12]["stage"] = "test"
+        self.assertIsNone(next_pending_control_row(items, "ARL-KB-014"))
+
+    def test_canonical_fallback_reloads_relative_to_last_selected_control(self):
+        self.view.show()
+        self.view.selected_control_id = "ARL-KB-013"
+        self.view.load_queue(select_next=True)
+        self.assertEqual(self.bridge.calls[-1][0], "control-queue")
+        items = [
+            {"control_id": f"ARL-KB-{n:03d}",
+             "title": f"Control {n}",
+             "stage": "applicability" if n >= 12 else "test"}
+            for n in range(1, 109)
+        ]
+        self.bridge.calls[-1][2]["callback"]({
+            "available": True, "total": 108,
+            "snapshot_id": "sys_example", "target_sha": "a" * 40,
+            "items": items, "stages": {"applicability": 97, "test": 11},
+        }, None)
+        self.assertEqual(self.view.controls.currentRow(), 13)  # KB-014.
+
     def test_next_detail_prefetch_requires_matching_snapshot_and_sha(self):
         self.view.show()
         items = [
