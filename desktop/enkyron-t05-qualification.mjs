@@ -15,7 +15,7 @@ const refuse=message=>{throw new Error('T05 source qualification: '+message);};
 const digest=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const clean=(v,min,max,label)=>{
   if(typeof v!=='string'||v.trim().length<min||v.length>max||
-     /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(v))
+     /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v))
     refuse(label+' length or characters invalid');
   return v.trim();
 };
@@ -71,15 +71,15 @@ export function existingCriteria(row){
   const text=String(row.limitations||'');
   const map=new Map();
   if(row.source_type==='arl_static_projection_bundle'){
-    const part=/Criterion projections:\\s*([^|]+)/.exec(text)?.[1];
+    const part=/Criterion projections:\s*([^|]+)/.exec(text)?.[1];
     if(!part)refuse('bundle has no recorded criterion fingerprints');
-    for(const m of part.matchAll(/(?:^|[, ]+)(\\d{1,2}):([a-f0-9]{64})(?=,|\\s|$)/g)){
+    for(const m of part.matchAll(/(?:^|[, ]+)(\d{1,2}):([a-f0-9]{64})(?=,|\s|$)/g)){
       const n=Number(m[1]);if(n<1||n>40||map.has(n))refuse('invalid projection index');
       map.set(n,m[2]);
     }
   } else if(row.source_type==='arl_frozen_source_candidate' &&
             row.entry_id==='ARL-KB-001'){
-    const m=/Projection SHA256:\\s*([a-f0-9]{64})/.exec(text);
+    const m=/Projection SHA256:\s*([a-f0-9]{64})/.exec(text);
     if(m)map.set(1,m[1]);
   } else refuse('not an existing T04 source-metadata candidate');
   if(!map.size)refuse('no criterion in saved candidate');
@@ -173,9 +173,9 @@ export function frozenSourceExcerpt(repo,sha,sourcePath,first,last){
     if(String(e?.message||'').startsWith('T05 source qualification:'))throw e;
     refuse('exact frozen Git source unavailable; no qualification');
   }
-  const lines=text.split(/\\r?\\n/);
+  const lines=text.split(/\r?\n/);
   if(last>lines.length)refuse('source line range exceeds frozen file');
-  const excerpt=lines.slice(first-1,last).join('\\n');
+  const excerpt=lines.slice(first-1,last).join('\n');
   if(excerpt.length<1||excerpt.length>12000)
     refuse('source excerpt must be bounded and non-empty');
   return {source_excerpt_sha256:crypto.createHash('sha256')
