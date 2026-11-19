@@ -142,7 +142,7 @@ test('single canonical local read produces exactly 108 validated control stages'
 });
 
 test('trusted local full-queue capability is a non-serialisable symbol',async()=>{
-  const {LOCAL_OPERATOR_FULL_QUEUE}=await import('../src/control-intelligence-core.js');
+  const {LOCAL_OPERATOR_FULL_QUEUE}=await import('../src/agent/local-operator-full-queue.mjs');
   assert.equal(typeof LOCAL_OPERATOR_FULL_QUEUE,'symbol');
   assert.equal(JSON.stringify({[LOCAL_OPERATOR_FULL_QUEUE]:true}), '{}');
   assert.equal(JSON.parse('{"LOCAL_OPERATOR_FULL_QUEUE":true}')[LOCAL_OPERATOR_FULL_QUEUE], undefined);
