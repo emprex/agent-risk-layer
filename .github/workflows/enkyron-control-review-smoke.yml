@@ -28,6 +28,12 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/qt"
           "$RUNNER_TEMP/qt/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Verify full 108-control canonical queue contract (offline)
+        run: |
+          node --check src/control-intelligence-core.js
+          node --check desktop/enkyron-ticket-controls.mjs
+          node --test tests/enkyron-ticket-controls.test.js
+
       - name: Compile and run long-dialog and fast-next regression tests
         env:
           QT_QPA_PLATFORM: offscreen
