@@ -165,6 +165,12 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Control applicability dialog and fast-next regression (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'test_enkyron_control_review_gui.py' -v
+
       - name: Native pilot assessment lab UI smoke (offline)
         env:
           QT_QPA_PLATFORM: offscreen
