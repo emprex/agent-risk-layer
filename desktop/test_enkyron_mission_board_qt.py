@@ -59,6 +59,40 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertIn('Mission data unavailable', self.view.notice.text())
         self.assertFalse(self.view.notice.isHidden())
 
+    def test_double_click_shows_full_mission_and_work_item_without_writes(self):
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QApplication, QDialog, QPlainTextEdit
+
+        mission = demo_missions()[0]
+        mission["title"] = "Mission " + ("long name " * 12)
+        mission["description"] = "Full mission description " + ("context " * 24)
+        mission["work_items"][0]["title"] = "T04 — Deploy Louvain Engine in an isolated local environment"
+        self.view.show_live_board({
+            "available": True, "items": [mission], "more": False, "can_write": True})
+        writes = []
+        self.view.writeRequested.connect(lambda action, data: writes.append(action))
+
+        def read_dialog():
+            dialog = QApplication.activeModalWidget()
+            self.assertIsInstance(dialog, QDialog)
+            self.assertEqual(dialog.objectName(), "enkyronMissionReadOnlyDetails")
+            editor = dialog.findChild(QPlainTextEdit, "enkyronMissionDetailsText")
+            self.assertIsNotNone(editor)
+            self.assertTrue(editor.isReadOnly())
+            captured.append(editor.toPlainText())
+            dialog.reject()
+
+        captured = []
+        QTimer.singleShot(0, read_dialog)
+        self.view.mission_table.itemDoubleClicked.emit(self.view.mission_table.item(0, 0))
+        self.assertIn(mission["title"], captured[0])
+        self.assertIn(mission["description"], captured[0])
+        QTimer.singleShot(0, read_dialog)
+        self.view.task_table.itemDoubleClicked.emit(self.view.task_table.item(0, 1))
+        self.assertIn(mission["work_items"][0]["title"], captured[1])
+        self.assertIn("Status: Completed", captured[1])
+        self.assertEqual(writes, [])
+
     def test_every_write_control_stays_disabled_in_demo(self):
         self.view.example_button.click()
         self.assertFalse(self.view.new_button.isEnabled())
