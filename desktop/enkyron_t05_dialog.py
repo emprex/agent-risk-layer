@@ -21,18 +21,19 @@ class T05QualificationDialog(QDialog):
         self.on_recorded = on_recorded
         self.preview_data = None
         self.loading = False
-        self.setWindowTitle("T05 · Qualify existing source evidence")
+        self.setWindowTitle("Evidence Qualification · Existing candidate")
         self.setMinimumSize(760, 630)
         layout = QVBoxLayout(self)
 
-        title = QLabel("T05 SOURCE QUALIFICATION — " + control_id)
+        title = QLabel("EVIDENCE QUALIFICATION — " + control_id)
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         layout.addWidget(title)
         self.identity = QLabel("Candidate: " + evidence_id)
         self.identity.setWordWrap(True)
         layout.addWidget(self.identity)
         explanation = QLabel(
-            "Review an existing T04 candidate and its exact criterion. "
+            "Review an existing recorded source candidate and its exact criterion. "
+            "This is an assessment evidence review, not a Project Board task. "
             "Source observations, missing proof and tests requiring separate "
             "authorisation remain distinct. No PASS/FAIL or VERIFIED status "
             "is created here."
@@ -91,7 +92,7 @@ class T05QualificationDialog(QDialog):
         form.addRow("Evidence limitations:", self.limitations)
         layout.addLayout(form)
 
-        self.prior = QLabel("Loading existing T05 history…")
+        self.prior = QLabel("Loading existing evidence qualification history…")
         self.prior.setWordWrap(True)
         layout.addWidget(self.prior)
         self.preview_view = QPlainTextEdit()
@@ -106,11 +107,11 @@ class T05QualificationDialog(QDialog):
         layout.addWidget(self.notice)
 
         actions = QHBoxLayout()
-        self.preview_button = QPushButton("Preview T05 qualification · read-only")
+        self.preview_button = QPushButton("Preview evidence qualification · read-only")
         self.preview_button.clicked.connect(self.preview)
         self.preview_button.setEnabled(False)
         actions.addWidget(self.preview_button)
-        self.record_button = QPushButton("Record reviewed T05 decision")
+        self.record_button = QPushButton("Record evidence qualification")
         self.record_button.setEnabled(False)
         self.record_button.clicked.connect(self.record)
         actions.addWidget(self.record_button)
@@ -167,13 +168,13 @@ class T05QualificationDialog(QDialog):
     def loaded(self, result, error):
         self.loading = False
         if error or not isinstance(result, dict) or not result.get("available"):
-            self.notice.setText("T05 unavailable: " + str(error or "No response"))
+            self.notice.setText("Evidence qualification unavailable: " + str(error or "No response"))
             return
         if (result.get("ticket_id") != self.ticket_id or
                 result.get("control_id") != self.control_id or
                 result.get("evidence_id") != self.evidence_id or
                 result.get("candidate_verification_state") != "unverified"):
-            self.notice.setText("T05 identity/verification mismatch; refused.")
+            self.notice.setText("Evidence review identity/verification mismatch; refused.")
             return
         self.criterion.blockSignals(True)
         self.criterion.clear()
@@ -194,7 +195,7 @@ class T05QualificationDialog(QDialog):
                 )
             )
         self.prior.setText(
-            "Previous T05 decisions: " + (
+            "Previous evidence qualifications: " + (
                 "; ".join(summary) if summary else "none — this does not erase prior Work Notes"
             )
         )
@@ -218,14 +219,14 @@ class T05QualificationDialog(QDialog):
         self.preview_button.setEnabled(True)
         if error or not isinstance(result, dict) or not result.get("available"):
             self.notice.setText(
-                "T05 preview refused: " + str(error or "No verified preview")
+                "Evidence preview refused: " + str(error or "No verified preview")
             )
             return
         if (result.get("evidence_id") != self.evidence_id or
                 result.get("control_id") != self.control_id or
                 result.get("ticket_id") != self.ticket_id or
                 result.get("evidence_accepted") is not False):
-            self.notice.setText("T05 preview did not match the selected record.")
+            self.notice.setText("Evidence preview did not match the selected record.")
             return
         self.preview_data = result
         lines = [
@@ -262,13 +263,13 @@ class T05QualificationDialog(QDialog):
         if not preview or not self.record_button.isEnabled():
             return
         question = (
-            "Record this T05 technical qualification in the append-only "
+            "Record this evidence qualification in the append-only "
             "assessment review ledger?\n\n"
-            "The existing T04 candidate remains UNVERIFIED.\n"
+            "The existing candidate remains UNVERIFIED.\n"
             "No tests, security finding, PASS/FAIL or Master revision."
         )
         if QMessageBox.question(
-            self, "Confirm human T05 qualification", question,
+            self, "Confirm evidence qualification", question,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         ) != QMessageBox.StandardButton.Yes:
@@ -289,7 +290,7 @@ class T05QualificationDialog(QDialog):
             result.get("saved") is True or result.get("already_recorded") is True
         ):
             self.notice.setText(
-                "T05 was NOT confirmed: " + str(error or "No recorded response")
+                "Evidence qualification was NOT confirmed: " + str(error or "No recorded response")
                 + ". Reopen preview before retrying."
             )
             self.preview_button.setEnabled(True)
@@ -299,12 +300,12 @@ class T05QualificationDialog(QDialog):
                 result.get("evidence_accepted") is not False or
                 result.get("control_id") != self.control_id):
             self.notice.setText(
-                "Unexpected T05 acknowledgement. Check existing records."
+                "Unexpected qualification acknowledgement. Check existing records."
             )
             return
         self.notice.setText(
             "Already recorded; no duplicate." if result.get("already_recorded")
-            else "T05 qualification recorded. Original candidate remains UNVERIFIED."
+            else "Evidence qualification recorded. Candidate remains UNVERIFIED."
         )
         self.preview_data = None
         self.preview_view.setPlainText(
