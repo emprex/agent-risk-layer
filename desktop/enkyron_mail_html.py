@@ -3,7 +3,7 @@
 Never pass the original provider HTML to QTextBrowser.setHtml. Only generated
 tags from a tiny allowlist are returned. No active CSS or arbitrary src/href attributes, active
 links, scripts, fonts, embedded media or external resources. Up to 12 bounded HTTPS
-image references are emitted for the separate asynchronous Qt image loader.
+image references are emitted only after explicit user consent for the Qt image loader.
 The original message remains unchanged in the PostgreSQL archive.
 """
 from html import escape
@@ -73,8 +73,9 @@ def _mail_image_url(value):
 
 
 class _SafeEmailHTML(HTMLParser):
-    def __init__(self):
+    def __init__(self, allow_remote_images=False):
         super().__init__(convert_charrefs=True)
+        self.allow_remote_images = allow_remote_images is True
         self.result = []
         self.open_tags = []
         self.blocked_tag = None
@@ -98,12 +99,12 @@ class _SafeEmailHTML(HTMLParser):
             src = next((v for k, v in attrs if k.lower() == "src"), None)
             # ENKYRON_INLINE_MAIL_IMAGES_V1: HTTPS only, no raw HTML or local URLs.
             url = _mail_image_url(src)
-            if url and self.image_count < 12:
+            if self.allow_remote_images and url and self.image_count < 12:
                 self.image_count += 1
                 self.result.append('<img src="' + escape(url, quote=True)
                                    + '" alt="' + escape(alt, quote=True) + '">')
             else:
-                label = "[Image unavailable: " + alt + "]" if alt else "[Image unavailable]"
+                label = "[Image blocked: " + alt + "]" if alt else "[Image blocked]"
                 self.result.append("<em>" + escape(label, quote=True) + "</em>")
             return
         if tag == "a":
@@ -156,11 +157,11 @@ class _SafeEmailHTML(HTMLParser):
             self.result.append(escape("&#" + name + ";", quote=True))
 
 
-def safe_mail_html(value):
+def safe_mail_html(value, allow_remote_images=False):
     """Convert at most 20k characters of untrusted HTML into inert Qt markup."""
     if not isinstance(value, str) or not value.strip():
         return ""
-    parser = _SafeEmailHTML()
+    parser = _SafeEmailHTML(allow_remote_images=allow_remote_images)
     try:
         parser.feed(value[:20000])
         parser.close()
