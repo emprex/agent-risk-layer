@@ -54,7 +54,9 @@ class ManualSendSmoke(unittest.TestCase):
             calls[-1][3]({"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"},None)
             self.assertFalse(window.crm_mail_send_dialog.isVisible())
             self.assertFalse(window.crm_draft_dialog.isVisible())
-            self.assertEqual(calls[-1][0],"crm-mail-drafts")
+            self.assertEqual([c[0] for c in calls[-2:]],
+                             ["crm-mail-drafts", "crm-company-dossier"])
+            self.assertNotIn("mail-send-draft", [c[0] for c in calls])
             window.show_mail_draft_dialog({
                 **draft,"mail_state":"external_send_reported",
                 "manual_send_provider":"gmail",
