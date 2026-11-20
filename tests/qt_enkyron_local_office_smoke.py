@@ -52,7 +52,7 @@ class LocalOfficeSmoke(unittest.TestCase):
                                 "items": ([{"mailbox": "direction", "id": THREAD,
                                    "subject": "FIFA assessment", "labels": "Priority"}]
                                   if payload["folder"] == "user_example" else [])}
-                elif command == "mail-local-messages":
+                elif command in ("mail-local-messages", "mail-thread-conversation"):
                     response = {"mailbox": "direction", "thread_id": THREAD,
                                 "items": [{"from": "contact@example.invalid",
                                     "subject": "FIFA assessment", "text":
@@ -117,8 +117,8 @@ class LocalOfficeSmoke(unittest.TestCase):
         window = None
         try:
             window = EnkyronWindow()
-            self.assertEqual(window.pages.count(), 4)
-            self.assertEqual(window.navigation.count(), 5)
+            self.assertEqual(window.pages.count(), 5)
+            self.assertEqual(window.navigation.count(), 6)
             routes = [
                 ("enkyronHomeOpenTickets", 1, 1, None),
                 ("enkyronHomeOpenCRM", 2, 2, 0),
