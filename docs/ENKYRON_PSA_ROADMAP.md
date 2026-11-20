@@ -777,3 +777,14 @@ L'orientation reste 17 blocs / 157 critères, puis les 26 scénarios de recette 
 - Références : [issue UX-15 #544](https://github.com/emprex/agent-risk-layer/issues/544), [PR UX-15A #545](https://github.com/emprex/agent-risk-layer/pull/545), [PR Close #543](https://github.com/emprex/agent-risk-layer/pull/543), [PR manual send #542](https://github.com/emprex/agent-risk-layer/pull/542), [UX-14 #540](https://github.com/emprex/agent-risk-layer/issues/540), [suivi principal #520](https://github.com/emprex/agent-risk-layer/pull/520).
 - **Méthode de travail :** avant toute modification, vérifier l'état réel de Git/SQL/UI ; un seul changement de fonctionnalité ; tests unitaires + Qt natif + PostgreSQL synthétique ; exact-head CI puis recette Debian ; ne rien affirmer pour la base locale par simple fusion GitHub. Ne jamais effacer les données, supprimer migrations passées ou inventer un résultat métier.
 
+## 12. Retour d'expérience opérationnel — Louvain Engine (20 novembre 2026)
+
+**État :** annexe de coordination des correctifs, **sans réinterpréter** les anciennes sections ni leurs anciens points d'arrêt. Le registre de pilotage actuel reste [l'index ENKYRON #602](https://github.com/emprex/agent-risk-layer/issues/602).
+
+Le premier assessment indépendant Louvain Engine a abouti à un rapport client confidentiel et immuablement archivé ; l'opérateur a ensuite enregistré la qualification et l'opportunité commerciale dans ENKYRON. Ce parcours a néanmoins exigé des opérations terminal pour le laboratoire, des Work Notes manuelles pour les tests et approbations, la production/QA externe du PDF et un importeur hors interface pour l'archivage.
+
+**Document de référence (workflow, échecs opérateur, neuf corrections LA-01 à LA-09, UAT et priorité de reprise) :** [RETEX Louvain Engine](enkyron/ENKYRON_LOUVAIN_ASSESSMENT_RETEX_2026-11-20.md).
+
+**Prochaine tranche P0, bornée et recettable :** **LA-03** — lire depuis ENKYRON le PDF final **déjà** stocké dans PostgreSQL et rattaché au ticket/assessment existant ; identité et SHA vérifiés, aucun nouvel import, aucun changement de statut de test ou de finding. Puis **LA-02** — enregistrement et revue canonique des tests et preuves depuis Current Assessment. Le reste demeure dans les issues [#565](https://github.com/emprex/agent-risk-layer/issues/565), [#620](https://github.com/emprex/agent-risk-layer/issues/620), [#619](https://github.com/emprex/agent-risk-layer/issues/619), [#621](https://github.com/emprex/agent-risk-layer/issues/621), avec #602 comme directive d'ensemble.
+
+**Garde-fous :** aucune réécriture du planning T01–T16/M01–M03 ; T17/T18 sont des notes, pas des tâches ; assessment privé et findings non publiés ; test autorisé distinct de revue de code public ; les approbations humaines de conclusions ne valent ni preuves vérifiées ni remédiation ni GO de déploiement ; aucune écriture risquée dans `arl_local` hors procédure validée.
