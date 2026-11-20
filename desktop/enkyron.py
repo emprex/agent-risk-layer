@@ -1226,7 +1226,7 @@ class EnkyronWindow(QMainWindow):
         self.record_integrity_button.setEnabled(False)
         self.record_integrity_button.clicked.connect(self.inspect_record_integrity)
         toolbar.addWidget(self.record_integrity_button)
-        self.t05_review_button = QPushButton("T05 · Qualify source candidate…")
+        self.t05_review_button = QPushButton("Qualify source evidence…")
         self.t05_review_button.setObjectName("enkyronT05CandidateQualification")
         self.t05_review_button.setEnabled(False)
         self.t05_review_button.clicked.connect(self.open_t05_qualification)
