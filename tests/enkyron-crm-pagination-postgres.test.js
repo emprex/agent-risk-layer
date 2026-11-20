@@ -41,8 +41,9 @@ test('344 synthetic research candidates appear on pages 1, 2, 3 and 4 without du
       +placeholders.join(','),values
     );
     const seen=new Set(),lengths=[];
+    const actor='ci-pagination';
     for(let page=1;page<=4;page++){
-      const response=await listSalesProspectsPage(pool,{search:prefix,page});
+      const response=await listSalesProspectsPage(pool,{search:prefix,page},actor);
       assert.equal(response.available,true);
       assert.equal(response.total,344);
       assert.equal(response.page,page);
@@ -58,13 +59,13 @@ test('344 synthetic research candidates appear on pages 1, 2, 3 and 4 without du
     assert.equal(seen.size,344);
     const noResults=await listSalesProspectsPage(pool,{
       search:'CRM-PAGE-CI-NEVER-MATCH',page:1
-    });
+    },actor);
     assert.equal(noResults.total,0);
     assert.deepEqual(noResults.items,[]);
     assert.equal(noResults.more,false);
     const narrowed=await listSalesProspectsPage(pool,{
       search:prefix+'0344',page:1
-    });
+    },actor);
     assert.equal(narrowed.total,1);
     assert.equal(narrowed.items[0].company_name,prefix+'0344');
   }finally{await pool.end();}
