@@ -306,7 +306,9 @@ class MailNativeUXSmoke(unittest.TestCase):
                 self.assertFalse(dialog.save.isEnabled())
                 dialog.controls.setCurrentRow(1)
                 dialog.controls.setCurrentRow(0)
-                self.assertEqual(len([c for c in calls if c[0]=="control-detail"]),2)
+                self.assertEqual(
+                    [c[2]["control_id"] for c in calls if c[0]=="control-detail"],
+                    ["ARL-KB-001", "ARL-KB-002", "ARL-KB-003"])
                 self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
                 # Non-applicable is unavailable without confirmed architecture facts.
                 self.assertFalse(dialog.decision.model().item(3).isEnabled())
@@ -553,7 +555,11 @@ class MailNativeUXSmoke(unittest.TestCase):
         self.assertIn("&lt;img src=", html)
         self.assertNotIn("<script>", html)
         self.assertNotIn("<img ", html)
-        self.assertNotIn("href=", html)
+        self.assertEqual(html.count('href="enkyron-attachment:'), 2)
+        for forbidden in ('href="https:', 'href="http:',
+                          'href="javascript:', 'href="file:',
+                          'href="data:'):
+            self.assertNotIn(forbidden, html)
         self.assertIn("attachment reference(s)", html)
         self.assertIn("&lt;img src=x onerror=alert(1)&gt;.pdf", html)
         self.assertNotIn("<img src=", html)
@@ -684,6 +690,7 @@ class MailNativeUXSmoke(unittest.TestCase):
                           if name.startswith("mail-")]
             self.assertEqual([name for name,_ in mail_calls],[
                 "mail-local-sync","mail-local-sync-bodies",
+                "mail-local-folders","mail-local-labels",
                 "mail-local-list","mail-local-archive-sync"])
             self.assertEqual(mail_calls[0][1],{
                 "mailbox":"all","inbox_only":True})
@@ -695,7 +702,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             window._mail_sync_running = True
             window.poll_local_inbox()
             self.assertEqual(len([name for name,_ in calls
-                                  if name.startswith("mail-")]),4)
+                                  if name.startswith("mail-")]),6)
             self.assertFalse(window._mail_archive_running)
         finally:
             if window:
@@ -952,7 +959,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertIsNone(window.calendar_detached_window.parent())
             self.assertTrue(window.mail_detached_window.isVisible())
             self.assertTrue(window.calendar_detached_window.isVisible())
-            self.assertEqual(window.pages.count(), 4)
+            self.assertEqual(window.pages.count(), 5)
             window.mail_detached_window.close()
             self.assertIsNone(window.mail_detached_window)
             self.assertIs(window.crm_tabs.widget(3), mail_widget)
@@ -960,7 +967,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             window.calendar_detached_window.close()
             self.assertIsNone(window.calendar_detached_window)
             self.assertIs(window.pages.widget(3), calendar_widget)
-            self.assertEqual(window.pages.count(), 4)
+            self.assertEqual(window.pages.count(), 5)
         finally:
             if window:
                 self._dispose(window)
@@ -975,7 +982,7 @@ class MailNativeUXSmoke(unittest.TestCase):
 
         def fake(_self, command, arg="", payload=None, callback=None):
             commands.append((command, payload))
-            if command == "mail-local-messages" and callback:
+            if command == "mail-thread-conversation" and callback:
                 callback({"items":[{
                     "id":"33333333-3333-4333-8333-333333333333",
                     "from":"client@example.invalid",
@@ -1169,9 +1176,10 @@ class MailNativeUXSmoke(unittest.TestCase):
         window = None
         try:
             window = EnkyronWindow()
-            self.assertEqual([window.navigation.item(i).text() for i in range(5)],
-                             ["Home", "Tickets", "CRM", "Mail", "Calendar"])
-            self.assertEqual(window.pages.count(), 4)
+            self.assertEqual([window.navigation.item(i).text() for i in range(6)],
+                             ["Home", "Tickets", "CRM", "Mail", "Calendar",
+                              "Projects"])
+            self.assertEqual(window.pages.count(), 5)
             self.assertEqual(window.crm_tabs.tabText(3), "Mail")
             self.assertEqual([window.crm_mail_folders.tabText(i) for i in range(3)],
                              ["Inbox", "Sent", "Drafts"])
@@ -1274,9 +1282,10 @@ class MailNativeUXSmoke(unittest.TestCase):
                 with patch.object(window, "load_local_mail",
                                   side_effect=AssertionError("Unexpected reload")):
                     window.set_local_mail_read("direction", THREAD, False)
-                self.assertEqual(calls[-1][0], "mail-local-read")
-                self.assertEqual(calls[-1][1],
-                    {"mailbox": "direction", "thread_id": THREAD, "unread": False})
+                read_calls = [(name, payload) for name, payload in calls
+                              if name == "mail-local-read"]
+                self.assertEqual(read_calls, [("mail-local-read",
+                    {"mailbox": "direction", "thread_id": THREAD, "unread": False})])
                 self.assertEqual(ui.current_thread_id, THREAD)
                 self.assertEqual(ui.reply_body.toPlainText(), "Pending reply")
                 self.assertFalse(ui.thread_list.item(0).font().bold())
