@@ -74,13 +74,16 @@ class MissionBoardWidgetTests(unittest.TestCase):
 
         def read_dialog():
             dialog = QApplication.activeModalWidget()
-            self.assertIsInstance(dialog, QDialog)
-            self.assertEqual(dialog.objectName(), "enkyronMissionReadOnlyDetails")
-            editor = dialog.findChild(QPlainTextEdit, "enkyronMissionDetailsText")
-            self.assertIsNotNone(editor)
-            self.assertTrue(editor.isReadOnly())
-            captured.append(editor.toPlainText())
-            dialog.reject()
+            try:
+                self.assertIsInstance(dialog, QDialog)
+                self.assertEqual(dialog.objectName(), "enkyronMissionReadOnlyDetails")
+                editor = dialog.findChild(QPlainTextEdit, "enkyronMissionDetailsText")
+                self.assertIsNotNone(editor)
+                self.assertTrue(editor.isReadOnly())
+                captured.append(editor.toPlainText())
+            finally:
+                if isinstance(dialog, QDialog):
+                    dialog.reject()
 
         captured = []
         QTimer.singleShot(0, read_dialog)
