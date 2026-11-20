@@ -320,9 +320,15 @@ class MailNativeUXSmoke(unittest.TestCase):
                 self.assertFalse(dialog.save.isEnabled())
                 dialog.confirm.setChecked(True)
                 self.assertTrue(dialog.save.isEnabled())
-                with patch.object(QMessageBox, "question",
-                                  return_value=QMessageBox.StandardButton.Yes):
+                # The real human confirmation is a custom QDialog.exec(),
+                # not QMessageBox.question. Simulate approval only here.
+                with patch.object(dialog, "confirm_decision",
+                                  return_value=True) as confirmation:
                     dialog.save_decision()
+                confirmation.assert_called_once()
+                self.assertEqual(
+                    confirmation.call_args.args[0]["control_id"], "ARL-KB-001")
+                self.assertEqual(confirmation.call_args.args[1], "applicable")
                 saved=[c for c in calls if c[0]=="control-applicability-save"]
                 self.assertEqual(len(saved),1)
                 self.assertEqual(saved[0][2]["control_id"],"ARL-KB-001")
