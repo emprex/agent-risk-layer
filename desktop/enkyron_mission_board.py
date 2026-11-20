@@ -420,12 +420,12 @@ class MissionBoardView(QWidget):
             return
         mission = self._visible[row]
         done, total, _ = progress(mission)
-        contents = (f"Mission: {mission['title']}\\n\\n"
-                    f"Company: {mission['company_name']}\\n"
-                    f"Status: {mission['status'].capitalize()}\\n"
-                    f"Due: {mission['due_date'] or 'Not set'}\\n"
-                    f"Work items: {done} of {total} completed\\n\\n"
-                    f"Description:\\n{mission['description'] or 'Not recorded'}")
+        contents = (f"Mission: {mission['title']}\n\n"
+                    f"Company: {mission['company_name']}\n"
+                    f"Status: {mission['status'].capitalize()}\n"
+                    f"Due: {mission['due_date'] or 'Not set'}\n"
+                    f"Work items: {done} of {total} completed\n\n"
+                    f"Description:\n{mission['description'] or 'Not recorded'}")
         self._show_read_only_details("Mission details", contents)
 
     def _open_work_item_details(self, item=None):
@@ -438,10 +438,10 @@ class MissionBoardView(QWidget):
         if not 0 <= row < len(tasks):
             return
         work = tasks[row]
-        contents = (f"Title: {work['title']}\\n\\n"
-                    f"Mission: {mission['title']}\\n"
-                    f"Type: {work['kind'].capitalize()}\\n"
-                    f"Status: {work['status'].capitalize()}\\n"
+        contents = (f"Title: {work['title']}\n\n"
+                    f"Mission: {mission['title']}\n"
+                    f"Type: {work['kind'].capitalize()}\n"
+                    f"Status: {work['status'].capitalize()}\n"
                     f"Due: {work['due_date'] or 'Not set'}")
         self._show_read_only_details("Work item details", contents)
 
