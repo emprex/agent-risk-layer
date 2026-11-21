@@ -395,11 +395,17 @@ class MissionBoardView(QWidget):
                 self.time_table.setItem(row, col, _cell(value))
         self._update_write_controls()
 
-    def _show_read_only_details(self, heading, contents):
-        """Show complete stored fields without any mutation or approval action."""
-        dialog = QDialog(self)
+    def _build_read_only_details_dialog(self, heading, contents):
+        """Independent, native details window; no mutation or approval action.
+
+        Using a parentless native Window avoids a window-manager transient group
+        that can drag the Mission Board with the details on some Linux desktops.
+        exec() below owns its lifetime and restores focus when the dialog closes.
+        """
+        dialog = QDialog(None, Qt.WindowType.Window)
         dialog.setObjectName("enkyronMissionReadOnlyDetails")
         dialog.setWindowTitle(heading)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
         dialog.resize(720, 460)
         layout = QVBoxLayout(dialog)
         layout.addWidget(_label(heading, bold=True))
@@ -412,6 +418,10 @@ class MissionBoardView(QWidget):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        return dialog
+
+    def _show_read_only_details(self, heading, contents):
+        dialog = self._build_read_only_details_dialog(heading, contents)
         dialog.exec()
 
     def _open_mission_details(self, item=None):

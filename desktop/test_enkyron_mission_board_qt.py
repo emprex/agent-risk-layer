@@ -192,6 +192,35 @@ class MissionBoardWidgetTests(unittest.TestCase):
         self.assertEqual(requested, [True])
         self.assertEqual(self.view.mission_table.rowCount(), 0)
 
+    def test_details_window_is_independent_modal_and_read_only(self):
+        """Offline Qt contract; native X11/Wayland drag still needs local UAT."""
+        from PySide6.QtCore import Qt, QTimer
+        from PySide6.QtWidgets import QApplication, QDialog, QPlainTextEdit
+
+        self.view.move(50, 70)
+        original = self.view.pos()
+        for title in ("Mission details", "Work item details", "Milestone details"):
+            dialog = self.view._build_read_only_details_dialog(
+                title, "Synthetic planning detail; no security verdict")
+            self.assertIsInstance(dialog, QDialog)
+            self.assertIsNone(dialog.parentWidget(),
+                              "Details must not share the main native window group")
+            self.assertEqual(
+                dialog.windowFlags() & Qt.WindowType.WindowType_Mask,
+                Qt.WindowType.Window)
+            self.assertEqual(dialog.windowModality(),
+                             Qt.WindowModality.ApplicationModal)
+            self.assertEqual(dialog.windowTitle(), title)
+            box = dialog.findChild(QPlainTextEdit, "enkyronMissionDetailsText")
+            self.assertTrue(box.isReadOnly())
+            self.assertIn("Synthetic planning", box.toPlainText())
+            dialog.move(210, 230)
+            self.assertEqual(self.view.pos(), original)
+            QTimer.singleShot(0, dialog.reject)
+            self.assertEqual(dialog.exec(), QDialog.DialogCode.Rejected)
+            self.assertEqual(self.view.pos(), original)
+        self.assertIsNone(QApplication.activeModalWidget())
+
     def test_server_write_refusal_never_enables_editing(self):
         self.view.show_crm_companies({"available": True, "more": False, "items": [
             {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
