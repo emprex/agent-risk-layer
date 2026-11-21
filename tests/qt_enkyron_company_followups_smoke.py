@@ -181,6 +181,7 @@ class CompanyFollowupsSmoke(unittest.TestCase):
                 {"key": "direction", "address": "direction@example.invalid"}
             ]})
             inbox.set_connection_state("connected")
+            inbox._folder = "sent"
             window.mail_sent_items = [sent]
             inbox.show_local_records("sent", [sent])
             inbox.thread_list.setCurrentRow(0)
