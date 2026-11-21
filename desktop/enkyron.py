@@ -9923,6 +9923,8 @@ class EnkyronWindow(QMainWindow):
                     )
                     page_layout.addWidget(limit_notice)
                 table = QTableWidget(len(rows), len(columns))
+                if section_id == "drafts":
+                    table.setObjectName("crmDossierMailRecordsTable")
                 table.setHorizontalHeaderLabels(
                     [heading for heading, _ in columns]
                 )
@@ -9950,6 +9952,12 @@ class EnkyronWindow(QMainWindow):
                             str(value) if value is not None else ""
                         )
                         cell.setToolTip(cell.text())
+                        if (section_id == "drafts" and key == "send_state"
+                                and isinstance(record, dict)
+                                and record.get("company_id") == company_id
+                                and isinstance(record.get("id"), str)):
+                            # UI identity only; the backend record is untouched.
+                            cell.setData(Qt.ItemDataRole.UserRole, record["id"])
                         table.setItem(row_index, column_index, cell)
                 # The exact source ID is the ONLY key used to locate the Mail
                 # row. A matching subject, recipient or company name is not proof.
@@ -10070,8 +10078,9 @@ class EnkyronWindow(QMainWindow):
                     notice = QLabel(
                         "Local drafts and recorded external sends. "
                         "Double-click a row to open it. To reconcile an email "
-                        "sent elsewhere, use Record external send in the editor; "
-                        "delivery and reading are not independently verified."
+                        "sent elsewhere, use Record external send in the editor. "
+                        "Live Resend statuses are temporary, read-only and "
+                        "do not verify human reading."
                     )
                     notice.setWordWrap(True)
                     page_layout.addWidget(notice)
@@ -19160,6 +19169,37 @@ class EnkyronWindow(QMainWindow):
             0 <= row < len(self.crm_draft_items)
         )
 
+    def reflect_dossier_mail_delivery(self, company_id, draft_id, status):
+        """Update only the exact visible CRM row after a verified provider read."""
+        dossier = self.crm_dossier_dialog
+        if (dossier is None or not dossier.isVisible()
+                or self.crm_dossier_company_id != company_id
+                or not isinstance(draft_id, str)
+                or not isinstance(status, str)):
+            return
+        for section_index, (section_name, _count) in enumerate(
+                self.crm_dossier_sections):
+            if section_name != "drafts":
+                continue
+            page = self.crm_dossier_tabs.widget(section_index)
+            table = (page.findChild(QTableWidget, "crmDossierMailRecordsTable")
+                     if page is not None else None)
+            if table is None:
+                return
+            for row in range(table.rowCount()):
+                cell = table.item(row, 3)
+                if (cell is not None
+                        and cell.data(Qt.ItemDataRole.UserRole) == draft_id):
+                    # This is a one-session display, not a CRM record revision.
+                    cell.setText(status)
+                    cell.setToolTip(
+                        "Read-only status from Resend for this exact message. "
+                        "Not stored in CRM; refresh restores the recorded state. "
+                        "Human reading is not independently verified."
+                    )
+                    return
+            return
+
     def open_dossier_company_mail_draft(self, company_id, company_name, draft_id=None):
         """Reuse the existing local draft editor without requiring an opportunity."""
         dialog = self.crm_dossier_dialog
@@ -19581,6 +19621,10 @@ class EnkyronWindow(QMainWindow):
                             "delivery not confirmed"
                         )
                     receipt.setText(receipt_header + "Delivery status: " + status)
+                    if (verified
+                            and draft.get("_dossier_company_id") == draft.get("company_id")):
+                        self.reflect_dossier_mail_delivery(
+                            draft["company_id"], draft_id, status)
 
                 self.bridge.call(
                     "mail-provider-status", draft_id, callback=provider_status

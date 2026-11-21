@@ -5,7 +5,7 @@ import gc
 from PySide6.QtCore import QEvent
 
 os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
-from PySide6.QtWidgets import QApplication, QPushButton, QLabel
+from PySide6.QtWidgets import QApplication, QPushButton, QLabel, QTableWidget
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
 DRAFT='11111111-2222-4333-8444-555555555555'
@@ -155,6 +155,120 @@ class ManualSendSmoke(unittest.TestCase):
                 window = None
                 gc.collect()
             DesktopBridge.call = original
+
+    def test_dossier_row_reflects_only_exact_verified_resend_status(self):
+        """Live status affects one displayed row, not the saved CRM record."""
+        provider = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        other_draft = "99999999-2222-4333-8444-666666666666"
+        original_state = "Resend accepted (delivery unverified)"
+        calls = []
+        original_call = DesktopBridge.call
+
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.crm_company_id = COMPANY
+            window.open_company_dossier()
+            dossier_result = {
+                "available": True,
+                "company": {
+                    "id": COMPANY, "name": "Synthetic Labs",
+                    "record_version": 1, "relationship_state": "prospect",
+                },
+                "sections": {"drafts": {
+                    "items": [
+                        {"id": other_draft, "company_id": COMPANY,
+                         "subject": "Repeated subject",
+                         "recipient_email": "buyer@example.invalid",
+                         "revision": 1, "send_state": original_state},
+                        {"id": DRAFT, "company_id": COMPANY,
+                         "subject": "Repeated subject",
+                         "recipient_email": "buyer@example.invalid",
+                         "revision": 1, "send_state": original_state},
+                    ],
+                    "total": 2, "more": False,
+                }},
+            }
+            dossier_load = next(x[3] for x in calls
+                                if x[0] == "crm-company-dossier")
+            dossier_load(dossier_result, None)
+            draft_index = next(i for i, (kind, _count) in
+                               enumerate(window.crm_dossier_sections)
+                               if kind == "drafts")
+            page = window.crm_dossier_tabs.widget(draft_index)
+            table = page.findChild(QTableWidget, "crmDossierMailRecordsTable")
+            self.assertIsNotNone(table)
+            self.assertEqual(table.item(0, 3).text(), original_state)
+            self.assertEqual(table.item(1, 3).text(), original_state)
+
+            table.selectRow(1)
+            action = page.findChild(QPushButton, "crmDossierEditDraft")
+            self.assertTrue(action.isEnabled())
+            action.click()
+            draft_read = next(x[3] for x in reversed(calls)
+                              if x[0] == "crm-mail-draft")
+            draft_read({"available": True, "draft": {
+                "id": DRAFT, "company_id": COMPANY, "revision": 1,
+                "company_name_at_creation": "Synthetic Labs",
+                "mail_state": "provider_submitted",
+                "mailbox_key": "direction",
+                "provider_message_id": provider,
+                "provider_outcome": "accepted",
+                "recipient_email": "buyer@example.invalid",
+                "subject": "Repeated subject",
+                "body_text": "Synthetic submitted email.",
+            }}, None)
+            status_calls = [x for x in calls
+                            if x[0] == "mail-provider-status"]
+            self.assertEqual(len(status_calls), 1)
+            self.assertEqual(status_calls[0][1], DRAFT)
+            status_read = status_calls[0][3]
+
+            # A mismatched provider response cannot change either row.
+            status_read({"verified": True,
+                         "provider_message_id":
+                         "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+                         "last_event": "delivered"}, None)
+            self.assertEqual(table.item(1, 3).text(), original_state)
+            status_read({"verified": True, "provider_message_id": provider,
+                         "last_event": "delivered"}, None)
+            self.assertIn("Resend reports delivered", table.item(1, 3).text())
+            self.assertIn("human reading not verified",
+                          table.item(1, 3).text())
+            self.assertIn("Not stored in CRM", table.item(1, 3).toolTip())
+            self.assertEqual(table.item(0, 3).text(), original_state)
+
+            # Re-reading the canonical dossier resets transient provider status.
+            window.crm_draft_dialog.reject()
+            window.refresh_company_dossier()
+            refreshed = [x for x in calls if x[0] == "crm-company-dossier"][-1][3]
+            refreshed(dossier_result, None)
+            page = window.crm_dossier_tabs.widget(draft_index)
+            table = page.findChild(QTableWidget, "crmDossierMailRecordsTable")
+            self.assertEqual(table.item(1, 3).text(), original_state)
+            self.assertFalse(any(
+                name in ("mail-send-draft", "crm-mail-update",
+                         "crm-record-activity", "mail-reply-draft")
+                for name, *_ in calls
+            ))
+            self.assertEqual(len([x for x in calls
+                                  if x[0] == "mail-provider-status"]), 1)
+        finally:
+            if window:
+                if window.crm_dossier_dialog:
+                    window.crm_dossier_dialog.close_guard = lambda: True
+                for top in list(QApplication.topLevelWidgets()):
+                    top.close()
+                    top.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.app.processEvents()
+                window = None
+                gc.collect()
+            DesktopBridge.call = original_call
 
 
 if __name__=="__main__":
