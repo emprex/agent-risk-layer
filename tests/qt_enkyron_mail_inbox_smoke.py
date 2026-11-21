@@ -457,8 +457,11 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertTrue(linked["value"])
             self.assertEqual(len([x for x in calls
                                   if x[0]=="mail-local-company-link"]),1)
-            self.assertFalse(window.mail_inbox.crm_link_button.isEnabled())
+            self.assertTrue(window.mail_inbox.crm_link_button.isEnabled())
             self.assertIn("Verified manually",window.mail_inbox.crm_link_button.text())
+            with patch.object(window, "open_company_dossier") as open_dossier:
+                window.mail_inbox.crm_link_button.click()
+                open_dossier.assert_called_once_with()
             self.assertFalse(any(x[0] in ("mail-send-draft","mail-reply-draft",
                 "create-ticket") for x in calls))
         finally:
