@@ -102,7 +102,7 @@ class MissionBoardWidgetTests(unittest.TestCase):
             "available": False, "items": [], "more": False,
             "notice": "Mission Board tables not installed."})
         self.assertEqual(self.view.mission_table.rowCount(), 0)
-        self.assertIn("NOT CONNECTED", self.view.notice.text())
+        self.assertIn("Mission data unavailable", self.view.notice.text())
         self.assertIn("not installed", self.view.notice.text())
         self.assertFalse(self.view.new_button.isEnabled())
 
