@@ -6720,8 +6720,14 @@ class EnkyronWindow(QMainWindow):
                 "end": datetime(last.year(),last.month(),last.day(),
                                 tzinfo=tz).isoformat(),
             }
+        self._calendar_list_sequence = getattr(
+            self, "_calendar_list_sequence", 0) + 1
+        sequence = self._calendar_list_sequence
         self.calendar_view.status.setText("Loading local calendar…")
         def received(data, error):
+            # An older month/day request must not overwrite the selected period.
+            if sequence != self._calendar_list_sequence:
+                return
             if error or not isinstance(data, dict):
                 self.calendar_view.status.setText(
                     "Calendar unavailable. Local schema may need updating."
@@ -6765,8 +6771,8 @@ class EnkyronWindow(QMainWindow):
                 QMessageBox.warning(self, "Calendar", str(error or "Could not save task."))
                 return
             task_id = result["id"]
-            self.load_calendar()
             if mail_ref is None:
+                self.load_calendar()
                 return
 
             def reread(stored, read_error):
@@ -6780,11 +6786,19 @@ class EnkyronWindow(QMainWindow):
                         or parse_task_mail_source(task.get("notes")) != mail_ref
                         or task.get("completed_at") is not None
                         or not same_due(task.get("due_at"))):
+                    self.load_calendar()
                     QMessageBox.warning(
                         self, "Calendar",
                         "Task creation was reported, but the exact saved task "
                         "and Mail reference could not be confirmed. Refresh "
                         "Calendar before trying again; do not create a duplicate.")
+                    return
+                if not self.calendar_view.reveal_saved_task(task):
+                    self.load_calendar()
+                    QMessageBox.warning(
+                        self, "Calendar",
+                        "The saved task could not be located in Calendar. "
+                        "No duplicate was created.")
                     return
                 self.calendar_view._show_item_details("Task", task)
 

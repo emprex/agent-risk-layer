@@ -221,6 +221,7 @@ class MailCalendarView(QWidget):
         self._dialogs = []
         self._task_editors = {}
         self._pending_task_updates = {}
+        self._focus_saved_task_id = None
         self.task_rows = []
         self.event_rows = []
         self._agenda_records = []
@@ -553,6 +554,23 @@ class MailCalendarView(QWidget):
             "{} appointment(s) · {} task(s) · {} view · Stored in ENKYRON.".format(
                 len(self.event_rows), len(self.task_rows), mode.capitalize())
         )
+        focus_id = self._focus_saved_task_id
+        self._focus_saved_task_id = None
+        if focus_id is not None:
+            matching = next(
+                (index for index, row in enumerate(self.task_rows)
+                 if row.get("id") == focus_id), None)
+            if matching is not None:
+                self.tasks_table.selectRow(matching)
+                cell = self.tasks_table.item(matching, 1)
+                if cell is not None:
+                    self.tasks_table.scrollToItem(cell)
+                self.status.setText(
+                    "Saved task selected · " + self.status.text())
+            else:
+                self.status.setText(
+                    "The saved task was not in this Calendar page. "
+                    "It still exists; refresh or search other periods.")
 
     def open_editor(self, kind, prefill=None, edit_record=None, details_dialog=None):
         chosen_date = (QDate.currentDate() if prefill is not None
@@ -639,6 +657,33 @@ class MailCalendarView(QWidget):
         if details_dialog is not None:
             details_dialog.accept()
         self._show_item_details("Task", fresh_record)
+
+    def reveal_saved_task(self, task):
+        """Navigate to the persisted task's due month, then select its exact ID."""
+        if not isinstance(task, dict):
+            return False
+        task_id = task.get("id")
+        if not isinstance(task_id, str) or not task_id:
+            return False
+        stamp = self._local_stamp(task.get("due_at"))
+        if task.get("due_at") is not None and stamp is None:
+            return False
+        day = (QDate(stamp.year, stamp.month, stamp.day)
+               if stamp else QDate.currentDate())
+        self._focus_saved_task_id = task_id
+        self.calendar.blockSignals(True)
+        try:
+            self.calendar.setSelectedDate(day)
+        finally:
+            self.calendar.blockSignals(False)
+        self.view_picker.blockSignals(True)
+        try:
+            self.view_picker.setCurrentIndex(2)  # Month shows undated tasks too.
+        finally:
+            self.view_picker.blockSignals(False)
+        self.tabs.setCurrentIndex(1)  # Tasks, never silently mark complete.
+        self.request_range()
+        return True
 
     def open_task_details(self, row):
         if 0 <= row < len(self.task_rows):

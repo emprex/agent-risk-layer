@@ -133,7 +133,7 @@ class CalendarMailSourceSmoke(unittest.TestCase):
             "due_at": "2026-11-24T16:00:00.000Z",
             "completed_at": None,
         }
-        calls, opened, refreshed = [], [], []
+        calls, opened, refreshed, focused = [], [], [], []
         def call(command, arg=None, payload=None, callback=None):
             calls.append((command, payload))
             if command == "calendar-task-create":
@@ -145,6 +145,7 @@ class CalendarMailSourceSmoke(unittest.TestCase):
         stub = SimpleNamespace(
             bridge=SimpleNamespace(call=call),
             calendar_view=SimpleNamespace(
+                reveal_saved_task=lambda record: focused.append(record) or True,
                 _show_item_details=lambda kind, record:
                 opened.append((kind, record))),
             load_calendar=lambda: refreshed.append(True),
@@ -156,7 +157,8 @@ class CalendarMailSourceSmoke(unittest.TestCase):
             ("calendar-task-create", expected),
             ("calendar-task-read", {"id": task}),
         ])
-        self.assertEqual(len(refreshed), 1)
+        self.assertEqual(refreshed, [])  # One fresh range request by reveal.
+        self.assertEqual(focused, [stored])
         self.assertEqual(opened, [("Task", stored)])
         self.assertEqual(parse_task_mail_source(opened[0][1]["notes"])["draft_id"], DRAFT)
 
@@ -221,6 +223,79 @@ class CalendarMailSourceSmoke(unittest.TestCase):
         self.assertEqual(calls, ["calendar-task-create"])
         self.assertEqual(len(refreshed), 1)
         self.assertEqual(opened, [])
+
+    def test_future_mail_task_is_visible_in_its_due_month(self):
+        from PySide6.QtCore import QDate
+        task_id = "99999999-aaaa-4bbb-8ccc-dddddddddddd"
+        view = MailCalendarView()
+        ranges = []
+        view.rangeRequested.connect(ranges.append)
+        record = {
+            "id": task_id, "title": "Contact existing client",
+            "due_at": "2030-03-15T09:00:00+00:00",
+            "completed_at": None, "notes": SENT_NOTES,
+        }
+        try:
+            self.assertTrue(view.reveal_saved_task(record))
+            self.assertEqual(view.calendar.selectedDate(), QDate(2030, 3, 15))
+            self.assertEqual(view.view_picker.currentData(), "month")
+            self.assertEqual(view.tabs.currentIndex(), 1)
+            self.assertEqual(len(ranges), 1)
+            self.assertTrue(ranges[0]["start"].startswith("2030-03-01T"))
+            view.show_data({"events": [], "tasks": [record]})
+            self.assertEqual(view.tasks_table.rowCount(), 1)
+            self.assertEqual(view.tasks_table.currentRow(), 0)
+            self.assertIn("Saved task selected", view.status.text())
+            self.assertIsNone(view._focus_saved_task_id)
+            self.assertIsNone(view.task_rows[0]["completed_at"])
+        finally:
+            view.close_editors()
+            view.close()
+            view.deleteLater()
+
+    def test_unscheduled_task_is_revealed_and_bad_reference_does_not_navigate(self):
+        task_id = "99999999-aaaa-4bbb-8ccc-dddddddddddd"
+        view = MailCalendarView()
+        ranges = []
+        view.rangeRequested.connect(ranges.append)
+        try:
+            self.assertFalse(view.reveal_saved_task({
+                "id": task_id, "due_at": "not-a-time"}))
+            self.assertEqual(ranges, [])
+            task = {"id": task_id, "title": "No deadline",
+                    "due_at": None, "notes": SENT_NOTES,
+                    "completed_at": None}
+            self.assertTrue(view.reveal_saved_task(task))
+            view.show_data({"events": [], "tasks": [task]})
+            self.assertEqual(view.tasks_table.currentRow(), 0)
+            self.assertIn("Saved task selected", view.status.text())
+        finally:
+            view.close_editors()
+            view.close()
+            view.deleteLater()
+
+    def test_calendar_disregards_stale_out_of_order_list_result(self):
+        callbacks, shown = [], []
+        stub = SimpleNamespace(
+            calendar_view=SimpleNamespace(
+                status=SimpleNamespace(setText=lambda _message: None),
+                show_data=shown.append,
+            ),
+        )
+        def call(command, arg=None, payload=None, callback=None):
+            self.assertEqual(command, "calendar-list")
+            callbacks.append(callback)
+        stub.bridge = SimpleNamespace(call=call)
+        first = {"start": "2026-11-01T00:00:00Z",
+                 "end": "2026-12-01T00:00:00Z"}
+        second = {"start": "2030-03-01T00:00:00Z",
+                  "end": "2030-04-01T00:00:00Z"}
+        EnkyronWindow.load_calendar(stub, first)
+        EnkyronWindow.load_calendar(stub, second)
+        callbacks[1]({"events": [], "tasks": [{"id": "new"}]}, None)
+        callbacks[0]({"events": [], "tasks": [{"id": "old"}]}, None)
+        self.assertEqual(shown, [
+            {"events": [], "tasks": [{"id": "new"}]}])
 
     def test_sent_source_reads_exact_draft_and_formats_metadata(self):
         record = {
