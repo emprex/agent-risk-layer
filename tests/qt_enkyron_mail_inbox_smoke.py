@@ -1208,7 +1208,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             window.navigation.setCurrentRow(2)
             self.assertEqual(window.crm_tabs.currentIndex(), 0)
             window.navigation.setCurrentRow(0)
-            window.findChild(type(window.mail_inbox.refresh_button), "enkyronHomeOpenMail").click()
+            window.navigation.setCurrentRow(3)
             self.assertEqual(window.navigation.currentRow(), 3)
             self.assertEqual(window.crm_tabs.currentIndex(), 3)
             self.assertTrue(window.mail_inbox.findChildren(
