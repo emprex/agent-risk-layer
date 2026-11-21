@@ -297,6 +297,89 @@ class CalendarMailSourceSmoke(unittest.TestCase):
         self.assertEqual(shown, [
             {"events": [], "tasks": [{"id": "new"}]}])
 
+    def test_source_email_loads_mailbox_access_on_first_use(self):
+        from desktop.enkyron_mail_workspace import MailInboxView
+        authorized = {
+            "schema_ready": True,
+            "mailboxes": [
+                {"key": "direction", "address": "direction@example.invalid",
+                 "can_read": True},
+                {"key": "support", "address": "support@example.invalid",
+                 "can_read": True},
+            ],
+        }
+        stored = {
+            "id": DRAFT,
+            "mailbox_key": "direction",
+            "mail_state": "provider_submitted",
+            "subject": "Existing assessment message",
+            "recipient_email": "contact@example.invalid",
+            "body_text": "Original saved mail body",
+        }
+        calls, navigation = [], []
+        def call(command, arg=None, payload=None, callback=None):
+            calls.append((command, arg))
+            if command == "mail-status":
+                callback(authorized, None)
+            elif command == "crm-mail-draft":
+                callback({"draft": stored}, None)
+            else:
+                self.fail("Unexpected route: " + command)
+        inbox = MailInboxView()
+        stub = SimpleNamespace(
+            mail_inbox=inbox,
+            navigation=SimpleNamespace(setCurrentRow=navigation.append),
+            mail_thread_windows={},
+            bridge=SimpleNamespace(call=call),
+        )
+        try:
+            self.assertEqual(inbox._mailboxes, {})
+            EnkyronWindow.open_calendar_source_mail(
+                stub, parse_task_mail_source(SENT_NOTES))
+            self.assertEqual(calls, [
+                ("mail-status", None), ("crm-mail-draft", DRAFT)])
+            self.assertIn("direction", inbox._mailboxes)
+            self.assertEqual(navigation, [3])
+            dialog = stub.mail_thread_windows[("calendar-source", DRAFT)]
+            self.assertEqual(dialog.findChild(
+                QPlainTextEdit,
+                "enkyronCalendarSourceMailBody").toPlainText(),
+                "Original saved mail body")
+            dialog.close()
+        finally:
+            inbox.close()
+            inbox.deleteLater()
+
+    def test_source_email_denied_mail_access_never_reads_message(self):
+        from unittest.mock import patch
+        for status in (
+            {"schema_ready": False, "mailboxes": []},
+            {"schema_ready": True, "mailboxes": [
+                {"key": "direction", "address": "direction@example.invalid",
+                 "can_read": False}]},
+            None,
+        ):
+            with self.subTest(status=status):
+                calls, navigation = [], []
+                def call(command, arg=None, payload=None, callback=None):
+                    calls.append(command)
+                    self.assertEqual(command, "mail-status")
+                    callback(status, None)
+                stub = SimpleNamespace(
+                    mail_inbox=SimpleNamespace(_mailboxes={}),
+                    navigation=SimpleNamespace(
+                        setCurrentRow=navigation.append),
+                    mail_thread_windows={},
+                    bridge=SimpleNamespace(call=call),
+                )
+                with patch("desktop.enkyron.QMessageBox.warning") as warning:
+                    EnkyronWindow.open_calendar_source_mail(
+                        stub, parse_task_mail_source(SENT_NOTES))
+                    warning.assert_called_once()
+                self.assertEqual(calls, ["mail-status"])
+                self.assertEqual(navigation, [])
+                self.assertEqual(stub.mail_thread_windows, {})
+
     def test_sent_source_reads_exact_draft_and_formats_metadata(self):
         record = {
             "id": DRAFT,

@@ -4674,9 +4674,37 @@ class EnkyronWindow(QMainWindow):
             return
         mailbox = source.get("mailbox")
         if (mailbox not in ("direction", "support")
-                or mailbox not in self.mail_inbox._mailboxes):
-            QMessageBox.warning(
-                self, "Source email", "This mailbox is not available.")
+                or source.get("kind") not in ("thread", "saved")):
+            return
+        if mailbox not in self.mail_inbox._mailboxes:
+            # My Work -> Calendar may be the first Mail-related journey in
+            # this session. The mailbox card is lazy-loaded on entering Mail.
+            # Check real local mailbox access rather than rejecting a valid
+            # saved reference or bypassing permissions based on its notes.
+            def access_loaded(data, error):
+                entries = data.get("mailboxes") if isinstance(data, dict) else None
+                allowed = (not error and data.get("schema_ready") is True
+                           and isinstance(entries, list)
+                           and any(isinstance(entry, dict)
+                                   and entry.get("key") == mailbox
+                                   and entry.get("can_read") is True
+                                   for entry in entries))
+                if not allowed:
+                    QMessageBox.warning(
+                        self, "Source email",
+                        "This mailbox is unavailable or read access was not "
+                        "granted. No email was opened.")
+                    return
+                self.mail_inbox.set_owner_mailboxes({"mailboxes": entries})
+                if mailbox not in self.mail_inbox._mailboxes:
+                    QMessageBox.warning(
+                        self, "Source email",
+                        "The permitted mailbox could not be loaded. "
+                        "No email was opened.")
+                    return
+                self.open_calendar_source_mail(source)
+
+            self.bridge.call("mail-status", callback=access_loaded)
             return
 
         uuid_pattern = (
