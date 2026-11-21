@@ -113,6 +113,11 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
         interval = calls[0][1]
         self.assertIn("start", interval)
         self.assertIn("end", interval)
+        # Backend accepts at most three fractional digits; My Work uses seconds.
+        for boundary in ("start", "end"):
+            self.assertRegex(
+                interval[boundary],
+                r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
         original = {
             "id": task_id, "title": "Synthetic follow-up",
             "due_at": "2026-11-25T16:00:00Z",
@@ -165,14 +170,26 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
         window = None
         try:
             window = EnkyronWindow()
-            crm = window.findChild(QPushButton, "enkyronHomeOpenCRM")
-            calendar = window.findChild(QPushButton, "enkyronHomeOpenCalendar")
-            self.assertIsNotNone(crm)
-            self.assertIsNotNone(calendar)
-            # Qt consumes single '&' as a keyboard mnemonic. Double it so
-            # users see the literal ampersand in each button.
-            self.assertEqual(crm.text(), "Clients && CRM · sales")
-            self.assertEqual(calendar.text(), "Calendar · appointments && tasks")
+            refresh = window.findChild(QPushButton, "enkyronHomeRefreshMyWork")
+            self.assertIsNotNone(refresh)
+            self.assertEqual(refresh.text(), "Refresh My Work")
+            # Home does not duplicate the five sidebar workspace destinations.
+            self.assertIsNone(window.findChild(QPushButton, "enkyronHomeOpenCRM"))
+            self.assertIsNone(window.findChild(QPushButton, "enkyronHomeOpenCalendar"))
+            self.assertIsNone(window.findChild(
+                QPushButton, "enkyronHomeRefreshCalendarTasks"))
+            self.assertEqual(
+                [window.navigation.item(i).text() for i in range(6)],
+                ["Home", "Tickets", "CRM", "Mail", "Calendar", "Projects"])
+            home_buttons = window.pages.widget(0).findChildren(QPushButton)
+            self.assertEqual(
+                [button.text() for button in home_buttons if
+                 "Refresh" in button.text()], ["Refresh My Work"])
+            previous_count = len(calls)
+            refresh.click()
+            self.assertEqual(
+                [x[0] for x in calls[previous_count:]],
+                ["crm-sales-overview", "calendar-list"])
 
             initial = [x for x in calls if x[0] == "crm-sales-overview"]
             self.assertTrue(initial)

@@ -59,3 +59,12 @@ test('calendar returns task notes through existing scoped task list',async()=>{
   assert.match(read.sql,/crm_company_id,notes/);
   assert.deepEqual(read.params[0],'local:operator');
 });
+
+test('My Work second-resolution London-offset window is accepted by Calendar',async()=>{
+  const f=fixture();
+  await calendarList(f.pool,'operator',{
+    start:'2026-10-22T19:18:00+00:00',
+    end:'2027-01-20T19:18:00+00:00'
+  });
+  assert.equal(f.statements.filter(x=>x.sql.startsWith('SELECT ')).length,2);
+});

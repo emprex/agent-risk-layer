@@ -673,69 +673,24 @@ class EnkyronWindow(QMainWindow):
         home = QWidget()
         home_l = QVBoxLayout(home)
         home_l.setContentsMargins(32, 28, 32, 20)
-        home_l.addWidget(section_title("MY WORK"))
+        home_header = QHBoxLayout()
+        home_header.addWidget(section_title("MY WORK"))
+        home_header.addStretch()
+        refresh_my_work = QPushButton("Refresh My Work")
+        refresh_my_work.setObjectName("enkyronHomeRefreshMyWork")
+        refresh_my_work.setToolTip("Update saved Calendar tasks and commercial follow-ups")
+        refresh_my_work.clicked.connect(self.refresh_my_work)
+        home_header.addWidget(refresh_my_work)
+        home_l.addLayout(home_header)
         introduction = QLabel(
-            "Choose a workspace to continue your work. Open a client request, "
-            "manage a sales relationship, review mail or plan appointments. "
-            "Nothing is sent or approved just by opening a workspace."
+            "Your Calendar tasks and commercial follow-ups in one place. "
+            "Use the workspace menu on the left to take action."
         )
         introduction.setWordWrap(True)
         home_l.addWidget(introduction)
-        home_l.addWidget(section_title("START WORKING"))
 
-        # Shortcuts reuse the existing module navigation and read-only loaders.
-        # Do not introduce new business actions, records or permission shortcuts.
-        quick_actions_top = QHBoxLayout()
-        go_tickets = QPushButton("Tickets · client requests")
-        go_tickets.setObjectName("enkyronHomeOpenTickets")
-        go_tickets.setMinimumHeight(44)
-        go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
-        quick_actions_top.addWidget(go_tickets, 1)
-        go_crm = QPushButton("Clients && CRM · sales")
-        go_crm.setObjectName("enkyronHomeOpenCRM")
-        go_crm.setMinimumHeight(44)
-        go_crm.clicked.connect(lambda: self.navigation.setCurrentRow(2))
-        quick_actions_top.addWidget(go_crm, 1)
-        home_l.addLayout(quick_actions_top)
-
-        quick_actions_bottom = QHBoxLayout()
-        go_mail = QPushButton("Mail · conversations")
-        go_mail.setObjectName("enkyronHomeOpenMail")
-        go_mail.setMinimumHeight(44)
-        go_mail.clicked.connect(lambda: self.navigation.setCurrentRow(3))
-        quick_actions_bottom.addWidget(go_mail, 1)
-        go_calendar = QPushButton("Calendar · appointments && tasks")
-        go_calendar.setObjectName("enkyronHomeOpenCalendar")
-        go_calendar.setMinimumHeight(44)
-        go_calendar.clicked.connect(lambda: self.navigation.setCurrentRow(4))
-        quick_actions_bottom.addWidget(go_calendar, 1)
-        go_projects = QPushButton("Projects · Mission Board")
-        go_projects.setObjectName("enkyronHomeOpenProjects")
-        go_projects.setMinimumHeight(44)
-        go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))
-        quick_actions_bottom.addWidget(go_projects, 1)
-        if self.ux_preview_read_only or self.enk05_uat_ui:
-            go_mail.setEnabled(False)
-            go_calendar.setEnabled(False)
-            scope_reason = (
-                "Read-only synthetic preview"
-                if self.ux_preview_read_only
-                else "Outside UAT-04 Service Desk scope"
-            )
-            go_mail.setToolTip(scope_reason)
-            go_calendar.setToolTip(scope_reason)
-        home_l.addLayout(quick_actions_bottom)
-
-        # Read-only upcoming Calendar tasks: exact saved IDs, no merged
-        # CRM/PSA semantics and no implicit task creation or completion.
-        task_heading = QHBoxLayout()
-        task_heading.addWidget(section_title("UPCOMING CALENDAR TASKS"))
-        task_heading.addStretch()
-        refresh_tasks = QPushButton("Refresh tasks")
-        refresh_tasks.setObjectName("enkyronHomeRefreshCalendarTasks")
-        refresh_tasks.clicked.connect(self.load_home_calendar_tasks)
-        task_heading.addWidget(refresh_tasks)
-        home_l.addLayout(task_heading)
+        # Home displays existing records only; navigation stays in the sidebar.
+        home_l.addWidget(section_title("UPCOMING CALENDAR TASKS"))
         self.home_calendar_tasks_table = QTableWidget(0, 2)
         self.home_calendar_tasks_table.setObjectName("enkyronHomeCalendarTasks")
         self.home_calendar_tasks_table.setHorizontalHeaderLabels(
@@ -759,13 +714,7 @@ class EnkyronWindow(QMainWindow):
         self.home_calendar_tasks_notice.setWordWrap(True)
         home_l.addWidget(self.home_calendar_tasks_notice)
 
-        overview_header = QHBoxLayout()
-        overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
-        overview_header.addStretch()
-        refresh_overview = QPushButton("Refresh")
-        refresh_overview.clicked.connect(self.load_sales_overview)
-        overview_header.addWidget(refresh_overview)
-        home_l.addLayout(overview_header)
+        home_l.addWidget(section_title("COMMERCIAL OVERVIEW"))
         self.sales_overview_metrics = QLabel("Open Home to load commercial activity.")
         self.sales_overview_metrics.setWordWrap(True)
         home_l.addWidget(self.sales_overview_metrics)
@@ -6749,8 +6698,7 @@ class EnkyronWindow(QMainWindow):
             return
         self.pages.setCurrentIndex(index)
         if index == 0:
-            self.load_sales_overview()
-            self.load_home_calendar_tasks()
+            self.refresh_my_work()
         if index == 2:
             # Returning to CRM automatically reloads companies once.
             # Canonical-ID selection is preserved across list reloads.
@@ -7069,6 +7017,11 @@ class EnkyronWindow(QMainWindow):
             "company_name": existing.get("company_name_at_creation") or ""
         }, existing)
 
+    def refresh_my_work(self):
+        """Refresh both Home summaries without modifying any business records."""
+        self.load_sales_overview()
+        self.load_home_calendar_tasks()
+
     def load_home_calendar_tasks(self):
         """Show up to five real local tasks in a bounded 90-day window."""
         self.home_calendar_tasks_seq += 1
@@ -7083,8 +7036,8 @@ class EnkyronWindow(QMainWindow):
             return
         now = datetime.now(timezone.utc)
         interval = {
-            "start": (now - timedelta(days=30)).isoformat(),
-            "end": (now + timedelta(days=60)).isoformat()
+            "start": (now - timedelta(days=30)).isoformat(timespec="seconds"),
+            "end": (now + timedelta(days=60)).isoformat(timespec="seconds")
         }
 
         def received(data, error):
@@ -7093,7 +7046,9 @@ class EnkyronWindow(QMainWindow):
             tasks = data.get("tasks") if isinstance(data, dict) else None
             if error or not isinstance(tasks, list):
                 self.home_calendar_tasks_notice.setText(
-                    "Calendar tasks unavailable; open Calendar to retry.")
+                    "Calendar tasks unavailable. " +
+                    ((str(error)[:160] + " ") if error else "") +
+                    "Use Refresh My Work to retry, or open Calendar.")
                 return
             # Keep exact operator-scoped backend IDs; discard malformed dates
             # rather than inventing deadlines or attributing them to London.
