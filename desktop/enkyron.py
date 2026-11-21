@@ -19463,13 +19463,16 @@ class EnkyronWindow(QMainWindow):
             layout.addWidget(receipt)
         if submitted:
             outcome = draft.get("provider_outcome") or "uncertain"
-            receipt = QLabel(
-                "Provider response: {}\nResend email ID: {}\n"
-                "Delivery status: not independently verified".format(
+            provider_id = draft.get("provider_message_id")
+            receipt_header = (
+                "Provider response: {}\nResend email ID: {}\n".format(
                     "Accepted by Resend" if outcome == "accepted"
                     else "Uncertain — check provider",
-                    draft.get("provider_message_id") or "Not available"
+                    provider_id or "Not available"
                 )
+            )
+            receipt = QLabel(
+                receipt_header + "Delivery status: not yet verified"
             )
             receipt.setObjectName("enkyronSubmittedMailReceipt")
             receipt.setTextFormat(Qt.TextFormat.PlainText)
@@ -19527,6 +19530,61 @@ class EnkyronWindow(QMainWindow):
             self.crm_mail_to.textEdited.connect(self.mail_recipient_text_edited)
             self.crm_mail_to_completer.activated[str].connect(self.choose_mail_recipient)
         dialog.show()
+        if submitted:
+            # A provider submission is not proof of delivery. Resolve the
+            # actual Resend event with the existing ACL-scoped, read-only GET.
+            # Never trigger another send or infer identity from a recipient.
+            draft_id = draft.get("id")
+            uuid_pattern = r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}"
+            valid_ids = (
+                isinstance(draft_id, str)
+                and re.fullmatch(uuid_pattern, draft_id, re.I) is not None
+                and isinstance(provider_id, str)
+                and re.fullmatch(uuid_pattern, provider_id, re.I) is not None
+            )
+            if valid_ids:
+                receipt.setText(receipt_header +
+                                "Delivery status: checking Resend (read-only)…")
+
+                def provider_status(data, error):
+                    if not dialog.isVisible() or self.crm_draft_dialog is not dialog:
+                        return
+                    # The response must refer to this exact saved Resend ID.
+                    verified = (
+                        not error and isinstance(data, dict)
+                        and data.get("verified") is True
+                        and data.get("provider_message_id") == provider_id
+                    )
+                    if verified:
+                        event = data.get("last_event")
+                        if event == "delivered":
+                            status = (
+                                "Resend reports delivered; human reading not verified"
+                            )
+                        elif event in ("bounced", "failed", "suppressed",
+                                       "complained"):
+                            status = "Resend reports {}; delivery failed".format(event)
+                        elif event in ("opened", "clicked"):
+                            status = (
+                                "Resend reports {}; human reading not "
+                                "independently verified".format(event)
+                            )
+                        elif event in ("sent", "scheduled", "delivery_delayed"):
+                            status = (
+                                "Resend event: {}; delivery not confirmed".format(event)
+                            )
+                        else:
+                            status = "Resend event unknown; delivery not confirmed"
+                    else:
+                        status = (
+                            "Resend status unavailable or mismatched; "
+                            "delivery not confirmed"
+                        )
+                    receipt.setText(receipt_header + "Delivery status: " + status)
+
+                self.bridge.call(
+                    "mail-provider-status", draft_id, callback=provider_status
+                )
 
 
     def mail_recipient_text_edited(self, _text):

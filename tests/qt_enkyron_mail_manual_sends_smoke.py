@@ -5,7 +5,7 @@ import gc
 from PySide6.QtCore import QEvent
 
 os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QLabel
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
 DRAFT='11111111-2222-4333-8444-555555555555'
@@ -84,6 +84,78 @@ class ManualSendSmoke(unittest.TestCase):
                 window = None
                 gc.collect()
             DesktopBridge.call=prev
+
+    def test_provider_status_in_submitted_crm_record_is_exact_and_read_only(self):
+        """CRM uses the same Resend read status as Mail, never a second send."""
+        provider = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        calls = []
+        original = DesktopBridge.call
+
+        def fake(_self, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.show_mail_draft_dialog({
+                "id": DRAFT, "company_id": COMPANY, "revision": 1,
+                "company_name_at_creation": "Synthetic Labs",
+                "mail_state": "provider_submitted",
+                "mailbox_key": "direction",
+                "provider_message_id": provider,
+                "provider_outcome": "accepted",
+                "recipient_email": "buyer@example.invalid",
+                "subject": "Synthetic sent message",
+                "body_text": "This was already submitted.",
+            })
+            dialog = window.crm_draft_dialog
+            label = dialog.findChild(QLabel, "enkyronSubmittedMailReceipt")
+            self.assertIsNotNone(label)
+            self.assertIn("checking Resend", label.text())
+            lookups = [x for x in calls if x[0] == "mail-provider-status"]
+            self.assertEqual(len(lookups), 1)
+            self.assertEqual(lookups[0][1], DRAFT)
+            self.assertIsNone(lookups[0][2])
+            self.assertTrue(window.crm_mail_body.isReadOnly())
+            self.assertFalse(window.crm_mail_send.isVisible())
+            callback = lookups[0][3]
+            callback({"verified": True, "provider_message_id": provider,
+                      "last_event": "delivered"}, None)
+            self.assertIn("Resend reports delivered", label.text())
+            self.assertIn("human reading not verified", label.text())
+            callback({"verified": True, "provider_message_id": provider,
+                      "last_event": "bounced"}, None)
+            self.assertIn("delivery failed", label.text())
+            callback({"verified": True, "provider_message_id": provider,
+                      "last_event": "sent"}, None)
+            self.assertIn("delivery not confirmed", label.text())
+            callback({"verified": True, "provider_message_id":
+                      "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+                      "last_event": "delivered"}, None)
+            self.assertIn("mismatched", label.text())
+            callback(None, "Read permission unavailable")
+            self.assertIn("delivery not confirmed", label.text())
+            dialog.reject()
+            before = label.text()
+            callback({"verified": True, "provider_message_id": provider,
+                      "last_event": "delivered"}, None)
+            self.assertEqual(label.text(), before)
+            self.assertFalse(any(
+                action in ("mail-send-draft", "crm-mail-update", "mail-reply-draft")
+                for action, *_ in calls
+            ))
+        finally:
+            if window:
+                for top in list(QApplication.topLevelWidgets()):
+                    top.close()
+                    top.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.app.processEvents()
+                window = None
+                gc.collect()
+            DesktopBridge.call = original
+
 
 if __name__=="__main__":
     unittest.main()
