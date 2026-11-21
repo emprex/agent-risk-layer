@@ -56,6 +56,7 @@ class MissionBoardView(QWidget):
         self._crm_companies = []
         self._live_missions = []
         self._live_can_write = False
+        self._live_can_edit = False
         self._write_busy = False
         self._live_available = False
         self._live_notice = 'Mission Board tables are not installed.'
@@ -281,6 +282,7 @@ class MissionBoardView(QWidget):
         if error or not isinstance(data, dict) or data.get("available") is not True:
             self._live_available = False
             self._live_can_write = False
+            self._live_can_edit = False
             self._live_missions = []
             message = data.get("notice") if isinstance(data, dict) else ""
             self._live_notice = (str(message)[:200] if message else
@@ -288,6 +290,7 @@ class MissionBoardView(QWidget):
         else:
             self._live_available = True
             self._live_can_write = data.get("can_write") is True
+            self._live_can_edit = self._live_can_write and data.get("can_edit") is True
             self._live_missions = normalize_missions(data.get("items"))
             self._live_notice = (
                 "Existing internal planning missions · "
@@ -395,7 +398,7 @@ class MissionBoardView(QWidget):
                 self.time_table.setItem(row, col, _cell(value))
         self._update_write_controls()
 
-    def _build_read_only_details_dialog(self, heading, contents):
+    def _build_read_only_details_dialog(self, heading, contents, *, allow_edit=False):
         """Independent, native details window; no mutation or approval action.
 
         Using a parentless native Window avoids a window-manager transient group
@@ -417,12 +420,19 @@ class MissionBoardView(QWidget):
         layout.addWidget(details, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
+        if allow_edit:
+            edit = buttons.addButton("Edit existing item…",
+                                     QDialogButtonBox.ButtonRole.AcceptRole)
+            edit.setObjectName("enkyronMissionEditDetails")
+            edit.clicked.connect(dialog.accept)
         layout.addWidget(buttons)
         return dialog
 
-    def _show_read_only_details(self, heading, contents):
-        dialog = self._build_read_only_details_dialog(heading, contents)
-        dialog.exec()
+    def _show_read_only_details(self, heading, contents, on_edit=None):
+        dialog = self._build_read_only_details_dialog(
+            heading, contents, allow_edit=on_edit is not None)
+        if dialog.exec() == QDialog.DialogCode.Accepted and on_edit:
+            on_edit()
 
     def _open_mission_details(self, item=None):
         row = item.row() if item is not None else self.mission_table.currentRow()
@@ -452,8 +462,96 @@ class MissionBoardView(QWidget):
                     f"Mission: {mission['title']}\n"
                     f"Type: {work['kind'].capitalize()}\n"
                     f"Status: {work['status'].capitalize()}\n"
-                    f"Due: {work['due_date'] or 'Not set'}")
-        self._show_read_only_details("Work item details", contents)
+                    f"Version: {work['version']}\n"
+                    f"Due: {work['due_date'] or 'Not set'}\n\n"
+                    f"Description:\n{work.get('description') or 'Not recorded'}")
+        editable = (not self._demo and self._live_available
+                    and self._live_can_write and self._live_can_edit
+                    and not self._write_busy and work["status"] == "open")
+        self._show_read_only_details(
+            "Work item details", contents,
+            on_edit=(lambda: self._edit_work_item_details(mission, work))
+            if editable else None)
+
+    def _edit_work_item_details(self, mission, work):
+        """Edit the same ID; backend owns version conflict, audit and persistence."""
+        if (self._demo or not self._live_available or not self._live_can_edit
+                or not self._live_can_write or self._write_busy
+                or mission.get("status") != "planning"
+                or work.get("status") != "open"):
+            return
+        dialog = QDialog(None, Qt.WindowType.Window)
+        dialog.setObjectName("enkyronMissionWorkItemEditor")
+        dialog.setWindowTitle("Edit existing " + work["kind"])
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dialog.resize(650, 450)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(_label(
+            "Internal work plan only · original task ID and status are preserved.",
+            muted=True))
+        form = QFormLayout()
+        title = QLineEdit(work["title"])
+        title.setObjectName("enkyronWorkItemEditTitle")
+        title.setMaxLength(200)
+        form.addRow("Title", title)
+        description = QPlainTextEdit()
+        description.setObjectName("enkyronWorkItemEditDescription")
+        description.setPlainText(work.get("description") or "")
+        description.setPlaceholderText("Optional internal details (up to 2000 characters)")
+        form.addRow("Details", description)
+        due = QLineEdit(work.get("due_date") or "")
+        due.setObjectName("enkyronWorkItemEditDue")
+        due.setMaxLength(10)
+        due.setPlaceholderText("YYYY-MM-DD (optional)")
+        form.addRow("Due date", due)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save |
+            QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        new_title = title.text().strip()
+        new_description = description.toPlainText().strip()
+        new_due = due.text().strip() or None
+        if not 5 <= len(new_title) <= 200 or len(new_description) > 2000:
+            QMessageBox.warning(None, "Work item", "Invalid title or details length.")
+            return
+        if new_due:
+            from datetime import date
+            try:
+                if date.fromisoformat(new_due).isoformat() != new_due:
+                    raise ValueError("Date format")
+            except ValueError:
+                QMessageBox.warning(None, "Work item", "Date must be YYYY-MM-DD.")
+                return
+        before = (work["title"], work.get("description") or "",
+                  work.get("due_date") or None)
+        after = (new_title, new_description, new_due)
+        if before == after:
+            return
+        preview = (
+            f"Edit existing {work['kind']} (version {work['version']})?\n\n"
+            f"Title: {before[0]}  →  {after[0]}\n"
+            f"Due: {before[2] or 'Not set'}  →  {after[2] or 'Not set'}\n"
+            "Description before:\n" + (before[1][:250] or "(empty)") +
+            "\n\nDescription after:\n" + (after[1][:250] or "(empty)") +
+            "\n\nSave a new audited revision? No status, owner, "
+            "assessment or security verdict is changed."
+        )
+        answer = QMessageBox.question(
+            None, "Review work item changes", preview,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.writeRequested.emit("psa-update-work-item", {
+            "mission_id": mission["id"], "task_id": work["id"],
+            "expected_version": work["version"], "title": new_title,
+            "description": new_description, "due_date": new_due,
+            "request_id": str(uuid4()), "confirmed": True})
 
     def set_write_busy(self, yes):
         self._write_busy = bool(yes)
