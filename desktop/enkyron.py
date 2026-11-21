@@ -180,6 +180,28 @@ def format_followup_due(value, stage, today=None):
     return due
 
 
+def home_calendar_priority(overdue, today, tomorrow, later):
+    """Compact non-zero counts from the bounded dated Calendar read."""
+    parts = []
+    for count, name in ((overdue, "overdue"), (today, "today"),
+                        (tomorrow, "tomorrow"), (later, "later")):
+        if count:
+            parts.append("{} {}".format(count, name))
+    return "Calendar: " + (" · ".join(parts) if parts
+                           else "no dated tasks in this view")
+
+
+def home_opportunity_priority(overdue, today, next_week):
+    """Opportunity counts are workspace-wide, separate from Calendar tasks."""
+    parts = []
+    for count, name in ((overdue, "overdue"), (today, "today"),
+                        (next_week, "due in next 7 days")):
+        if count:
+            parts.append("{} {}".format(count, name))
+    return "Opportunities: " + (" · ".join(parts) if parts
+                               else "none due within 7 days")
+
+
 def section_title(value):
     label = QLabel(value)
     label.setObjectName("sectionTitle")
@@ -7104,10 +7126,8 @@ class EnkyronWindow(QMainWindow):
                 for due, _, _ in candidates)
             later_count = (len(candidates) - overdue_count -
                            today_count - tomorrow_count)
-            self._home_calendar_priority = (
-                "Calendar (dated, returned): {} overdue · {} today · "
-                "{} tomorrow · {} later".format(
-                    overdue_count, today_count, tomorrow_count, later_count))
+            self._home_calendar_priority = home_calendar_priority(
+                overdue_count, today_count, tomorrow_count, later_count)
             EnkyronWindow.update_home_priority_summary(self)
             # Two most recent overdue + three soonest future tasks prevents
             # an old backlog from hiding today's work. Fill unused slots from
@@ -7215,16 +7235,18 @@ class EnkyronWindow(QMainWindow):
                     numbers["saved_drafts"]
                 )
             )
-            self._home_sales_priority = (
-                "Opportunities: {} overdue · {} today · {} next 7 days"
-                .format(numbers["overdue"], numbers["due_today"],
-                        numbers["due_next_week"]))
+            self._home_sales_priority = home_opportunity_priority(
+                numbers["overdue"], numbers["due_today"],
+                numbers["due_next_week"])
             EnkyronWindow.update_home_priority_summary(self)
-            # Keep provenance visible without duplicating the priority totals.
-            self.sales_overview_attention.setText(
-                "Opportunity follow-ups as of {}. Company-owned follow-ups "
-                "are separate.".format(numbers["as_of"]))
+            # The database counts all local opportunities; this table is
+            # only the six earliest dated ones. Never imply it lists all due.
             priorities = numbers.get("priority_items", [])
+            self.sales_overview_attention.setText(
+                "Showing {} earliest scheduled opportunity follow-ups "
+                "(up to 6) · as of {}. For more, open Opportunity follow-ups. "
+                "Company-owned follow-ups are separate.".format(
+                    len(priorities), numbers["as_of"]))
             self.sales_overview_table.setRowCount(len(priorities))
             self.sales_overview_table.setVisible(bool(priorities))
             self.sales_overview_empty.setVisible(not bool(priorities))

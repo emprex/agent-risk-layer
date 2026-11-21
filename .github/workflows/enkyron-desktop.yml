@@ -2299,7 +2299,8 @@ jobs:
               }
           }, None)
           assert "344" in window.sales_overview_metrics.text()
-          assert "Opportunities: 0 overdue · 1 today · 0 next 7 days" in window.home_priority_summary.text()
+          assert "Opportunities: 1 today" in window.home_priority_summary.text()
+          assert "Showing 1 earliest scheduled" in window.sales_overview_attention.text()
           assert "as of 2026-11-06" in window.sales_overview_attention.text()
           assert window.sales_overview_table.rowCount() == 1
           window.open_sales_followups()

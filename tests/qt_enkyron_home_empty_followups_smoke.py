@@ -10,7 +10,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication, QPushButton, QHeaderView
-from desktop.enkyron import DesktopBridge, EnkyronWindow, calendar_home_due
+from desktop.enkyron import (DesktopBridge, EnkyronWindow, calendar_home_due,
+                            home_calendar_priority, home_opportunity_priority)
 
 
 EMPTY_OVERVIEW = {
@@ -30,6 +31,25 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_home_summary_omits_zeroes_but_preserves_scope(self):
+        self.assertEqual(
+            home_calendar_priority(4, 0, 0, 0), "Calendar: 4 overdue")
+        self.assertEqual(
+            home_calendar_priority(0, 1, 2, 3),
+            "Calendar: 1 today · 2 tomorrow · 3 later")
+        self.assertEqual(
+            home_calendar_priority(0, 0, 0, 0),
+            "Calendar: no dated tasks in this view")
+        self.assertEqual(
+            home_opportunity_priority(0, 0, 15),
+            "Opportunities: 15 due in next 7 days")
+        self.assertEqual(
+            home_opportunity_priority(2, 1, 0),
+            "Opportunities: 2 overdue · 1 today")
+        self.assertEqual(
+            home_opportunity_priority(0, 0, 0),
+            "Opportunities: none due within 7 days")
 
     def test_calendar_home_deadlines_are_london_local_and_clear(self):
         from datetime import datetime, timezone
@@ -74,7 +94,7 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                                 callback({"tasks": records}, None)))
         )
         EnkyronWindow.load_home_calendar_tasks(stub)
-        self.assertIn("Calendar (dated, returned): 5 overdue",
+        self.assertIn("Calendar: 5 overdue",
                       summary.text())
         self.assertIn("Opportunities: loading", summary.text())
         self.assertEqual(calls, ["calendar-list"])
@@ -228,7 +248,7 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                 task_table.fontMetrics().horizontalAdvance(date_cell.text()) + 6)
             self.assertGreater(
                 task_table.columnWidth(0), task_table.columnWidth(1))
-            self.assertIn("Calendar (dated, returned): 1 overdue",
+            self.assertIn("Calendar: 1 overdue",
                           window.home_priority_summary.text())
 
             initial = [x for x in calls if x[0] == "crm-sales-overview"]
@@ -244,9 +264,11 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                           window.sales_overview_empty.text())
             self.assertIn("Active opportunities: 2",
                           window.sales_overview_metrics.text())
-            self.assertIn("Opportunities: 0 overdue · 0 today · 0 next 7 days",
+            self.assertIn("Opportunities: none due within 7 days",
                           window.home_priority_summary.text())
             self.assertIn("as of 2026-11-12",
+                          window.sales_overview_attention.text())
+            self.assertIn("Showing 0 earliest scheduled",
                           window.sales_overview_attention.text())
 
             # A real priority row must restore the table and retain the
@@ -275,6 +297,10 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
             self.assertGreaterEqual(table.rowHeight(0), 44)
             self.assertEqual(table.item(0, 2).text(), full_action)
             self.assertEqual(table.item(0, 2).toolTip(), full_action)
+            self.assertIn("Showing 1 earliest scheduled",
+                          window.sales_overview_attention.text())
+            self.assertIn("For more, open Opportunity follow-ups",
+                          window.sales_overview_attention.text())
             self.assertEqual(
                 table.item(0, 0).data(Qt.ItemDataRole.UserRole),
                 opportunity_id)
@@ -291,7 +317,7 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                           window.sales_overview_metrics.text())
             self.assertIn("Opportunities: unavailable",
                           window.home_priority_summary.text())
-            self.assertIn("Calendar (dated, returned): 1 overdue",
+            self.assertIn("Calendar: 1 overdue",
                           window.home_priority_summary.text())
 
             self.assertFalse(any(
