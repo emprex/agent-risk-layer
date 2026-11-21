@@ -151,6 +151,8 @@ class MissionBoardView(QWidget):
         self.mission_table.setAlternatingRowColors(True)
         self.mission_table.setAccessibleName("Read-only missions list")
         self.mission_table.itemSelectionChanged.connect(self._select_mission)
+        self.mission_table.itemDoubleClicked.connect(self._open_mission_details)
+        self.mission_table.setToolTip("Double-click a mission to read its full details")
         ll.addWidget(self.mission_table)
         splitter.addWidget(left_pane)
 
@@ -180,6 +182,8 @@ class MissionBoardView(QWidget):
         self.task_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.task_table.setAccessibleName("Read-only tasks and milestones")
         self.task_table.itemSelectionChanged.connect(self._update_write_controls)
+        self.task_table.itemDoubleClicked.connect(self._open_work_item_details)
+        self.task_table.setToolTip("Double-click a task or milestone to read its full details")
         self.detail_tabs.addTab(self.task_table, "Tasks & milestones")
         time_page = QWidget()
         time_layout = QVBoxLayout(time_page)
@@ -375,7 +379,10 @@ class MissionBoardView(QWidget):
             values = (work['kind'].capitalize(), work['title'],
                       work['due_date'] or 'Not set', work['status'].capitalize())
             for col, value in enumerate(values):
-                self.task_table.setItem(row, col, _cell(value))
+                cell = _cell(value)
+                if col == 1:
+                    cell.setToolTip(work["title"])
+                self.task_table.setItem(row, col, cell)
         minutes, duration = time_summary(mission)
         self.time_summary_label.setText(
             f"Internal draft time: {duration} · Not approved or billable")
@@ -387,6 +394,56 @@ class MissionBoardView(QWidget):
             for col, value in enumerate(values):
                 self.time_table.setItem(row, col, _cell(value))
         self._update_write_controls()
+
+    def _show_read_only_details(self, heading, contents):
+        """Show complete stored fields without any mutation or approval action."""
+        dialog = QDialog(self)
+        dialog.setObjectName("enkyronMissionReadOnlyDetails")
+        dialog.setWindowTitle(heading)
+        dialog.resize(720, 460)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(_label(heading, bold=True))
+        details = QPlainTextEdit(dialog)
+        details.setObjectName("enkyronMissionDetailsText")
+        details.setReadOnly(True)
+        details.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        details.setPlainText(contents)
+        layout.addWidget(details, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec()
+
+    def _open_mission_details(self, item=None):
+        row = item.row() if item is not None else self.mission_table.currentRow()
+        if not 0 <= row < len(self._visible):
+            return
+        mission = self._visible[row]
+        done, total, _ = progress(mission)
+        contents = (f"Mission: {mission['title']}\n\n"
+                    f"Company: {mission['company_name']}\n"
+                    f"Status: {mission['status'].capitalize()}\n"
+                    f"Due: {mission['due_date'] or 'Not set'}\n"
+                    f"Work items: {done} of {total} completed\n\n"
+                    f"Description:\n{mission['description'] or 'Not recorded'}")
+        self._show_read_only_details("Mission details", contents)
+
+    def _open_work_item_details(self, item=None):
+        mission_row = self.mission_table.currentRow()
+        if not 0 <= mission_row < len(self._visible):
+            return
+        mission = self._visible[mission_row]
+        tasks = mission["work_items"]
+        row = item.row() if item is not None else self.task_table.currentRow()
+        if not 0 <= row < len(tasks):
+            return
+        work = tasks[row]
+        contents = (f"Title: {work['title']}\n\n"
+                    f"Mission: {mission['title']}\n"
+                    f"Type: {work['kind'].capitalize()}\n"
+                    f"Status: {work['status'].capitalize()}\n"
+                    f"Due: {work['due_date'] or 'Not set'}")
+        self._show_read_only_details("Work item details", contents)
 
     def set_write_busy(self, yes):
         self._write_busy = bool(yes)

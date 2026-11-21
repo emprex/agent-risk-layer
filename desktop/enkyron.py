@@ -43,6 +43,8 @@ if __package__:
     from .enkyron_pilot_lab import PilotLabPanel
     from .enkyron_control_review import ControlReviewDialog
     from .enkyron_scope_review import ScopeReviewDialog
+    from .enkyron_t05_dialog import T05QualificationDialog
+    from .enkyron_test_import import HistoricalTestImportDialog
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -56,6 +58,8 @@ else:
     from enkyron_pilot_lab import PilotLabPanel
     from enkyron_control_review import ControlReviewDialog
     from enkyron_scope_review import ScopeReviewDialog
+    from enkyron_t05_dialog import T05QualificationDialog
+    from enkyron_test_import import HistoricalTestImportDialog
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -249,6 +253,12 @@ class DesktopBridge:
                     callback(None, "Read-only synthetic UX preview blocks "
                                    "laboratory and assessment adapters")
                 return
+        if (action == "test-import-record" and
+                (os.environ.get("ENKYRON_UAT_DATABASE") is not None or
+                 os.environ.get("ENKYRON_UX_PREVIEW_READ_ONLY") == "1")):
+            if callback:
+                callback(None, "Import blocked in read-only UAT")
+            return
         # ARL master readers use separate Python adapters. They must not
         # accidentally inspect the live assessment DB during synthetic UAT.
         if (os.environ.get("ENKYRON_UAT_DATABASE") is not None
@@ -265,6 +275,11 @@ class DesktopBridge:
             module = ("desktop.enkyron_operator_state" if action == "operator-state"
                       else "desktop.enkyron_evidence")
             process.setArguments(["-m", module])
+        elif action in ("test-import-preview", "test-import-record"):
+            process.setProgram("node")
+            process.setArguments([
+                str(ROOT / "desktop" / "enkyron-test-import-cli.mjs"), action
+            ])
         elif action in ("pilot-lab-status", "pilot-lab-run"):
             process.setProgram(sys.executable)
             process.setArguments(["-B", str(ROOT / "desktop" / "enkyron_pilot_lab_bridge.py"), action, arg])
@@ -1003,6 +1018,26 @@ class EnkyronWindow(QMainWindow):
         self.engine_button.setEnabled(False)
         self.engine_button.clicked.connect(self.inspect_engine)
         engine_l.addWidget(self.engine_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.archived_report_button = QPushButton("Open archived final report…")
+        self.archived_report_button.setObjectName("enkyronOpenArchivedAssessmentReport")
+        self.archived_report_button.setToolTip(
+            "Read and verify the existing final PDF archived for this assessment")
+        self.archived_report_button.setEnabled(False)
+        self.archived_report_button.clicked.connect(self.open_archived_assessment_report)
+        engine_l.addWidget(self.archived_report_button,
+                           alignment=Qt.AlignmentFlag.AlignLeft)
+        self.archived_report_meta = QLabel("No archived final report opened.")
+        self.archived_report_meta.setObjectName("enkyronArchivedAssessmentReportMeta")
+        self.archived_report_meta.setTextFormat(Qt.TextFormat.PlainText)
+        self.archived_report_meta.setWordWrap(True)
+        self.archived_report_meta.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        engine_l.addWidget(self.archived_report_meta)
+        self.security_test_button = QPushButton("Security Test Workbench…")
+        self.security_test_button.setToolTip(
+            "Independent window: select supported canonical tests for the current assessment")
+        self.security_test_button.clicked.connect(self.open_security_test_workbench)
+        engine_l.addWidget(self.security_test_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.engine_view = make_text_area()
         self.engine_view.setPlaceholderText("Select a linked Git ticket, then inspect.")
         engine_l.addWidget(self.engine_view, 1)
@@ -1224,6 +1259,14 @@ class EnkyronWindow(QMainWindow):
         self.record_integrity_button.setEnabled(False)
         self.record_integrity_button.clicked.connect(self.inspect_record_integrity)
         toolbar.addWidget(self.record_integrity_button)
+        self.t05_review_button = QPushButton("Qualify source evidence…")
+        self.t05_review_button.setObjectName("enkyronT05CandidateQualification")
+        self.t05_review_button.setEnabled(False)
+        self.t05_review_button.clicked.connect(self.open_t05_qualification)
+        toolbar.addWidget(self.t05_review_button)
+        self.test_import_button = QPushButton("Import existing redacted test output…")
+        self.test_import_button.clicked.connect(self.open_test_import)
+        ledger_l.addWidget(self.test_import_button)
         toolbar.addStretch()
         ledger_l.addLayout(toolbar)
         self.records_notice = QLabel("Select a linked assessment ticket.")
@@ -3262,7 +3305,7 @@ class EnkyronWindow(QMainWindow):
             "thread_id": thread_id,
         }, callback=options_loaded)
 
-    def _open_mail_pdf_with_system(self, filename, raw):
+    def _open_mail_pdf_with_system(self, filename, raw, *, prefix="enkyron-mail-pdf-"):
         """Open PDF in Debian's configured viewer using private runtime storage."""
         runtime = Path(
             os.environ.get("XDG_RUNTIME_DIR")
@@ -3279,7 +3322,7 @@ class EnkyronWindow(QMainWindow):
                 raise OSError("No private Debian session directory")
 
             fd, path = tempfile.mkstemp(
-                prefix="enkyron-mail-pdf-",
+                prefix=prefix,
                 suffix=".pdf",
                 dir=str(runtime)
             )
@@ -21357,6 +21400,8 @@ class EnkyronWindow(QMainWindow):
     def ticket_operator_display(self, account):
         """Show a professional name; keep assignment and audit IDs intact."""
         technical = str(account or "").strip()
+        if technical.startswith('local:'):
+            technical = technical[6:]
         if not technical:
             return "Unassigned"
         return self.crm_operator_display(technical)
@@ -21721,7 +21766,9 @@ class EnkyronWindow(QMainWindow):
         self.master_create.setVisible(False)
         self.master_meta.setText("Master dossier not loaded.")
         self.engine_view.clear()
+        self.archived_report_meta.setText("No archived final report opened.")
         self.engine_button.setEnabled(False)
+        self.archived_report_button.setEnabled(False)
         self.control_review_button.setEnabled(False)
         self.static_collect_button.setEnabled(False)
         self.batch_replay_button.setEnabled(False)
@@ -21922,6 +21969,7 @@ class EnkyronWindow(QMainWindow):
                 and bool(ticket.get("linked_project_id"))
                 and bool(ticket.get("linked_assessment_id"))
             )
+            self.archived_report_button.setEnabled(self.engine_button.isEnabled())
             self.evidence_button.setEnabled(self.engine_button.isEnabled())
             self.control_review_button.setEnabled(
                 self.engine_button.isEnabled()
@@ -22062,6 +22110,145 @@ class EnkyronWindow(QMainWindow):
             )
             self.master_create.setText("Confirm and record revision 1…")
         self.bridge.call("master-init-preview", ticket_id, callback=prepared)
+
+    def open_security_test_workbench(self):
+        """Open a detached workbench; this ticket does not own its test catalogue."""
+        ticket = self.current_ticket
+        ticket_id = self.current_id
+        if (not ticket_id or not ticket or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")):
+            QMessageBox.information(self, "ARL", "Select an existing linked Git assessment first.")
+            return
+        if __package__:
+            from .enkyron_security_test_workbench import SecurityTestWorkbench
+        else:
+            from enkyron_security_test_workbench import SecurityTestWorkbench
+        windows = getattr(self, "_security_test_windows", None)
+        if windows is None:
+            windows = {}
+            self._security_test_windows = windows
+        previous = windows.get(ticket_id)
+        if previous is not None:
+            try:
+                previous.show()
+                previous.raise_()
+                previous.activateWindow()
+                return
+            except RuntimeError:
+                windows.pop(ticket_id, None)
+        window = SecurityTestWorkbench(ticket_id, ticket.get("ticket_number", ticket_id))
+        windows[ticket_id] = window
+        window.destroyed.connect(lambda *_: windows.pop(ticket_id, None))
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def open_archived_assessment_report(self):
+        """LA-03: open an existing verified PDF without modifying the dossier."""
+        ticket_id = self.current_id
+        ticket = self.current_ticket or {}
+        if (not ticket_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")):
+            return
+        expected_project = ticket["linked_project_id"]
+        expected_assessment = ticket["linked_assessment_id"]
+        expected_number = ticket.get("ticket_number")
+        self.archived_report_button.setEnabled(False)
+        self.status.setText("Retrieving the existing final report from PostgreSQL…")
+
+        def received(data, error):
+            if self.current_id != ticket_id:
+                return  # Do not show a previous client's report after switching tickets.
+            self.archived_report_button.setEnabled(True)
+            if error:
+                self.status.setText("Archive retrieval refused; nothing opened.")
+                self.archived_report_meta.setText(
+                    "Archive retrieval or verification failed; nothing opened.")
+                QMessageBox.warning(
+                    self, "Archived assessment report",
+                    "The archive could not be safely retrieved. Nothing was opened."
+                )
+                return
+            if not isinstance(data, dict) or not data.get("available"):
+                self.status.setText("No accessible archived final report for this ticket.")
+                self.archived_report_meta.setText(
+                    "No accessible archived report for this ticket.")
+                QMessageBox.information(
+                    self, "Archived assessment report",
+                    "No archived final report is available for this ticket."
+                )
+                return
+            try:
+                if (data.get("ticket_id") != ticket_id
+                        or data.get("project_id") != expected_project
+                        or data.get("assessment_id") != expected_assessment
+                        or data.get("ticket_number") != expected_number
+                        or data.get("confidentiality") != "confidential"
+                        or data.get("mime_type") != "application/pdf"
+                        or data.get("integrity") != "sha256_verified"
+                        or not re.fullmatch(r"rpt_[a-f0-9]{32}",
+                                            str(data.get("report_id") or ""))
+                        or not re.fullmatch(r"[a-f0-9]{40}",
+                                            str(data.get("source_commit") or ""))
+                        or not re.fullmatch(r"[a-f0-9]{64}",
+                                            str(data.get("content_sha256") or ""))):
+                    raise ValueError("Archive identity mismatch")
+                content64 = data.get("content_base64")
+                length = data.get("byte_length")
+                if (not isinstance(content64, str)
+                        or len(content64) > 33333336
+                        or type(length) is not int
+                        or not 1000 <= length <= 25000000):
+                    raise ValueError("Archive size mismatch")
+                raw = base64.b64decode(content64, validate=True)
+                if (len(raw) != length or not raw.startswith(b"%PDF-")
+                        or hashlib.sha256(raw).hexdigest()
+                        != data["content_sha256"]):
+                    raise ValueError("Archive SHA-256 mismatch")
+            except (ValueError, TypeError, KeyError, base64.binascii.Error):
+                self.status.setText("Archived report verification failed. Nothing opened.")
+                self.archived_report_meta.setText(
+                    "Archived report failed integrity or scope verification.")
+                QMessageBox.warning(
+                    self, "Archived assessment report",
+                    "The archived PDF failed its identity or integrity check."
+                )
+                return
+
+            if not self._open_mail_pdf_with_system(
+                    data.get("file_name"), raw,
+                    prefix="enkyron-assessment-report-"):
+                self.status.setText("Verified PDF could not open in the Debian viewer.")
+                self.archived_report_meta.setText(
+                    "Archived report verified, but the local PDF viewer is unavailable.")
+                QMessageBox.warning(
+                    self, "Archived assessment report",
+                    "The PDF was verified, but the local viewer could not open it."
+                )
+                return
+            self.archived_report_meta.setText(
+                "Archived report: {}\nReport ID: {}\nArchived: {} by {}\n"
+                "Source commit: {}\nSize: {} bytes\n"
+                "SHA-256 (matching stored digest): {}\n"
+                "Read-only consultation; not a security certification.".format(
+                    data.get("file_name") or "final assessment report",
+                    data["report_id"], display_date(data.get("archived_at")),
+                    data.get("archived_by") or "unknown",
+                    data["source_commit"], length, data["content_sha256"]
+                )
+            )
+            self.status.setText(
+                "Archived final report opened · SHA-256 verified · "
+                "{} bytes · recorded by {} on {} · source {}".format(
+                    length, data.get("archived_by") or "unknown",
+                    display_date(data.get("archived_at")),
+                    data["source_commit"][:12]
+                )
+            )
+
+        self.bridge.call("assessment-report-open", ticket_id, callback=received)
 
     def inspect_engine(self):
         """Inspect the canonical current Git snapshot even before a Master is written."""
@@ -23039,6 +23226,7 @@ class EnkyronWindow(QMainWindow):
             self.record_control.setValue(number)
 
     def invalidate_records(self, _number):
+        self.t05_review_button.setEnabled(False)
         if self.current_id and self.current_ticket:
             self.active_control_by_ticket[self.current_id] = self.record_control.value()
         self.records_seq += 1
@@ -23168,6 +23356,7 @@ class EnkyronWindow(QMainWindow):
 
     def show_record_details(self):
         self.record_integrity_button.setEnabled(False)
+        self.t05_review_button.setEnabled(False)
         if self.record_views.currentIndex() != 0:
             return
         rows = self.records_table.selectionModel().selectedRows()
@@ -23178,6 +23367,15 @@ class EnkyronWindow(QMainWindow):
         if not 0 <= index < len(self.record_items):
             return
         record = self.record_items[index]
+        self.t05_review_button.setEnabled(
+            record.get("verification_state") == "unverified"
+            and record.get("retention_status") == "active"
+            and record.get("source_type") in (
+                "arl_static_projection_bundle", "arl_frozen_source_candidate"
+            )
+            and self.current_ticket is not None
+            and self.current_ticket.get("status") != "closed"
+        )
         self.record_integrity_button.setEnabled(
             record.get("entry_id") == "ARL-KB-001"
             and record.get("source_type") == "arl_frozen_source_candidate"
@@ -23211,6 +23409,54 @@ class EnkyronWindow(QMainWindow):
             "No raw evidence or credential source displayed. Human verification required.",
         ]
         self.record_details.setPlainText("\n".join(details))
+
+
+    def open_test_import(self):
+        ticket = self.current_ticket or {}
+        if (not self.current_id or ticket.get("target_kind") != "git" or
+                not ticket.get("linked_project_id") or
+                not ticket.get("linked_assessment_id")):
+            return
+        existing = getattr(self, "test_import_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            return
+        control = "ARL-KB-{:03d}".format(self.record_control.value())
+        self.test_import_dialog = HistoricalTestImportDialog(
+            self, self.bridge, self.current_id, control,
+            on_recorded=self.inspect_records
+        )
+        self.test_import_dialog.show()
+
+    def open_t05_qualification(self):
+        """Review one T04 candidate without reimport, tests or trust promotion."""
+        if not self.t05_review_button.isEnabled() or not self.current_id:
+            return
+        selected = self.records_table.selectionModel().selectedRows()
+        if len(selected) != 1:
+            return
+        index = selected[0].row()
+        if not 0 <= index < len(self.record_items):
+            return
+        candidate = self.record_items[index]
+        control_id = "ARL-KB-{:03d}".format(self.record_control.value())
+        if (candidate.get("entry_id") != control_id or
+                candidate.get("verification_state") != "unverified" or
+                candidate.get("retention_status") != "active" or
+                candidate.get("source_type") not in (
+                    "arl_static_projection_bundle", "arl_frozen_source_candidate")):
+            return
+        existing = getattr(self, "t05_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = T05QualificationDialog(
+            self, self.bridge, self.current_id, control_id,
+            candidate["id"], on_recorded=self.inspect_records
+        )
+        self.t05_dialog = dialog
+        dialog.show()
 
     def inspect_record_integrity(self):
         """Inspect the stored ARL digest and claimed Git binding without writes."""

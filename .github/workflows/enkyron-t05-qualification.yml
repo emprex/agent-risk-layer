@@ -1,0 +1,51 @@
+name: ENKYRON T05 Evidence Qualification
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/enkyron-t05-qualification.mjs'
+      - 'desktop/enkyron_t05_dialog.py'
+      - 'desktop/enkyron.py'
+      - 'desktop/enkyron-bridge.mjs'
+      - 'migrations/123_enkyron_t05_source_qualifications.sql'
+      - 'tests/enkyron-t05-qualification.test.js'
+      - '.github/workflows/enkyron-t05-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  t05-focused:
+    name: T05 isolated source and trust regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - name: Install locked dependencies (no scripts)
+        run: npm ci --ignore-scripts
+      - name: Validate Node bridge and T05 contracts
+        run: |
+          node --check desktop/enkyron-t05-qualification.mjs
+          node --check desktop/enkyron-bridge.mjs
+          node --test tests/enkyron-t05-qualification.test.js
+      - name: Compile native UI source without running it
+        run: |
+          python3 -B -m py_compile desktop/enkyron.py desktop/enkyron_t05_dialog.py
+      - name: Confirm schema is append-only and candidate trust is unchanged
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const migration=fs.readFileSync('migrations/123_enkyron_t05_source_qualifications.sql','utf8');
+          const backend=fs.readFileSync('desktop/enkyron-t05-qualification.mjs','utf8');
+          assert.match(migration,/CREATE TABLE enkyron_t05_source_qualifications/);
+          assert.match(migration,/BEFORE UPDATE OR DELETE ON enkyron_t05_source_qualifications/);
+          assert.doesNotMatch(migration,/\\b(?:UPDATE|DELETE FROM|TRUNCATE)\\s+control_evidence_items\\b/i);
+          assert.doesNotMatch(backend,/\\b(?:UPDATE|DELETE FROM|TRUNCATE)\\s+control_evidence_items\\b/i);
+          assert.match(backend,/candidate_verification_state:'unverified'/);
+          JS
