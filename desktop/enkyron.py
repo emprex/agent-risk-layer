@@ -4683,7 +4683,8 @@ class EnkyronWindow(QMainWindow):
             # saved reference or bypassing permissions based on its notes.
             def access_loaded(data, error):
                 entries = data.get("mailboxes") if isinstance(data, dict) else None
-                allowed = (not error and data.get("schema_ready") is True
+                allowed = (not error and isinstance(data, dict)
+                           and data.get("schema_ready") is True
                            and isinstance(entries, list)
                            and any(isinstance(entry, dict)
                                    and entry.get("key") == mailbox
