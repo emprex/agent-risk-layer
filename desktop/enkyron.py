@@ -1094,6 +1094,17 @@ class EnkyronWindow(QMainWindow):
         self.evidence_button.setVisible(False)
         self.evidence_button.setEnabled(False)
         self.evidence_button.clicked.connect(self.inspect_evidence)
+        # One direct operator path: preview the existing canonical batch before
+        # asking for a single explicit confirmation to record UNVERIFIED metadata.
+        # The optional read-only matrix below is not a prerequisite.
+        self.batch_record_button = QPushButton(
+            "Collect and register source evidence candidates…")
+        self.batch_record_button.setObjectName("batchEvidenceCandidatesGuidedAction")
+        self.batch_record_button.setEnabled(False)
+        self.batch_record_button.setToolTip(
+            "Preview already recorded and remaining candidates; confirm once before writing.")
+        self.batch_record_button.clicked.connect(self.review_static_metadata_batch)
+        evidence_l.addWidget(self.batch_record_button)
         work_actions = QHBoxLayout()
         self.control_review_button = QPushButton("Continue assessment · Review controls…")
         self.control_review_button.setObjectName("primary")
@@ -1119,6 +1130,12 @@ class EnkyronWindow(QMainWindow):
         self.batch_replay_results.setMaximumHeight(205)
         self.batch_replay_results.setVisible(False)
         evidence_l.addWidget(self.batch_replay_results)
+        self.batch_open_register_button = QPushButton("Open Evidence Register")
+        self.batch_open_register_button.setObjectName("batchEvidenceOpenRegister")
+        self.batch_open_register_button.setVisible(False)
+        self.batch_open_register_button.clicked.connect(
+            lambda: self.tabs.setCurrentIndex(6))
+        evidence_l.addWidget(self.batch_open_register_button)
         # Preserve one live Qt matrix widget whether embedded or detached.
         self.batch_review_panel = QWidget()
         self.batch_review_panel.setObjectName("batchEvidenceReviewPanel")
@@ -1128,18 +1145,6 @@ class EnkyronWindow(QMainWindow):
             "108-CONTROL EVIDENCE REVIEW MATRIX · READ-ONLY")
         review_head.addWidget(self.batch_review_heading)
         review_head.addStretch()
-        self.batch_record_button = QToolButton()
-        self.batch_record_button.setObjectName("batchMetadataRecordTinyAction")
-        self.batch_record_button.setText("＋")
-        self.batch_record_button.setToolTip(
-            "Record eligible static metadata in one reviewed batch · UNVERIFIED only")
-        self.batch_record_button.setStatusTip(
-            "Explicit human authorisation required; no PASS/FAIL or active tests")
-        self.batch_record_button.setFixedSize(30, 30)
-        self.batch_record_button.setAutoRaise(True)
-        self.batch_record_button.setEnabled(False)
-        self.batch_record_button.clicked.connect(self.review_static_metadata_batch)
-        review_head.addWidget(self.batch_record_button)
         self.batch_review_detach_button = QPushButton("Open matrix in window")
         self.batch_review_detach_button.setObjectName("batchEvidenceDetach")
         self.batch_review_detach_button.clicked.connect(self.toggle_batch_review_window)
@@ -21774,6 +21779,7 @@ class EnkyronWindow(QMainWindow):
         self.batch_replay_button.setEnabled(False)
         self.batch_replay_results.clear()
         self.batch_replay_results.setVisible(False)
+        self.batch_open_register_button.setVisible(False)
         self.batch_review_table.setRowCount(0)
         self.batch_review_panel.setVisible(False)
         self.batch_review_open.setEnabled(False)
@@ -21980,6 +21986,9 @@ class EnkyronWindow(QMainWindow):
                 self.control_review_button.isEnabled()
             )
             self.batch_replay_button.setEnabled(
+                self.control_review_button.isEnabled()
+            )
+            self.batch_record_button.setEnabled(
                 self.control_review_button.isEnabled()
             )
             self.pilot_lab.set_ticket(ticket_id,
@@ -22459,10 +22468,11 @@ class EnkyronWindow(QMainWindow):
                 or not ticket.get("linked_project_id")
                 or not ticket.get("linked_assessment_id")
                 or ticket.get("archived_at") or ticket.get("status") == "closed"
+                or self.batch_record_progress is not None
                 or not self.batch_replay_button.isEnabled()):
             return
         self.batch_replay_button.setEnabled(False)
-        self.batch_record_button.setEnabled(False)
+        # Optional replay never gates or disables the guided recording preview.
         self.batch_record_progress = None
         if self.batch_review_detached_window is not None:
             self.batch_review_detached_window.close()
@@ -22592,9 +22602,11 @@ class EnkyronWindow(QMainWindow):
                 not self.batch_record_button.isEnabled()):
             return
         self.batch_record_button.setEnabled(False)
+        self.batch_open_register_button.setVisible(False)
+        self.batch_replay_results.setVisible(True)
         self.batch_replay_results.setPlainText(
-            "Checking the exact 108-control frozen source manifest and existing "
-            "canonical records. This preview does NOT write evidence."
+            "Checking the frozen source manifest and already recorded candidates…\n"
+            "Read-only preview; no evidence, tests or security decisions written."
         )
 
         def previewed(data, error):
@@ -22631,34 +22643,42 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             remaining = data.get("to_record")
-            if not isinstance(remaining, int) or not 0 <= remaining <= 103:
+            already = data.get("already_recorded")
+            if (not isinstance(remaining, int) or not 0 <= remaining <= 103
+                    or not isinstance(already, int) or not 0 <= already <= 103
+                    or already + remaining != 103):
                 self.batch_replay_results.setPlainText(
                     "Batch preview refused: inconsistent existing record count."
                 )
                 return
+            self.batch_replay_results.setPlainText(
+                "SOURCE EVIDENCE CANDIDATES · READ-ONLY PREVIEW\n"
+                "Snapshot: {}\nFrozen Git SHA: {}\n"
+                "Eligible metadata bundles: 103\n"
+                "Already recorded (UNVERIFIED): {}\n"
+                "Remaining to record: {}\n"
+                "Excluded: existing KB-001 (1); no static source (4)\n"
+                "No evidence is verified. No test is authorised.\n"
+                "Recording requires one explicit human confirmation.".format(
+                    data["snapshot_id"], data["target_sha"], already, remaining)
+            )
             if remaining == 0:
-                self.batch_replay_results.setPlainText(
-                    "All 103 other-KB source metadata bundles already exist. "
-                    "No duplicate was created. All remain UNVERIFIED; "
-                    "review original source and owner approvals separately."
+                self.batch_replay_results.appendPlainText(
+                    "\nNothing to record. No duplicate created."
                 )
+                self.batch_open_register_button.setVisible(True)
                 return
             confirm = QMessageBox.question(
-                self, "Record UNVERIFIED source metadata for other KBs?",
-                "Frozen source SHA: {}\nSnapshot: {}\n"
-                "Manifest SHA-256: {}\n\n"
-                "Already recorded: {} of 103 other KBs\n"
-                "Still to record: {} of 103\n"
-                "KB-001: existing evidence preserved\n"
-                "KB-030/031/032/106: no static source, skipped\n\n"
-                "AUTHORISE recording metadata CANDIDATES only, in bounded "
-                "resumable chunks?\n"
-                "This does NOT verify source authenticity, approve owner "
-                "permissions, accept evidence, perform tests, change "
-                "applicability, record PASS/FAIL or revise the Master.".format(
-                    data["target_sha"], data["snapshot_id"],
-                    data["manifest_digest"], data["already_recorded"],
-                    remaining
+                self, "Record unverified evidence candidates?",
+                "Snapshot: {}\nFrozen Git SHA: {}\n\n"
+                "Already recorded: {} / 103\n"
+                "Remaining: {} / 103\n"
+                "Excluded: KB-001 (1) and no-static-source controls (4).\n\n"
+                "Record the remaining {} metadata candidates as UNVERIFIED?\n"
+                "This does not verify evidence, authorise tests, record "
+                "PASS/FAIL, or change applicability or the Master.".format(
+                    data["snapshot_id"], data["target_sha"], already,
+                    remaining, remaining
                 ),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
@@ -22763,6 +22783,7 @@ class EnkyronWindow(QMainWindow):
                 )
                 self.batch_record_progress = None
                 self.batch_record_button.setEnabled(True)
+                self.batch_open_register_button.setVisible(True)
                 return
             if data.get("finished") is not False or next_cursor >= 103:
                 self.batch_replay_results.setPlainText(
