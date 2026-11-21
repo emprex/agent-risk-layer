@@ -119,6 +119,109 @@ class CalendarMailSourceSmoke(unittest.TestCase):
             view.close()
             view.deleteLater()
 
+    def test_saved_mail_task_is_reread_before_source_button_is_shown(self):
+        from unittest.mock import patch
+        task = "99999999-aaaa-4bbb-8ccc-dddddddddddd"
+        expected = {
+            "title": "Follow up existing saved mail",
+            "notes": SENT_NOTES,
+            "due_at": "2026-11-24T16:00:00+00:00",
+        }
+        stored = {
+            "id": task, "title": expected["title"],
+            "notes": SENT_NOTES,
+            "due_at": "2026-11-24T16:00:00.000Z",
+            "completed_at": None,
+        }
+        calls, opened, refreshed = [], [], []
+        def call(command, arg=None, payload=None, callback=None):
+            calls.append((command, payload))
+            if command == "calendar-task-create":
+                callback({"id": task}, None)
+            elif command == "calendar-task-read":
+                callback({"task": stored}, None)
+            else:
+                self.fail("Unexpected Calendar operation: " + command)
+        stub = SimpleNamespace(
+            bridge=SimpleNamespace(call=call),
+            calendar_view=SimpleNamespace(
+                _show_item_details=lambda kind, record:
+                opened.append((kind, record))),
+            load_calendar=lambda: refreshed.append(True),
+        )
+        with patch("desktop.enkyron.QMessageBox.warning") as warning:
+            EnkyronWindow.create_calendar_task(stub, expected)
+            warning.assert_not_called()
+        self.assertEqual(calls, [
+            ("calendar-task-create", expected),
+            ("calendar-task-read", {"id": task}),
+        ])
+        self.assertEqual(len(refreshed), 1)
+        self.assertEqual(opened, [("Task", stored)])
+        self.assertEqual(parse_task_mail_source(opened[0][1]["notes"])["draft_id"], DRAFT)
+
+    def test_changed_or_unverifiable_source_never_opens_another_task(self):
+        from unittest.mock import patch
+        task = "99999999-aaaa-4bbb-8ccc-dddddddddddd"
+        expected = {
+            "title": "Follow up existing saved mail",
+            "notes": SENT_NOTES,
+            "due_at": "2026-11-24T16:00:00+00:00",
+        }
+        variants = [
+            {"id": "88888888-aaaa-4bbb-8ccc-dddddddddddd",
+             "title": expected["title"], "notes": SENT_NOTES,
+             "due_at": expected["due_at"], "completed_at": None},
+            {"id": task, "title": expected["title"],
+             "notes": "Unrelated note", "due_at": expected["due_at"],
+             "completed_at": None},
+            {"id": task, "title": expected["title"],
+             "notes": SENT_NOTES, "due_at": "2026-11-25T16:00:00Z",
+             "completed_at": None},
+            None,
+        ]
+        for stored in variants:
+            with self.subTest(stored=stored):
+                calls, opened = [], []
+                def call(command, arg=None, payload=None, callback=None):
+                    calls.append(command)
+                    if command == "calendar-task-create":
+                        callback({"id": task}, None)
+                    elif command == "calendar-task-read":
+                        callback({"task": stored} if stored else None,
+                                 "Not found" if stored is None else None)
+                stub = SimpleNamespace(
+                    bridge=SimpleNamespace(call=call),
+                    calendar_view=SimpleNamespace(
+                        _show_item_details=lambda *args: opened.append(args)),
+                    load_calendar=lambda: None,
+                )
+                with patch("desktop.enkyron.QMessageBox.warning") as warning:
+                    EnkyronWindow.create_calendar_task(stub, expected)
+                    warning.assert_called_once()
+                    self.assertIn("do not create a duplicate",
+                                  warning.call_args.args[2])
+                self.assertEqual(calls, [
+                    "calendar-task-create", "calendar-task-read"])
+                self.assertEqual(opened, [])
+
+    def test_ordinary_task_keeps_single_create_without_extra_reread(self):
+        calls, opened, refreshed = [], [], []
+        data = {"title": "Plain task", "notes": "No Mail link", "due_at": None}
+        def call(command, arg=None, payload=None, callback=None):
+            calls.append(command)
+            callback({"id": "99999999-aaaa-4bbb-8ccc-dddddddddddd"}, None)
+        stub = SimpleNamespace(
+            bridge=SimpleNamespace(call=call),
+            calendar_view=SimpleNamespace(
+                _show_item_details=lambda *args: opened.append(args)),
+            load_calendar=lambda: refreshed.append(True),
+        )
+        EnkyronWindow.create_calendar_task(stub, data)
+        self.assertEqual(calls, ["calendar-task-create"])
+        self.assertEqual(len(refreshed), 1)
+        self.assertEqual(opened, [])
+
     def test_sent_source_reads_exact_draft_and_formats_metadata(self):
         record = {
             "id": DRAFT,

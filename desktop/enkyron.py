@@ -38,7 +38,7 @@ if __package__:
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
-    from .enkyron_calendar_view import MailCalendarView
+    from .enkyron_calendar_view import MailCalendarView, parse_task_mail_source
     from .enkyron_mission_board import MissionBoardView
     from .enkyron_pilot_lab import PilotLabPanel
     from .enkyron_control_review import ControlReviewDialog
@@ -53,7 +53,7 @@ else:
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
-    from enkyron_calendar_view import MailCalendarView
+    from enkyron_calendar_view import MailCalendarView, parse_task_mail_source
     from enkyron_mission_board import MissionBoardView
     from enkyron_pilot_lab import PilotLabPanel
     from enkyron_control_review import ControlReviewDialog
@@ -6739,11 +6739,58 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("calendar-create", payload=data, callback=received)
 
     def create_calendar_task(self, data):
+        """After Mail → Task, reread the exact saved task before opening its source."""
+        mail_ref = parse_task_mail_source(data.get("notes"))
+        expected_title = data.get("title")
+        expected_notes = data.get("notes")
+        expected_due = data.get("due_at")
+
+        def same_due(actual):
+            if expected_due is None or expected_due == "":
+                return actual is None
+            if not isinstance(actual, str):
+                return False
+            try:
+                def utc(value):
+                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        raise ValueError("Missing timezone")
+                    return parsed.astimezone(timezone.utc)
+                return utc(actual) == utc(expected_due)
+            except (ValueError, TypeError, OverflowError):
+                return False
+
         def received(result, error):
             if error or not isinstance(result, dict) or not result.get("id"):
                 QMessageBox.warning(self, "Calendar", str(error or "Could not save task."))
                 return
+            task_id = result["id"]
             self.load_calendar()
+            if mail_ref is None:
+                return
+
+            def reread(stored, read_error):
+                task = stored.get("task") if isinstance(stored, dict) else None
+                # No approximation by title or timestamp: only the original
+                # operator-owned ID and exact source note can open the link.
+                if (read_error or not isinstance(task, dict)
+                        or task.get("id") != task_id
+                        or task.get("title") != expected_title
+                        or task.get("notes") != expected_notes
+                        or parse_task_mail_source(task.get("notes")) != mail_ref
+                        or task.get("completed_at") is not None
+                        or not same_due(task.get("due_at"))):
+                    QMessageBox.warning(
+                        self, "Calendar",
+                        "Task creation was reported, but the exact saved task "
+                        "and Mail reference could not be confirmed. Refresh "
+                        "Calendar before trying again; do not create a duplicate.")
+                    return
+                self.calendar_view._show_item_details("Task", task)
+
+            self.bridge.call("calendar-task-read",
+                             payload={"id": task_id}, callback=reread)
+
         self.bridge.call("calendar-task-create", payload=data, callback=received)
 
     def update_calendar_task(self, data):

@@ -427,6 +427,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_operator_personal_profile_smoke.py'
 
+      - name: ENK-06 M07 Mail to persisted Calendar task source (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_calendar_mail_source_m07_smoke.py' -v
       - name: Native window smoke without PostgreSQL
         env:
           QT_QPA_PLATFORM: offscreen
