@@ -81,7 +81,8 @@ class MailNativeUXSmoke(unittest.TestCase):
                 window._set_ticket_actions_height(item_count=2)
                 self.assertGreater(window.ticket_actions_view.height(), 90)
                 window._set_ticket_actions_height()
-                self.assertEqual(window.ticket_actions_view.height(), 60)
+                self.assertTrue(window.ticket_actions_view.isHidden())
+                self.assertFalse(window.ticket_actions_empty_notice.isHidden())
                 window.operator_profile_state = {
                     "local_operator": "emprex",
                     "current": {"display_name": "Guillaume Strohecker"},
