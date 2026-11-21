@@ -187,6 +187,7 @@ test('ENK-08 board: existing scoped missions and children are read-only queries'
     calls.push({sql,args});
     if(sql.includes('to_regclass'))return {rows:[{missions:'enkyron_psa_missions',
       work_items:'enkyron_psa_work_items',time_entries:'enkyron_psa_time_entries'}]};
+    if(sql.includes('FROM information_schema.columns'))return {rows:[{columns:0}]};
     if(sql.includes('FROM enkyron_psa_missions m')) return {rows:[m]};
     if(sql.includes('FROM enkyron_psa_work_items'))return {rows:[w]};
     if(sql.includes('FROM enkyron_psa_time_entries'))return {rows:[time]};
@@ -198,9 +199,10 @@ test('ENK-08 board: existing scoped missions and children are read-only queries'
   assert.equal(r.items.length,1);
   assert.deepEqual(r.items[0].work_items,[w]);
   assert.deepEqual(r.items[0].time_entries,[time]);
-  assert.equal(calls.length,4);
+  assert.equal(calls.length,5);
+  assert.equal(r.can_edit,false);
   assert.deepEqual(calls.slice(1).map(x=>x.args),
-    [['local:operator',null],['local:operator',mission],['local:operator',mission]]);
+    [[],['local:operator',null],['local:operator',mission],['local:operator',mission]]);
   assert.ok(calls.every(x=>x.sql.startsWith('SELECT ')));
   assert.ok(calls.every(x=>!(/INSERT|UPDATE|DELETE|CREATE TABLE/i).test(x.sql)));
 });
