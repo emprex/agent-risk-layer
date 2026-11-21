@@ -7,7 +7,7 @@ import base64
 import atexit
 import tempfile
 from email.utils import parseaddr
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import os
 import re
@@ -547,6 +547,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_catalog_items = []
         self.sales_overview_seq = 0
         self.sales_overview_loaded = False
+        self.home_calendar_tasks_seq = 0
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -698,6 +699,39 @@ class EnkyronWindow(QMainWindow):
             go_mail.setToolTip(scope_reason)
             go_calendar.setToolTip(scope_reason)
         home_l.addLayout(quick_actions_bottom)
+
+        # Read-only upcoming Calendar tasks: exact saved IDs, no merged
+        # CRM/PSA semantics and no implicit task creation or completion.
+        task_heading = QHBoxLayout()
+        task_heading.addWidget(section_title("UPCOMING CALENDAR TASKS"))
+        task_heading.addStretch()
+        refresh_tasks = QPushButton("Refresh tasks")
+        refresh_tasks.setObjectName("enkyronHomeRefreshCalendarTasks")
+        refresh_tasks.clicked.connect(self.load_home_calendar_tasks)
+        task_heading.addWidget(refresh_tasks)
+        home_l.addLayout(task_heading)
+        self.home_calendar_tasks_table = QTableWidget(0, 2)
+        self.home_calendar_tasks_table.setObjectName("enkyronHomeCalendarTasks")
+        self.home_calendar_tasks_table.setHorizontalHeaderLabels(
+            ["Saved task", "Due"])
+        self.home_calendar_tasks_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch)
+        self.home_calendar_tasks_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self.home_calendar_tasks_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.home_calendar_tasks_table.setMaximumHeight(180)
+        self.home_calendar_tasks_table.setVisible(False)
+        self.home_calendar_tasks_table.cellDoubleClicked.connect(
+            self.open_home_calendar_task)
+        home_l.addWidget(self.home_calendar_tasks_table)
+        self.home_calendar_tasks_notice = QLabel(
+            "Open Home to load saved Calendar tasks.")
+        self.home_calendar_tasks_notice.setObjectName(
+            "enkyronHomeCalendarTasksNotice")
+        self.home_calendar_tasks_notice.setTextFormat(Qt.TextFormat.PlainText)
+        self.home_calendar_tasks_notice.setWordWrap(True)
+        home_l.addWidget(self.home_calendar_tasks_notice)
 
         overview_header = QHBoxLayout()
         overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
@@ -6690,6 +6724,7 @@ class EnkyronWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         if index == 0:
             self.load_sales_overview()
+            self.load_home_calendar_tasks()
         if index == 2:
             # Returning to CRM automatically reloads companies once.
             # Canonical-ID selection is preserved across list reloads.
@@ -7007,6 +7042,97 @@ class EnkyronWindow(QMainWindow):
             "id": existing.get("prospect_id"),
             "company_name": existing.get("company_name_at_creation") or ""
         }, existing)
+
+    def load_home_calendar_tasks(self):
+        """Show up to five real local tasks in a bounded 90-day window."""
+        self.home_calendar_tasks_seq += 1
+        sequence = self.home_calendar_tasks_seq
+        table = self.home_calendar_tasks_table
+        table.setRowCount(0)
+        table.setVisible(False)
+        self.home_calendar_tasks_notice.setText("Loading saved Calendar tasks…")
+        if self.ux_preview_read_only or self.enk05_uat_ui:
+            self.home_calendar_tasks_notice.setText(
+                "Calendar tasks unavailable in this synthetic preview.")
+            return
+        now = datetime.now(timezone.utc)
+        interval = {
+            "start": (now - timedelta(days=30)).isoformat(),
+            "end": (now + timedelta(days=60)).isoformat()
+        }
+
+        def received(data, error):
+            if sequence != self.home_calendar_tasks_seq:
+                return
+            tasks = data.get("tasks") if isinstance(data, dict) else None
+            if error or not isinstance(tasks, list):
+                self.home_calendar_tasks_notice.setText(
+                    "Calendar tasks unavailable; open Calendar to retry.")
+                return
+            candidates = [
+                item for item in tasks
+                if isinstance(item, dict)
+                and isinstance(item.get("id"), str)
+                and re.fullmatch(
+                    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}",
+                    item["id"])
+                and item.get("completed_at") is None
+                and isinstance(item.get("due_at"), str)
+            ]
+            # Backend sorts due dates ascending; limit rendered rows only,
+            # never misrepresent this window as every task in the workspace.
+            shown = candidates[:5]
+            table.setRowCount(len(shown))
+            for index, task in enumerate(shown):
+                due = str(task["due_at"])[:16].replace("T", " ")
+                for col, value in enumerate((
+                        str(task.get("title") or "(untitled)")[:200], due)):
+                    cell = QTableWidgetItem(value)
+                    if col == 0:
+                        cell.setData(Qt.ItemDataRole.UserRole, task["id"])
+                    table.setItem(index, col, cell)
+            table.setVisible(bool(shown))
+            self.home_calendar_tasks_notice.setText(
+                ("Showing {} upcoming/overdue saved tasks within the "
+                 "last 30 and next 60 days; double-click to open."
+                 .format(len(shown)))
+                if shown else
+                "No dated open Calendar tasks in the last 30 / next 60 days. "
+                "Undated tasks remain available in Calendar."
+            )
+        self.bridge.call("calendar-list", payload=interval, callback=received)
+
+    def open_home_calendar_task(self, row, _column):
+        """Resolve exact task ID before opening Calendar; no name guesses."""
+        table = self.home_calendar_tasks_table
+        if not 0 <= row < table.rowCount():
+            return
+        first = table.item(row, 0)
+        task_id = first.data(Qt.ItemDataRole.UserRole) if first else None
+        if (not isinstance(task_id, str) or not re.fullmatch(
+                r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}",
+                task_id)):
+            return
+
+        def received(data, error):
+            task = data.get("task") if isinstance(data, dict) else None
+            if (error or not isinstance(task, dict)
+                    or task.get("id") != task_id):
+                QMessageBox.warning(
+                    self, "Calendar task",
+                    "The exact saved task could not be reopened. "
+                    "No task or email was changed.")
+                return
+            self.navigation.setCurrentRow(4)
+            if not self.calendar_view.reveal_saved_task(task):
+                QMessageBox.warning(
+                    self, "Calendar task",
+                    "This task could not be located in Calendar.")
+                return
+            self.calendar_view._show_item_details("Task", task)
+
+        self.bridge.call("calendar-task-read", payload={"id": task_id},
+                         callback=received)
 
     def load_sales_overview(self):
         self.sales_overview_seq += 1

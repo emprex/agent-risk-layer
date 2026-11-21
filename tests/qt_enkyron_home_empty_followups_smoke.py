@@ -31,6 +31,74 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_home_calendar_tasks_use_scoped_reads_and_exact_identity(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        task_id = "99999999-aaaa-4bbb-8ccc-dddddddddddd"
+        calls, opened, focused, navigated = [], [], [], []
+        table = __import__("PySide6.QtWidgets", fromlist=["QTableWidget"]).QTableWidget(0, 2)
+        notice = __import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel()
+        stub = SimpleNamespace(
+            home_calendar_tasks_seq=0, home_calendar_tasks_table=table,
+            home_calendar_tasks_notice=notice,
+            ux_preview_read_only=False, enk05_uat_ui=False,
+            calendar_view=SimpleNamespace(
+                reveal_saved_task=lambda task: focused.append(task) or True,
+                _show_item_details=lambda kind, task: opened.append((kind, task))
+            ),
+            navigation=SimpleNamespace(setCurrentRow=navigated.append)
+        )
+        callbacks = {}
+        def call(action, arg="", payload=None, callback=None):
+            calls.append((action, payload))
+            callbacks[action] = callback
+        stub.bridge = SimpleNamespace(call=call)
+        EnkyronWindow.load_home_calendar_tasks(stub)
+        self.assertEqual(calls[0][0], "calendar-list")
+        interval = calls[0][1]
+        self.assertIn("start", interval)
+        self.assertIn("end", interval)
+        original = {
+            "id": task_id, "title": "Synthetic follow-up",
+            "due_at": "2026-11-25T16:00:00Z",
+            "completed_at": None, "notes": "Synthetic notes"
+        }
+        callbacks["calendar-list"]({"tasks": [
+            original,
+            {**original, "id": "not-uuid", "title": "Invalid"},
+            {**original, "id": "11111111-2222-4333-8444-555555555555",
+             "completed_at": "2026-11-20T12:00:00Z"},
+        ]}, None)
+        self.assertEqual(table.rowCount(), 1)
+        self.assertEqual(table.item(0, 0).data(
+            __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.ItemDataRole.UserRole),
+            task_id)
+        EnkyronWindow.open_home_calendar_task(stub, 0, 0)
+        self.assertEqual(calls[-1], ("calendar-task-read", {"id": task_id}))
+        callbacks["calendar-task-read"]({"task": original}, None)
+        self.assertEqual(navigated, [4])
+        self.assertEqual(focused, [original])
+        self.assertEqual(opened, [("Task", original)])
+        table.deleteLater()
+
+    def test_home_calendar_unavailable_does_not_create_task(self):
+        from types import SimpleNamespace
+        table = __import__("PySide6.QtWidgets", fromlist=["QTableWidget"]).QTableWidget(0, 2)
+        notice = __import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel()
+        calls = []
+        stub = SimpleNamespace(
+            home_calendar_tasks_seq=0, home_calendar_tasks_table=table,
+            home_calendar_tasks_notice=notice,
+            ux_preview_read_only=False, enk05_uat_ui=False,
+            bridge=SimpleNamespace(call=lambda action, arg="", payload=None,
+                     callback=None: (calls.append(action), callback(None, "offline")))
+        )
+        EnkyronWindow.load_home_calendar_tasks(stub)
+        self.assertEqual(calls, ["calendar-list"])
+        self.assertIn("unavailable", notice.text())
+        self.assertEqual(table.rowCount(), 0)
+        table.deleteLater()
+
     def test_home_has_readable_buttons_and_explicit_empty_followups(self):
         saved = DesktopBridge.call
         calls = []
