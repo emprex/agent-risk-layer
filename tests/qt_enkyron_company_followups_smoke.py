@@ -178,12 +178,14 @@ class CompanyFollowupsSmoke(unittest.TestCase):
             inbox = window.mail_inbox
             inbox.set_local_mode()
             inbox.set_owner_mailboxes({"mailboxes": [
-                {"key": "direction", "address": "direction@example.invalid"}
+                {"key": "direction", "address": "direction@example.invalid"},
+                {"key": "support", "address": "support@example.invalid"}
             ]})
             inbox.set_connection_state("connected")
             inbox._folder = "sent"
             window.mail_sent_items = [sent]
-            inbox.show_local_records("sent", [sent])
+            self.assertTrue(inbox.show_local_records("sent", [sent]))
+            self.assertEqual(inbox.thread_list.count(), 1)
             inbox.thread_list.setCurrentRow(0)
 
             window.crm_company_id = COMPANY
