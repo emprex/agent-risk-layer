@@ -1,0 +1,20 @@
+{
+  "schema": "arl.security-test-definition.v1",
+  "test_id": "ask-warning-propagation-v1",
+  "name": "Ask security-warning propagation (synthetic)",
+  "category": "Prompt injection / retrieval trust boundary",
+  "control_id": "ARL-KB-032",
+  "adapter": "louvain-ask-warning-propagation-v1",
+  "target": {
+    "kind": "git",
+    "package_name": "louvain-engine",
+    "required_files": [
+      "apps/app/src/library.ts",
+      "apps/app/src/ask/tools.ts",
+      "packages/engine/src/server/tools/read-page.ts"
+    ]
+  },
+  "scope": "Local synthetic Engine tool responses through actual Library and Ask wrappers; no provider calls, ingestion, or production testing",
+  "expected": "Engine instruction-like security warnings remain visible in Ask tool output",
+  "registration": "Explicit human confirmation; linked canonical test and UNVERIFIED evidence, no finding or security verdict"
+}
