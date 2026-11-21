@@ -8,6 +8,7 @@ import atexit
 import tempfile
 from email.utils import parseaddr
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import json
 import os
 import re
@@ -131,6 +132,31 @@ QTabBar::tab:selected { background: white; font-weight: bold; }
 
 def display_date(value):
     return str(value or "").replace("T", " ")[:19]
+
+
+def calendar_home_due(value, now):
+    """Parse a stored offset-aware deadline and label it in London local time."""
+    if not isinstance(value, str) or len(value) > 48:
+        return None
+    try:
+        instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            return None
+        due_utc = instant.astimezone(timezone.utc)
+        local = due_utc.astimezone(ZoneInfo("Europe/London"))
+        today = now.astimezone(ZoneInfo("Europe/London")).date()
+    except (ValueError, TypeError, OverflowError):
+        return None
+    if due_utc < now:
+        status = "Overdue"
+    elif local.date() == today:
+        status = "Today"
+    elif local.date() == today + timedelta(days=1):
+        status = "Tomorrow"
+    else:
+        status = "Due"
+    return due_utc, "{} · {}".format(
+        status, local.strftime("%d %b %Y, %H:%M %Z"))
 
 
 def format_followup_due(value, stage, today=None):
@@ -7069,33 +7095,51 @@ class EnkyronWindow(QMainWindow):
                 self.home_calendar_tasks_notice.setText(
                     "Calendar tasks unavailable; open Calendar to retry.")
                 return
-            candidates = [
-                item for item in tasks
-                if isinstance(item, dict)
-                and isinstance(item.get("id"), str)
-                and re.fullmatch(
-                    r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}",
-                    item["id"])
-                and item.get("completed_at") is None
-                and isinstance(item.get("due_at"), str)
-            ]
-            # Backend sorts due dates ascending; limit rendered rows only,
-            # never misrepresent this window as every task in the workspace.
-            shown = candidates[:5]
+            # Keep exact operator-scoped backend IDs; discard malformed dates
+            # rather than inventing deadlines or attributing them to London.
+            candidates = []
+            seen_ids = set()
+            for item in tasks:
+                if (not isinstance(item, dict)
+                        or not isinstance(item.get("id"), str)
+                        or not re.fullmatch(
+                            r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}",
+                            item["id"])
+                        or item["id"] in seen_ids
+                        or item.get("completed_at") is not None):
+                    continue
+                parsed = calendar_home_due(item.get("due_at"), now)
+                if parsed is not None:
+                    seen_ids.add(item["id"])
+                    candidates.append((parsed[0], parsed[1], item))
+            # Two most recent overdue + three soonest future tasks prevents
+            # an old backlog from hiding today's work. Fill unused slots from
+            # whichever group still has records; never claim global coverage.
+            overdue = sorted((x for x in candidates if x[0] < now),
+                             key=lambda x: x[0], reverse=True)
+            upcoming = sorted((x for x in candidates if x[0] >= now),
+                              key=lambda x: x[0])
+            shown = overdue[:2] + upcoming[:3]
+            selected_ids = {row[2]["id"] for row in shown}
+            remaining = [x for x in overdue[2:] + upcoming[3:]
+                         if x[2]["id"] not in selected_ids]
+            shown.extend(remaining[:5 - len(shown)])
             table.setRowCount(len(shown))
-            for index, task in enumerate(shown):
-                due = str(task["due_at"])[:16].replace("T", " ")
+            for index, (_due_utc, label, task) in enumerate(shown):
                 for col, value in enumerate((
-                        str(task.get("title") or "(untitled)")[:200], due)):
+                        str(task.get("title") or "(untitled)")[:200], label)):
                     cell = QTableWidgetItem(value)
                     if col == 0:
                         cell.setData(Qt.ItemDataRole.UserRole, task["id"])
+                    else:
+                        cell.setToolTip("Local time in Europe/London (GMT/BST)")
                     table.setItem(index, col, cell)
             table.setVisible(bool(shown))
             self.home_calendar_tasks_notice.setText(
-                ("Showing {} upcoming/overdue saved tasks within the "
-                 "last 30 and next 60 days; double-click to open."
-                 .format(len(shown)))
+                ("Showing {} of {} dated open Calendar tasks returned "
+                 "for the last 30 / next 60 days. Double-click to open. "
+                 "Undated tasks remain in Calendar."
+                 .format(len(shown), len(candidates)))
                 if shown else
                 "No dated open Calendar tasks in the last 30 / next 60 days. "
                 "Undated tasks remain available in Calendar."

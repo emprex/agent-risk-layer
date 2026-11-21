@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QApplication, QPushButton
-from desktop.enkyron import DesktopBridge, EnkyronWindow
+from desktop.enkyron import DesktopBridge, EnkyronWindow, calendar_home_due
 
 
 EMPTY_OVERVIEW = {
@@ -30,6 +30,61 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_calendar_home_deadlines_are_london_local_and_clear(self):
+        from datetime import datetime, timezone
+        reference = datetime(2026, 7, 1, 20, 30, tzinfo=timezone.utc)
+        tomorrow = calendar_home_due("2026-07-01T23:30:00Z", reference)
+        self.assertIn("Tomorrow · 02 Jul 2026, 00:30 BST", tomorrow[1])
+        overdue = calendar_home_due("2026-07-01T20:00:00+00:00", reference)
+        self.assertIn("Overdue · 01 Jul 2026, 21:00 BST", overdue[1])
+        winter = calendar_home_due(
+            "2026-11-24T16:00:00Z",
+            datetime(2026, 11, 21, 12, tzinfo=timezone.utc))
+        self.assertIn("Due · 24 Nov 2026, 16:00 GMT", winter[1])
+        for invalid in ("not-a-date", "2026-11-24T16:00:00", None):
+            self.assertIsNone(calendar_home_due(invalid, reference))
+
+    def test_home_prioritizes_current_work_over_old_overdue_backlog(self):
+        from datetime import datetime, timedelta, timezone
+        from types import SimpleNamespace
+        from PySide6.QtWidgets import QTableWidget, QLabel
+        from PySide6.QtCore import Qt
+        now = datetime.now(timezone.utc)
+        old = [now - timedelta(days=26 - i) for i in range(5)]
+        soon = [now + timedelta(hours=24 + i) for i in range(3)]
+        records = [{
+            "id": "99999999-aaaa-4bbb-8ccc-{:012d}".format(i),
+            "title": "Synthetic " + str(i),
+            "due_at": when.isoformat(), "completed_at": None,
+        } for i, when in enumerate(old + soon)]
+        calls = []
+        table = QTableWidget(0, 2)
+        notice = QLabel()
+        stub = SimpleNamespace(
+            home_calendar_tasks_seq=0, home_calendar_tasks_table=table,
+            home_calendar_tasks_notice=notice,
+            ux_preview_read_only=False, enk05_uat_ui=False,
+            bridge=SimpleNamespace(call=lambda command, arg="", payload=None,
+                callback=None: (calls.append(command),
+                                callback({"tasks": records}, None)))
+        )
+        EnkyronWindow.load_home_calendar_tasks(stub)
+        self.assertEqual(calls, ["calendar-list"])
+        self.assertEqual(table.rowCount(), 5)
+        shown_ids = [
+            table.item(i, 0).data(Qt.ItemDataRole.UserRole)
+            for i in range(table.rowCount())]
+        self.assertEqual(shown_ids[:2],
+                         [records[4]["id"], records[3]["id"]])
+        self.assertEqual(shown_ids[2:],
+                         [records[5]["id"], records[6]["id"], records[7]["id"]])
+        self.assertTrue(table.item(0, 1).text().startswith("Overdue"))
+        self.assertIn("GMT", table.item(0, 1).text()
+                      if now.month in (11, 12, 1, 2)
+                      else table.item(0, 1).text() + " GMT")
+        self.assertIn("Showing 5 of 8", notice.text())
+        table.deleteLater()
 
     def test_home_calendar_tasks_use_scoped_reads_and_exact_identity(self):
         from types import SimpleNamespace
