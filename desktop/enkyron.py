@@ -4703,7 +4703,7 @@ class EnkyronWindow(QMainWindow):
                         "The permitted mailbox could not be loaded. "
                         "No email was opened.")
                     return
-                self.open_calendar_source_mail(source)
+                EnkyronWindow.open_calendar_source_mail(self, source)
 
             self.bridge.call("mail-status", callback=access_loaded)
             return
