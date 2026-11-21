@@ -54,6 +54,33 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
         finally:
             DesktopBridge.call=self.original
 
+    def test_work_notes_are_readable_and_empty_actions_collapse(self):
+        """Existing widget test: no data writes, schema changes or new dossier."""
+        self.assertGreaterEqual(self.w.notes_view.minimumHeight(), 340)
+        self.assertGreaterEqual(self.w.notes_view.maximumHeight(), 500)
+        self.w.operator_profile_state = {
+            "local_operator": "synthetic-os",
+            "current": {"display_name": "Synthetic Operator"}}
+        self.w._display_ticket_notes([{
+            "created_at": "2026-11-20T09:13:19Z",
+            "entered_by": "synthetic-os",
+            "source_id": None,
+            "body": "Original test observation, not verified evidence."
+        }])
+        shown = self.w.notes_view.toPlainText()
+        self.assertIn("Synthetic Operator", shown)
+        self.assertNotIn("synthetic-os", shown)
+        self.assertIn("Original test observation", shown)
+        self.assertIn("1 · NEWEST FIRST", self.w.work_notes_heading.text())
+        self.assertEqual(self.w.notes_view.verticalScrollBar().value(), 0)
+        self.w._set_ticket_actions_height()
+        self.assertTrue(self.w.ticket_actions_view.isHidden())
+        self.assertFalse(self.w.ticket_actions_empty_notice.isHidden())
+        self.w._set_ticket_actions_height(item_count=2)
+        self.assertFalse(self.w.ticket_actions_view.isHidden())
+        self.assertTrue(self.w.ticket_actions_empty_notice.isHidden())
+        self.assertEqual(self.calls, [])
+
     def test_synthetic_uat04_is_clearly_labelled_in_real_native_window(self):
         with patch.dict(os.environ, {
             "ENKYRON_UAT_DATABASE": "enkyron_uat_enk05",

@@ -964,18 +964,28 @@ class EnkyronWindow(QMainWindow):
         notes_l = QVBoxLayout(notes_content)
         notes_l.setSpacing(12)
         notes_l.setContentsMargins(12, 12, 12, 12)
-        notes_l.addWidget(section_title("RECORDED WORK NOTES"))
+        self.work_notes_heading = section_title("RECORDED WORK NOTES")
+        notes_l.addWidget(self.work_notes_heading)
         self.notes_view = make_text_area()
         self.notes_view.setObjectName("ticketRecordedNotes")
-        self.notes_view.setFixedHeight(230)
+        # Allow the journal to grow on tall screens; on small screens the
+        # outer Work Notes page scrolls without shrinking entries to a strip.
+        self.notes_view.setMinimumHeight(340)
+        self.notes_view.setMaximumHeight(560)
         self.notes_view.setPlaceholderText("No recorded work notes yet.")
-        notes_l.addWidget(self.notes_view)
+        notes_l.addWidget(self.notes_view, 1)
         notes_l.addWidget(section_title("INTERNAL ACTIONS · NOT TEST APPROVAL"))
         self.ticket_actions_view = make_text_area()
         self.ticket_actions_view.setObjectName("ticketActionSummary")
         self.ticket_actions_view.setFixedHeight(90)
         self.ticket_actions_view.setPlainText("Select a ticket to view planned actions.")
         notes_l.addWidget(self.ticket_actions_view)
+        self.ticket_actions_empty_notice = QLabel(
+            "No actions recorded. Use Plan / update ticket action… to add one.")
+        self.ticket_actions_empty_notice.setObjectName("ticketActionsEmptyNotice")
+        self.ticket_actions_empty_notice.setWordWrap(True)
+        self.ticket_actions_empty_notice.setVisible(False)
+        notes_l.addWidget(self.ticket_actions_empty_notice)
         self.ticket_actions_button = QPushButton("Plan / update ticket action…")
         self.ticket_actions_button.setEnabled(False)
         self.ticket_actions_button.clicked.connect(self.open_ticket_action)
@@ -20914,15 +20924,43 @@ class EnkyronWindow(QMainWindow):
         self.update_status_button.setEnabled(can_change)
 
     def _set_ticket_actions_height(self, item_count=0, unavailable=False):
-        """Give real actions space, but never let an empty checklist bury work notes."""
-        height = 90 if unavailable else min(300, 60 + 76 * item_count) if item_count else 60
-        self.ticket_actions_view.setFixedHeight(height)
+        """Collapse empty actions; retain the original full text for saved items."""
+        if unavailable:
+            self.ticket_actions_view.setFixedHeight(90)
+            self.ticket_actions_view.show()
+            self.ticket_actions_empty_notice.hide()
+        elif item_count:
+            self.ticket_actions_view.setFixedHeight(min(300, 60 + 76 * item_count))
+            self.ticket_actions_view.show()
+            self.ticket_actions_empty_notice.hide()
+        else:
+            self.ticket_actions_view.hide()
+            self.ticket_actions_empty_notice.show()
+
+    def _display_ticket_notes(self, notes):
+        """Display newest saved notes clearly; only names are presentation-mapped."""
+        items = [note for note in notes if isinstance(note, dict)]
+        self.work_notes_heading.setText(
+            "RECORDED WORK NOTES · {}".format(len(items)) +
+            (" · NEWEST FIRST" if items else "")
+        )
+        self.notes_view.setPlainText(
+            "\n\n──────────────────────────\n\n".join(
+                "{}  ·  {}  ·  {}\n{}".format(
+                    display_date(note["created_at"]),
+                    self.ticket_operator_display(note.get("entered_by")),
+                    note.get("source_id") or "Manual",
+                    note["body"]
+                ) for note in items
+            ) or "No saved work notes yet."
+        )
+        self.notes_view.verticalScrollBar().setValue(0)
 
     def load_ticket_actions(self, ticket_id):
         """Read the bounded internal checklist for one selected ticket."""
         if ticket_id != self.current_id:
             return
-        self.ticket_actions_view.setPlainText("Loading internal actions…")
+        self.ticket_actions_empty_notice.setText("Loading internal actions…")
         self._set_ticket_actions_height()
         self.ticket_actions_button.setEnabled(False)
         self.ticket_actions = []
@@ -20957,8 +20995,10 @@ class EnkyronWindow(QMainWindow):
                         item.get("details") or "(no details)"
                     )
                     for item in items
-                ) or "No actions recorded for this ticket."
+                ) if items else ""
             )
+            self.ticket_actions_empty_notice.setText(
+                "No actions recorded. Use Plan / update ticket action… to add one.")
             self._set_ticket_actions_height(item_count=len(items))
             ticket = self.current_ticket or {}
             self.ticket_actions_button.setEnabled(
@@ -21853,7 +21893,8 @@ class EnkyronWindow(QMainWindow):
         self.ticket_triage_label.setText("Business triage: Loading…")
         self.ticket_triage_latest_id = None
         self.ticket_triage_button.setEnabled(False)
-        self.ticket_actions_view.setPlainText("Loading internal actions…")
+        self.ticket_actions_empty_notice.setText("Loading internal actions…")
+        self._set_ticket_actions_height()
         self.ticket_actions_button.setEnabled(False)
         self.ticket_actions = []
         self.ticket_actions_available = False
@@ -21901,14 +21942,7 @@ class EnkyronWindow(QMainWindow):
                     ticket.get("permission_reference") or "Not provided"
                 )
             )
-            self.notes_view.setPlainText(
-                "\n\n──────────────────────────\n\n".join(
-                    "{}  ·  {}  ·  {}\n{}".format(
-                        display_date(n["created_at"]), n["entered_by"],
-                        n.get("source_id") or "Manual", n["body"]
-                    ) for n in data.get("notes", [])
-                ) or "No saved work notes yet."
-            )
+            self._display_ticket_notes(data.get("notes", []))
             self.events_view.setPlainText(
                 "\n".join("{}  |  {}  |  {}  |  {}".format(
                     display_date(e["created_at"]), e["event_type"], e["actor"], e["detail"]
