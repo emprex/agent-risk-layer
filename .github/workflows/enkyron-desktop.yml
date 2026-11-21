@@ -1530,8 +1530,10 @@ jobs:
           assert window.crm_dossier_nav.isRowHidden(6)
           assert window.crm_dossier_nav.currentRow() == 0
           assert window.crm_dossier_tabs.currentIndex() == 0
-          assert window.crm_dossier_tabs.count() == 9
-          assert window.crm_dossier_nav.count() == 9
+          assert window.crm_dossier_tabs.count() == 10
+          assert window.crm_dossier_nav.count() == 10
+          assert window.crm_dossier_nav.item(9).text() == "Linked Mail (0)"
+          assert window.crm_dossier_tabs.tabText(9) == "Linked Mail (0)"
           assert not window.crm_dossier_tabs.tabBar().isVisible()
           assert window.crm_dossier_nav.currentRow() == 0
           assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (4)"
