@@ -2338,7 +2338,7 @@ class EnkyronWindow(QMainWindow):
         self.calendar_view.sourceMailRequested.connect(
             self.open_calendar_source_mail)
         self.pages.addWidget(self.calendar_view)
-        # ENK-08: display-only Mission Board. No bridge, database or write path.
+        # ENK-08: internal planning Mission Board; audited edits are schema-gated.
         self.mission_board = MissionBoardView()
         self.mission_board.crmRefreshRequested.connect(self.load_mission_board_companies)
         self.mission_board.missionRefreshRequested.connect(self.load_mission_board)
@@ -6577,13 +6577,15 @@ class EnkyronWindow(QMainWindow):
     def save_mission_board_action(self, action, details):
         """Reuse the local ARL operator bridge; the backend checks peer identity."""
         allowed = {"psa-create-mission", "psa-add-work-item",
-                   "psa-complete-work-item", "psa-log-time"}
+                   "psa-update-work-item", "psa-complete-work-item", "psa-log-time"}
         if action not in allowed or not isinstance(details, dict):
             QMessageBox.warning(self, "Mission Board",
                                 "Invalid planning request. Nothing was recorded.")
             return
         if (self.mission_board._demo
                 or not self.mission_board._live_can_write
+                or (action == "psa-update-work-item"
+                    and not self.mission_board._live_can_edit)
                 or self.ux_preview_read_only
                 or os.environ.get("ENKYRON_UAT_DATABASE")):
             QMessageBox.warning(
