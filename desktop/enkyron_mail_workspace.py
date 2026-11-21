@@ -452,6 +452,7 @@ class MailInboxView(QWidget):
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
     localCompanyLinkRequested = Signal(str, str)
+    linkedCompanyOpenRequested = Signal(str)
     taskFromMailRequested = Signal(str, str, str)
     taskFromSavedMailRequested = Signal(dict)
     localTicketLinkRequested = Signal(str, str)
@@ -468,6 +469,7 @@ class MailInboxView(QWidget):
         self.connection_state = "disconnected"
         self.current_thread_id = None
         self.current_thread_mailbox = None
+        self._linked_company_id = None
         self.items = []
         self._filed_records = []
         self._has_more = False
@@ -1119,11 +1121,18 @@ class MailInboxView(QWidget):
             )
             if mailbox == "local-sent":
                 entry = self.items[thread_id] if 0 <= thread_id < len(self.items) else {}
-                if entry.get("company_id"):
+                linked_id = entry.get("company_id")
+                if isinstance(linked_id, str) and _MAIL_UUID.fullmatch(linked_id):
                     linked = menu.addAction(
-                        "CRM: " + str(entry.get("company_name") or "Linked company")[:50]
+                        "Open CRM: " + str(entry.get("company_name") or "Linked company")[:50]
                     )
-                    linked.setEnabled(False)
+                    linked.triggered.connect(
+                        lambda _checked=False, cid=linked_id:
+                        self.linkedCompanyOpenRequested.emit(cid)
+                    )
+                elif linked_id:
+                    unavailable = menu.addAction("CRM link unavailable")
+                    unavailable.setEnabled(False)
                 elif entry.get("draft_id"):
                     link = menu.addAction("Link to CRM…")
                     link.triggered.connect(
@@ -1314,6 +1323,7 @@ class MailInboxView(QWidget):
         self.body.show()
         self._attachment_previous = None
         self._attachment_snapshot = []
+        self._linked_company_id = None
         self.crm_link_button.setEnabled(True)
         self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
@@ -1736,6 +1746,7 @@ class MailInboxView(QWidget):
         self.body.show()
         self._attachment_previous = None
         self._attachment_snapshot = []
+        self._linked_company_id = None
         self.crm_link_button.setEnabled(True)
         self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
@@ -1841,12 +1852,19 @@ class MailInboxView(QWidget):
         record = self.items[index]
         if not isinstance(record, dict):
             return
-        if record.get("company_id"):
+        linked_id = record.get("company_id")
+        self._linked_company_id = None
+        if isinstance(linked_id, str) and _MAIL_UUID.fullmatch(linked_id):
+            self._linked_company_id = linked_id
             self.crm_link_button.setText(
-                "CRM: " + str(record.get("company_name") or "Linked company")[:50])
-            self.crm_link_button.setEnabled(False)
+                "Open CRM: " + str(record.get("company_name") or "Linked company")[:50])
+            self.crm_link_button.setEnabled(True)
             self.crm_link_button.setToolTip(
-                "Already associated. Correction requires a separate reviewed workflow.")
+                "Open the recorded CRM company dossier; the association is not changed.")
+        elif linked_id:
+            self.crm_link_button.setText("CRM link unavailable")
+            self.crm_link_button.setEnabled(False)
+            self.crm_link_button.setToolTip("Invalid recorded company identifier.")
         elif record.get("draft_id"):
             self.crm_link_button.setText("Link to CRM…")
             self.crm_link_button.setEnabled(True)
@@ -1943,6 +1961,31 @@ class MailInboxView(QWidget):
         )
 
     def _request_company_link(self):
+        linked_id = self._linked_company_id
+        if linked_id is not None:
+            selected = self.thread_list.currentItem()
+            reference = (selected.data(Qt.ItemDataRole.UserRole)
+                         if selected is not None else None)
+            if (not self.local_mode or self.connection_state != "connected"
+                    or self.crm_link_button.isHidden()
+                    or not self.crm_link_button.isEnabled()
+                    or not _MAIL_UUID.fullmatch(linked_id)):
+                return
+            if self.selected_folder == "sent":
+                if (isinstance(reference, tuple) and len(reference) == 2
+                        and reference[0] == "local-sent"
+                        and isinstance(reference[1], int)
+                        and 0 <= reference[1] < len(self.items)
+                        and isinstance(self.items[reference[1]], dict)
+                        and self.items[reference[1]].get("company_id") == linked_id):
+                    self.linkedCompanyOpenRequested.emit(linked_id)
+            elif (self.selected_folder not in ("drafts", "spam", "trash")
+                    and self.current_thread_mailbox in self._mailboxes
+                    and _MAIL_UUID.fullmatch(self.current_thread_id or "")
+                    and reference == (self.current_thread_mailbox,
+                                      self.current_thread_id)):
+                self.linkedCompanyOpenRequested.emit(linked_id)
+            return
         if self.local_mode and self.selected_folder == "sent":
             selected = self.thread_list.currentItem()
             reference = (selected.data(Qt.ItemDataRole.UserRole)
@@ -2167,12 +2210,19 @@ class MailInboxView(QWidget):
         if not isinstance(data, dict) or data.get("mailbox") != mailbox or (
                 data.get("thread_id") != thread_id):
             return False
-        if data.get("linked"):
+        linked_id = data.get("company_id")
+        self._linked_company_id = None
+        if data.get("linked") and isinstance(linked_id, str) and _MAIL_UUID.fullmatch(linked_id):
+            self._linked_company_id = linked_id
             self.crm_link_button.setText(
-                "CRM: " + str(data.get("company_name") or "Linked company")[:50])
-            self.crm_link_button.setEnabled(False)
+                "Open CRM: " + str(data.get("company_name") or "Linked company")[:50])
+            self.crm_link_button.setEnabled(True)
             self.crm_link_button.setToolTip(
-                "Company association saved. Correction needs a separate reviewed workflow.")
+                "Open the recorded CRM company dossier; the association is not changed.")
+        elif data.get("linked"):
+            self.crm_link_button.setText("CRM link unavailable")
+            self.crm_link_button.setEnabled(False)
+            self.crm_link_button.setToolTip("Invalid recorded company identifier.")
         else:
             self.crm_link_button.setText("Link to CRM…")
             self.crm_link_button.setEnabled(True)

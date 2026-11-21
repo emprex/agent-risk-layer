@@ -1918,6 +1918,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.attachmentSaveRequested.connect(
             self.save_mail_attachment_as)
         self.mail_inbox.localCompanyLinkRequested.connect(self.open_mail_company_link)
+        self.mail_inbox.linkedCompanyOpenRequested.connect(self.open_mail_linked_company)
         self.mail_inbox.localTicketLinkRequested.connect(self.open_mail_ticket_link)
         self.mail_inbox.taskFromMailRequested.connect(
             self.open_mail_followup_task)
@@ -4825,6 +4826,21 @@ class EnkyronWindow(QMainWindow):
             dialog.show()
 
         self.bridge.call("crm-mail-draft", draft_id, callback=received)
+
+    def open_mail_linked_company(self, company_id):
+        """Open an exact saved CRM dossier without changing CRM selection."""
+        if (not isinstance(company_id, str)
+                or re.fullmatch(
+                    r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}",
+                    company_id, re.I) is None):
+            return
+        # Reuse the scoped dossier read and its unsaved-edit guard. No writes.
+        selected_company_id = self.crm_company_id
+        try:
+            self.crm_company_id = company_id
+            self.open_company_dossier()
+        finally:
+            self.crm_company_id = selected_company_id
 
     def open_mail_company_link(self, mailbox, thread_id):
         """E04-04: operator-selected existing company, not inferred client."""
