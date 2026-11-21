@@ -4,7 +4,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QListWidgetItem, QPushButton, QTableWidget
 from unittest.mock import patch
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import MailInboxView
@@ -20,7 +20,7 @@ class SentCrmVisibleSmoke(unittest.TestCase):
         requested = []
         opened = []
         view.localRecordLinkRequested.connect(requested.append)
-        view.linkedCompanyOpenRequested.connect(opened.append)
+        view.linkedCompanyOpenRequested.connect(lambda *args: opened.append(args))
         try:
             view.set_local_mode()
             view.set_owner_mailboxes({"mailboxes": [
@@ -60,7 +60,7 @@ class SentCrmVisibleSmoke(unittest.TestCase):
             self.assertIn("Existing Client", view.crm_link_button.text())
             self.assertTrue(view.crm_link_button.isEnabled())
             view.crm_link_button.click()
-            self.assertEqual(opened, ["33333333-4444-4555-8666-777777777777"])
+            self.assertEqual(opened, [("33333333-4444-4555-8666-777777777777", "drafts", "22222222-3333-4333-8444-666666666666")])
             self.assertEqual(requested, [0])
 
             view.thread_list.setCurrentRow(2)
@@ -69,7 +69,7 @@ class SentCrmVisibleSmoke(unittest.TestCase):
             self.assertFalse(view.crm_link_button.isEnabled())
             view.crm_link_button.click()
             self.assertEqual(requested, [0])
-            self.assertEqual(opened, ["33333333-4444-4555-8666-777777777777"])
+            self.assertEqual(opened, [("33333333-4444-4555-8666-777777777777", "drafts", "22222222-3333-4333-8444-666666666666")])
         finally:
             view.close()
             view.deleteLater()
@@ -77,7 +77,7 @@ class SentCrmVisibleSmoke(unittest.TestCase):
     def test_received_link_requires_matching_thread_and_exact_company_id(self):
         view = MailInboxView()
         opened, links = [], []
-        view.linkedCompanyOpenRequested.connect(opened.append)
+        view.linkedCompanyOpenRequested.connect(lambda *args: opened.append(args))
         view.localCompanyLinkRequested.connect(lambda *args: links.append(args))
         thread = "11111111-2222-4333-8444-555555555555"
         company = "33333333-4444-4555-8666-777777777777"
@@ -109,7 +109,7 @@ class SentCrmVisibleSmoke(unittest.TestCase):
             }))
             self.assertTrue(view.crm_link_button.isEnabled())
             view.crm_link_button.click()
-            self.assertEqual(opened, [company])
+            self.assertEqual(opened, [(company, "linked_mail", thread)])
             self.assertEqual(links, [])
             self.assertTrue(view.show_company_link("direction", thread, {
                 "mailbox": "direction", "thread_id": thread,
@@ -117,7 +117,7 @@ class SentCrmVisibleSmoke(unittest.TestCase):
             }))
             self.assertFalse(view.crm_link_button.isEnabled())
             view.crm_link_button.click()
-            self.assertEqual(opened, [company])
+            self.assertEqual(opened, [(company, "linked_mail", thread)])
             view.thread_list.setCurrentRow(-1)
             self.app.processEvents()
             self.assertIsNone(view._linked_company_id)
@@ -135,14 +135,89 @@ class SentCrmVisibleSmoke(unittest.TestCase):
                 seen = []
                 with patch.object(window, "open_company_dossier",
                                   side_effect=lambda: seen.append(window.crm_company_id)):
-                    window.mail_inbox.linkedCompanyOpenRequested.emit(linked)
-                    window.mail_inbox.linkedCompanyOpenRequested.emit("invalid")
+                    window.mail_inbox.linkedCompanyOpenRequested.emit(
+                        linked, "drafts", "22222222-3333-4333-8444-666666666666")
+                    window.mail_inbox.linkedCompanyOpenRequested.emit(
+                        "invalid", "drafts", "22222222-3333-4333-8444-666666666666")
                 self.assertEqual(seen, [linked])
                 self.assertEqual(window.crm_company_id, previous)
             finally:
                 window.close()
                 window.deleteLater()
                 self.app.processEvents()
+
+    def test_open_company_dossier_focusses_exact_mail_row(self):
+        company = "33333333-4444-4555-8666-777777777777"
+        draft = "22222222-3333-4333-8444-666666666666"
+        other_draft = "55555555-2222-4333-8444-666666666666"
+        thread = "11111111-2222-4333-8444-555555555555"
+        other_thread = "66666666-2222-4333-8444-666666666666"
+        rows = {
+            "drafts": [
+                {"id": other_draft, "company_id": company,
+                 "subject": "Other saved email", "recipient_email": "x@example.invalid",
+                 "revision": 1, "send_state": "draft"},
+                {"id": draft, "company_id": company,
+                 "subject": "Exact saved email", "recipient_email": "y@example.invalid",
+                 "revision": 1, "send_state": "provider_submitted"},
+            ],
+            "linked_mail": [
+                {"thread_id": other_thread, "mailbox": "direction",
+                 "subject": "Other conversation", "folder_key": "inbox"},
+                {"thread_id": thread, "mailbox": "direction",
+                 "subject": "Exact conversation", "folder_key": "inbox"},
+            ],
+        }
+        for section, source_id, action_name in (
+                ("drafts", draft, "crmDossierEditDraft"),
+                ("linked_mail", thread, "crmDossierOpenLinkedMail"),
+                ("drafts", thread, "crmDossierEditDraft")):
+            with self.subTest(section=section, requested=source_id):
+                calls = []
+                def fake(_bridge, command, arg="", payload=None, callback=None):
+                    calls.append((command, arg, payload, callback))
+                with patch.object(DesktopBridge, "call", new=fake):
+                    window = EnkyronWindow()
+                    try:
+                        window.open_mail_linked_company(company, section, source_id)
+                        callback = next(
+                            c[3] for c in reversed(calls)
+                            if c[0] == "crm-company-dossier")
+                        callback({
+                            "available": True,
+                            "company": {"id": company, "name": "Synthetic Client",
+                                        "record_version": 1},
+                            "sections": {
+                                name: {"items": entries, "total": len(entries),
+                                       "more": False}
+                                for name, entries in rows.items()
+                            },
+                        }, None)
+                        self.assertEqual(window.crm_dossier_company_id, company)
+                        self.assertIsNone(window.crm_dossier_mail_source)
+                        expected = (section == "linked_mail" or source_id == draft)
+                        current_section = window.crm_dossier_sections[
+                            window.crm_dossier_nav.currentRow()][0]
+                        self.assertEqual(
+                            current_section, section if expected else "contacts")
+                        if expected:
+                            page = window.crm_dossier_tabs.currentWidget()
+                            table = page.findChild(QTableWidget)
+                            self.assertEqual(table.currentRow(), 1)
+                            button = page.findChild(QPushButton, action_name)
+                            self.assertTrue(button.isEnabled())
+                        self.assertFalse(any(
+                            action in ("crm-mail-update", "mail-local-company-link",
+                                       "mail-local-fetch", "mail-send-draft")
+                            for action, *_ in calls
+                        ))
+                    finally:
+                        if window.crm_dossier_dialog:
+                            window.crm_dossier_dialog.close_guard = lambda: True
+                            window.crm_dossier_dialog.reject()
+                        window.close()
+                        window.deleteLater()
+                        self.app.processEvents()
 
 
 if __name__ == "__main__":

@@ -501,6 +501,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_followups_dialog = None
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
+        self.crm_dossier_mail_source = None
         self.crm_dossier_seq = 0
         self.crm_dossier_activity_company_id = None
         self.crm_dossier_activity_opportunity_ids = set()
@@ -4827,20 +4828,34 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
-    def open_mail_linked_company(self, company_id):
-        """Open an exact saved CRM dossier without changing CRM selection."""
+    def open_mail_linked_company(self, company_id, source_section, source_id):
+        """Open recorded company and focus its exact saved Mail source, if present."""
+        uuid_pattern = r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}"
         if (not isinstance(company_id, str)
-                or re.fullmatch(
-                    r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}",
-                    company_id, re.I) is None):
+                or re.fullmatch(uuid_pattern, company_id, re.I) is None):
             return
-        # Reuse the scoped dossier read and its unsaved-edit guard. No writes.
+        exact_source = (
+            isinstance(source_id, str)
+            and re.fullmatch(uuid_pattern, source_id, re.I) is not None
+            and source_section in ("drafts", "linked_mail")
+        )
+        # A visible dossier retains its current edits and view; never reload it
+        # solely to change navigation, nor redirect an unrelated company.
+        already_open = (self.crm_dossier_dialog is not None
+                        and self.crm_dossier_dialog.isVisible())
+        if not already_open:
+            self.crm_dossier_mail_source = (
+                (company_id, source_section, source_id) if exact_source else None
+            )
         selected_company_id = self.crm_company_id
         try:
             self.crm_company_id = company_id
             self.open_company_dossier()
         finally:
             self.crm_company_id = selected_company_id
+            if (not self.crm_dossier_dialog
+                    or self.crm_dossier_company_id != company_id):
+                self.crm_dossier_mail_source = None
 
     def open_mail_company_link(self, mailbox, thread_id):
         """E04-04: operator-selected existing company, not inferred client."""
@@ -9666,6 +9681,9 @@ class EnkyronWindow(QMainWindow):
                     or company_id != self.crm_dossier_company_id):
                 return
             if error or not data or not data.get("available"):
+                if (self.crm_dossier_mail_source is not None
+                        and self.crm_dossier_mail_source[0] == company_id):
+                    self.crm_dossier_mail_source = None
                 self.crm_dossier_notice.setText(
                     error or (data or {}).get(
                         "notice", "Company dossier is unavailable."
@@ -9684,6 +9702,9 @@ class EnkyronWindow(QMainWindow):
                 return
             if (not isinstance(data.get("company"), dict)
                     or data["company"].get("id") != company_id):
+                if (self.crm_dossier_mail_source is not None
+                        and self.crm_dossier_mail_source[0] == company_id):
+                    self.crm_dossier_mail_source = None
                 self.crm_dossier_notice.setText(
                     "CRM dossier identity mismatch. No company details loaded."
                 )
@@ -9869,6 +9890,8 @@ class EnkyronWindow(QMainWindow):
             self.crm_dossier_tabs.clear()
             self.crm_dossier_nav.clear()
             self.crm_dossier_sections = []
+            mail_source = getattr(self, "crm_dossier_mail_source", None)
+            source_section_index = None
             for section_id, title, columns in definitions:
                 section = sections.get(section_id, {})
                 rows = section.get("items", [])
@@ -9928,6 +9951,17 @@ class EnkyronWindow(QMainWindow):
                         )
                         cell.setToolTip(cell.text())
                         table.setItem(row_index, column_index, cell)
+                # The exact source ID is the ONLY key used to locate the Mail
+                # row. A matching subject, recipient or company name is not proof.
+                if (mail_source is not None and mail_source[0] == company_id
+                        and section_id == mail_source[1]):
+                    identity_key = ("id" if section_id == "drafts" else "thread_id")
+                    for source_row, source_record in enumerate(rows):
+                        if (isinstance(source_record, dict)
+                                and source_record.get(identity_key) == mail_source[2]):
+                            table.selectRow(source_row)
+                            source_section_index = len(self.crm_dossier_sections)
+                            break
                 # Preserve readable email/identifier columns; a wide source
                 # table scrolls horizontally instead of crushing data cells.
                 header = table.horizontalHeader()
@@ -9980,6 +10014,7 @@ class EnkyronWindow(QMainWindow):
                         lambda _row, _column, launch=open_selected: launch()
                     )
                     open_linked.clicked.connect(open_selected)
+                    enable_open()
                     mail_actions.addWidget(open_linked)
                     mail_actions.addStretch()
                     page_layout.addLayout(mail_actions)
@@ -11040,6 +11075,10 @@ class EnkyronWindow(QMainWindow):
             if getattr(self, "crm_dossier_open_messages_after_load", False):
                 index = 5
                 self.crm_dossier_open_messages_after_load = False
+            if mail_source is not None and mail_source[0] == company_id:
+                self.crm_dossier_mail_source = None
+                if source_section_index is not None:
+                    index = source_section_index
             # Restore a previously selected advanced section without hiding it.
             if (index < len(self.crm_dossier_sections)
                     and self.crm_dossier_sections[index][0] not in {

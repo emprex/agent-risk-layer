@@ -452,7 +452,7 @@ class MailInboxView(QWidget):
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
     localCompanyLinkRequested = Signal(str, str)
-    linkedCompanyOpenRequested = Signal(str)
+    linkedCompanyOpenRequested = Signal(str, str, str)
     taskFromMailRequested = Signal(str, str, str)
     taskFromSavedMailRequested = Signal(dict)
     localTicketLinkRequested = Signal(str, str)
@@ -1127,8 +1127,13 @@ class MailInboxView(QWidget):
                         "Open CRM: " + str(entry.get("company_name") or "Linked company")[:50]
                     )
                     linked.triggered.connect(
-                        lambda _checked=False, cid=linked_id:
-                        self.linkedCompanyOpenRequested.emit(cid)
+                        lambda _checked=False, cid=linked_id,
+                               draft=entry.get("draft_id"):
+                        self.linkedCompanyOpenRequested.emit(
+                            cid, "drafts",
+                            draft if isinstance(draft, str)
+                            and _MAIL_UUID.fullmatch(draft) else ""
+                        )
                     )
                 elif linked_id:
                     unavailable = menu.addAction("CRM link unavailable")
@@ -1978,13 +1983,18 @@ class MailInboxView(QWidget):
                         and 0 <= reference[1] < len(self.items)
                         and isinstance(self.items[reference[1]], dict)
                         and self.items[reference[1]].get("company_id") == linked_id):
-                    self.linkedCompanyOpenRequested.emit(linked_id)
+                    draft_id = self.items[reference[1]].get("draft_id")
+                    self.linkedCompanyOpenRequested.emit(
+                        linked_id, "drafts",
+                        draft_id if isinstance(draft_id, str)
+                        and _MAIL_UUID.fullmatch(draft_id) else "")
             elif (self.selected_folder not in ("drafts", "spam", "trash")
                     and self.current_thread_mailbox in self._mailboxes
                     and _MAIL_UUID.fullmatch(self.current_thread_id or "")
                     and reference == (self.current_thread_mailbox,
                                       self.current_thread_id)):
-                self.linkedCompanyOpenRequested.emit(linked_id)
+                self.linkedCompanyOpenRequested.emit(
+                    linked_id, "linked_mail", self.current_thread_id)
             return
         if self.local_mode and self.selected_folder == "sent":
             selected = self.thread_list.currentItem()
