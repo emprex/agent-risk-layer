@@ -8,7 +8,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication, QPushButton, QHeaderView
 from desktop.enkyron import DesktopBridge, EnkyronWindow, calendar_home_due
 
@@ -239,20 +239,30 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
             window.load_sales_overview()
             next_callback = [x for x in calls if x[0] == "crm-sales-overview"][-1][3]
             populated = dict(EMPTY_OVERVIEW)
+            full_action = (
+                "Review the existing correspondence and draft a precise "
+                "customer follow-up including the scope and agreed next steps. "
+                "Check the customer's reply before sending anything.")
+            opportunity_id = "99999999-aaaa-4bbb-8ccc-cccccccccccc"
             populated["priority_items"] = [{
+                "id": opportunity_id,
                 "company_name_at_creation": "Synthetic customer",
                 "stage": "qualified",
-                "next_action": "Schedule a review",
+                "next_action": full_action,
                 "due_date": "2026-11-13",
             }]
             next_callback({"available": True, "overview": populated}, None)
-            self.assertEqual(window.sales_overview_table.rowCount(), 1)
-            self.assertFalse(window.sales_overview_table.isHidden())
+            table = window.sales_overview_table
+            self.assertEqual(table.rowCount(), 1)
+            self.assertFalse(table.isHidden())
             self.assertTrue(window.sales_overview_empty.isHidden())
+            self.assertTrue(table.wordWrap())
+            self.assertGreaterEqual(table.rowHeight(0), 44)
+            self.assertEqual(table.item(0, 2).text(), full_action)
+            self.assertEqual(table.item(0, 2).toolTip(), full_action)
             self.assertEqual(
-                window.sales_overview_table.item(0, 2).text(),
-                "Schedule a review"
-            )
+                table.item(0, 0).data(Qt.ItemDataRole.UserRole),
+                opportunity_id)
 
             # Failure is not represented as an empty or successful result.
             window.load_sales_overview()

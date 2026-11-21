@@ -737,6 +737,8 @@ class EnkyronWindow(QMainWindow):
             3, QHeaderView.ResizeMode.ResizeToContents
         )
         self.sales_overview_table.setAlternatingRowColors(True)
+        # Preview two lines per action; keep the full instruction on hover.
+        self.sales_overview_table.setWordWrap(True)
         self.sales_overview_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -7204,7 +7206,12 @@ class EnkyronWindow(QMainWindow):
                     if column == 0:
                         # Bind the exact opportunity ID, never infer it by name.
                         cell.setData(Qt.ItemDataRole.UserRole, item.get("id"))
+                    elif column == 2:
+                        # Expose the whole action without opening an editor.
+                        cell.setToolTip(str(value))
                     self.sales_overview_table.setItem(row, column, cell)
+                # Two readable lines without making the home table a document.
+                self.sales_overview_table.setRowHeight(row, 44)
 
         self.bridge.call("crm-sales-overview", callback=received)
 
