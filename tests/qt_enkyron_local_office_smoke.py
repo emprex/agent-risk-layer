@@ -105,7 +105,7 @@ class LocalOfficeSmoke(unittest.TestCase):
             self.dispose(window)
             DesktopBridge.call = old
 
-    def test_home_shortcuts_reuse_existing_native_modules_without_writes(self):
+    def test_home_sidebar_reuses_existing_modules_without_writes(self):
         old = DesktopBridge.call
         calls = []
 
@@ -119,23 +119,22 @@ class LocalOfficeSmoke(unittest.TestCase):
             window = EnkyronWindow()
             self.assertEqual(window.pages.count(), 5)
             self.assertEqual(window.navigation.count(), 6)
-            routes = [
-                ("enkyronHomeOpenTickets", 1, 1, None),
-                ("enkyronHomeOpenCRM", 2, 2, 0),
-                ("enkyronHomeOpenMail", 3, 2, 3),
-                ("enkyronHomeOpenCalendar", 4, 3, None),
-            ]
-            for object_name, nav_index, page_index, crm_tab in routes:
-                with self.subTest(shortcut=object_name):
+            routes = [(1, 1, None), (2, 2, 0),
+                      (3, 2, 3), (4, 3, None)]
+            for nav_index, page_index, crm_tab in routes:
+                with self.subTest(workspace=nav_index):
                     window.navigation.setCurrentRow(0)
-                    button = window.findChild(QPushButton, object_name)
-                    self.assertIsNotNone(button)
-                    self.assertGreaterEqual(button.minimumHeight(), 44)
-                    button.click()
+                    window.navigation.setCurrentRow(nav_index)
                     self.assertEqual(window.navigation.currentRow(), nav_index)
                     self.assertEqual(window.pages.currentIndex(), page_index)
                     if crm_tab is not None:
                         self.assertEqual(window.crm_tabs.currentIndex(), crm_tab)
+            # No duplicate workspace shortcuts on Home; navigation is left-side.
+            for object_name in (
+                "enkyronHomeOpenTickets", "enkyronHomeOpenCRM",
+                "enkyronHomeOpenMail", "enkyronHomeOpenCalendar",
+            ):
+                self.assertIsNone(window.findChild(QPushButton, object_name))
 
             mutation_commands = {
                 "create-ticket", "note", "ticket-status", "crm-create-company",
@@ -146,7 +145,7 @@ class LocalOfficeSmoke(unittest.TestCase):
                 "control-applicability-save",
             }
             self.assertFalse(mutation_commands.intersection(calls),
-                             "Home shortcuts must not mutate records")
+                             "Home navigation must not mutate records")
         finally:
             self.dispose(window)
             DesktopBridge.call = old
