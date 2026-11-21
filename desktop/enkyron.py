@@ -9147,8 +9147,11 @@ class EnkyronWindow(QMainWindow):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
         if self.crm_dossier_company_editor is not None:
-            current = {key: field.text() for key, field in
-                       self.crm_dossier_company_inputs.items()}
+            current = {
+                key: (field.currentText() if isinstance(field, QComboBox)
+                      else field.text())
+                for key, field in self.crm_dossier_company_inputs.items()
+            }
             if (current != self.crm_dossier_company_initial or
                     self.crm_dossier_company_reason.toPlainText().strip()):
                 pending.append("company details")
