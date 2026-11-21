@@ -8,6 +8,7 @@ import {listMailDocumentCandidates} from './enkyron-mail-document-candidates.mjs
 import {linkAttachmentToDossier as saveMailDossier, validateDossierLink as validateMailDossier} from './enkyron-mail-document-dossier-links.mjs';
 import { resolveEnkyronDatabase, requireEnkyronUatCommand, requireEnkyronUatPayload, requireEnkyronUxPreviewCommand, verifyEnkyronUatDatabase } from './enkyron-uat-database.mjs';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
+import {archivedAssessmentReport} from './enkyron-final-report-reader.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
 import {readT05Qualification,previewT05Qualification,recordT05Qualification,validateT05Identity,validateT05Review} from './enkyron-t05-qualification.mjs';
 import { readKb001EvidenceIntegrity,validateKb001IntegrityRequest } from './enkyron-evidence-integrity.mjs';
