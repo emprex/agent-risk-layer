@@ -8959,7 +8959,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_company_followups = QPushButton("Company follow-ups…")
         self.crm_dossier_company_followups.setObjectName("crmCompanyFollowups")
         self.crm_dossier_company_followups.clicked.connect(
-            lambda: self.open_company_followups(self.crm_dossier_company_id)
+            self.open_dossier_company_followups
         )
         # The follow-up action belongs with its recorded context, not
         # among the global dossier header controls.
@@ -9104,14 +9104,55 @@ class EnkyronWindow(QMainWindow):
 
 
 
-    def open_company_followups(self, company_id=None):
+    def open_dossier_company_followups(self):
+        """Prepare a human-reviewed reminder from the exact selected sent email."""
+        company_id = self.crm_dossier_company_id
+        if (not company_id or not self.crm_dossier_dialog
+                or not self.crm_dossier_dialog.isVisible()):
+            return
+        suggestion = None
+        inbox = self.mail_inbox
+        selected = inbox.thread_list.currentItem()
+        reference = (selected.data(Qt.ItemDataRole.UserRole)
+                     if selected is not None else None)
+        if (inbox.selected_folder == "sent"
+                and isinstance(reference, tuple) and len(reference) == 2
+                and reference[0] == "local-sent"
+                and type(reference[1]) is int
+                and 0 <= reference[1] < len(self.mail_sent_items)):
+            sent = self.mail_sent_items[reference[1]]
+            if isinstance(sent, dict):
+                draft_id = sent.get("draft_id")
+                if (sent.get("company_id") == company_id
+                        and sent.get("outcome") == "accepted"
+                        and isinstance(draft_id, str)
+                        and re.fullmatch(
+                            r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}",
+                            draft_id, re.I)):
+                    subject = " ".join(str(sent.get("subject") or "").split())[:150]
+                    if subject:
+                        suggestion = "Check whether a reply arrived to: " + subject
+        # A suggested action is only editable text. It is never saved without
+        # the operator choosing a due date and explicitly confirming.
+        self.open_company_followups(company_id, suggested_action=suggestion)
+
+    def open_company_followups(self, company_id=None, suggested_action=None):
         """Company-owned dated tasks, or a read-only cross-company upcoming view."""
         if (self.crm_company_followups_dialog is not None
                 and self.crm_company_followups_dialog.isVisible()):
+            if (self.crm_company_followups_dialog.property("enkyronFollowupCompanyId")
+                    != (company_id or "")):
+                QMessageBox.information(
+                    self, "Company follow-ups already open",
+                    "Close the current follow-ups window before opening a "
+                    "different company. Your existing form is preserved."
+                )
+                return
             self.crm_company_followups_dialog.raise_()
             self.crm_company_followups_dialog.activateWindow()
             return
         dialog = make_workspace_window("ENKYRON · Company follow-ups")
+        dialog.setProperty("enkyronFollowupCompanyId", company_id or "")
         self.crm_company_followups_dialog = dialog
         layout = QVBoxLayout(dialog)
         title = section_title(
@@ -9144,8 +9185,11 @@ class EnkyronWindow(QMainWindow):
         state = {"items": [], "pending": False, "seq": 0}
         form = QFormLayout()
         action = QLineEdit()
+        action.setObjectName("crmCompanyFollowupAction")
         action.setMaxLength(1000)
         action.setPlaceholderText("e.g. Review whether an answer was received")
+        if company_id and isinstance(suggested_action, str):
+            action.setText(" ".join(suggested_action.split())[:1000])
         due = QDateEdit(QDate.currentDate().addDays(7))
         due.setCalendarPopup(True)
         due.setDisplayFormat("yyyy-MM-dd")

@@ -1,11 +1,12 @@
 """UX-13 native company-first follow-up flow; no PostgreSQL or real prospect writes."""
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QDateEdit, QLineEdit, QPushButton, QTableWidget
+    QApplication, QCheckBox, QDateEdit, QLineEdit, QPushButton, QTableWidget, QMessageBox
 )
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
@@ -154,6 +155,97 @@ class CompanyFollowupsSmoke(unittest.TestCase):
             if window:
                 window.close()
             DesktopBridge.call = previous
+    def test_sent_mail_prefills_manual_company_followup_without_creating_it(self):
+        """Only selected, exact-company, accepted sent mail can propose text."""
+        calls = []
+        previous = DesktopBridge.call
+        draft_id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        sent = {
+            "draft_id": draft_id, "company_id": COMPANY,
+            "company_name": "Synthetic Labs", "mailbox_key": "direction",
+            "recipient_email": "buyer@example.invalid",
+            "subject": "Synthetic security assessment",
+            "outcome": "accepted",
+        }
+
+        def fake_call(_self, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+
+        DesktopBridge.call = fake_call
+        window = None
+        try:
+            window = EnkyronWindow()
+            inbox = window.mail_inbox
+            inbox.set_local_mode()
+            inbox.set_owner_mailboxes({"mailboxes": [
+                {"key": "direction", "address": "direction@example.invalid"}
+            ]})
+            inbox.set_connection_state("connected")
+            window.mail_sent_items = [sent]
+            inbox.show_local_records("sent", [sent])
+            inbox.thread_list.setCurrentRow(0)
+
+            window.crm_company_id = COMPANY
+            window.open_company_dossier()
+            self.assertTrue(window.crm_dossier_dialog.isVisible())
+            window.crm_dossier_company_followups.click()
+            dialog = window.crm_company_followups_dialog
+            self.assertTrue(dialog.isVisible())
+            action = dialog.findChild(QLineEdit, "crmCompanyFollowupAction")
+            self.assertIsNotNone(action)
+            self.assertEqual(
+                action.text(),
+                "Check whether a reply arrived to: Synthetic security assessment"
+            )
+            self.assertFalse(dialog.findChildren(QCheckBox)[0].isChecked())
+            self.assertEqual(
+                dialog.findChildren(QDateEdit)[0].date(),
+                QDate.currentDate().addDays(7)
+            )
+            self.assertEqual(calls[-1][0], "crm-company-followups")
+            self.assertEqual(calls[-1][1], COMPANY)
+            self.assertFalse(any(
+                c[0] in ("crm-company-followup-create",
+                         "crm-company-followup-update", "mail-send-draft")
+                for c in calls
+            ))
+            # Existing window with unsaved form must never be redirected
+            # to another company or to a global view.
+            before = len(calls)
+            with patch.object(QMessageBox, "information") as warning:
+                window.open_company_followups(
+                    "22222222-3333-4333-8444-666666666666")
+                warning.assert_called_once()
+            self.assertEqual(len(calls), before)
+            self.assertEqual(action.text(),
+                             "Check whether a reply arrived to: "
+                             "Synthetic security assessment")
+            dialog.reject()
+
+            # The name/subject alone cannot substitute for a company ID match.
+            other = dict(sent, company_id=
+                         "22222222-3333-4333-8444-666666666666")
+            window.mail_sent_items = [other]
+            inbox.show_local_records("sent", [other])
+            inbox.thread_list.setCurrentRow(0)
+            window.crm_dossier_company_followups.click()
+            second = window.crm_company_followups_dialog
+            unlinked_action = second.findChild(
+                QLineEdit, "crmCompanyFollowupAction")
+            self.assertEqual(unlinked_action.text(), "")
+            self.assertFalse(second.findChildren(QCheckBox)[0].isChecked())
+            self.assertEqual(calls[-1][0], "crm-company-followups")
+            second.reject()
+        finally:
+            if window:
+                if window.crm_dossier_dialog:
+                    window.crm_dossier_dialog.close_guard = lambda: True
+                    window.crm_dossier_dialog.reject()
+                window.close()
+                window.deleteLater()
+                self.app.processEvents()
+            DesktopBridge.call = previous
+
 
 if __name__ == "__main__":
     unittest.main()
