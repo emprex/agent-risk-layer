@@ -48,10 +48,14 @@ export function validateTestImport(data,{commit=false}={}){
     expectedManifest:data.expected_manifest_digest||null};
 }
 export function readOutput(filename){
-  const before=fs.lstatSync(filename);
+  const resolved=path.resolve(filename);
+  // O_NOFOLLOW protects the last component, not symlinked parent directories.
+  if(fs.realpathSync.native(resolved)!==resolved)
+    refuse('source path must not contain symbolic links');
+  const before=fs.lstatSync(resolved);
   if(!before.isFile()||before.isSymbolicLink()||before.size<1||before.size>65536)
     refuse('original redacted output must be a regular file, maximum 64 KiB');
-  const fd=fs.openSync(filename,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
+  const fd=fs.openSync(resolved,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
   let bytes;
   try {
     const after=fs.fstatSync(fd);
@@ -59,6 +63,11 @@ export function readOutput(filename){
        after.ino!==before.ino||after.dev!==before.dev)
       refuse('source file changed during inspection');
     bytes=fs.readFileSync(fd);
+    const final=fs.fstatSync(fd);
+    if(bytes.length!==after.size||final.size!==after.size||
+       final.mtimeMs!==after.mtimeMs||final.ctimeMs!==after.ctimeMs||
+       fs.realpathSync.native(resolved)!==resolved)
+      refuse('source file changed or path redirected during inspection');
   } finally {fs.closeSync(fd);}
   let text;
   try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}

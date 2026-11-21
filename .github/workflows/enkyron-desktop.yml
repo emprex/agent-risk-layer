@@ -47,6 +47,8 @@ jobs:
           node --check desktop/enkyron-final-report-reader.mjs
           node --check desktop/enkyron-bridge.mjs
           node --test tests/enkyron-archived-final-report.test.js
+          node --check desktop/enkyron-test-import.mjs
+          node --test tests/enkyron-test-import.test.js
           node --check desktop/enkyron-evidence-register.mjs
           node --check desktop/enkyron-ticket-intake.mjs
           node --check desktop/enkyron-ticket-triage.mjs
