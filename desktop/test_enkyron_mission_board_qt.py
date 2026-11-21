@@ -221,6 +221,89 @@ class MissionBoardWidgetTests(unittest.TestCase):
             self.assertEqual(self.view.pos(), original)
         self.assertIsNone(QApplication.activeModalWidget())
 
+    def test_existing_open_task_editor_preserves_identity_and_requires_review(self):
+        """Synthetic Qt: editor emits a versioned update, not a duplicate task."""
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import (
+            QApplication, QDialog, QDialogButtonBox, QLineEdit,
+            QPlainTextEdit, QMessageBox, QPushButton,
+        )
+        from unittest.mock import patch
+        row = demo_missions()[0]
+        row["work_items"][0]["status"] = "open"
+        self.view.show_live_board({
+            "available": True, "items": [row],
+            "can_write": True, "can_edit": True})
+        mission = self.view._visible[0]
+        work = mission["work_items"][0]
+        saved, errors = [], []
+        self.view.writeRequested.connect(lambda action, req: saved.append((action, req)))
+        preview = self.view._build_read_only_details_dialog(
+            "Work item details", "Synthetic work item", allow_edit=True)
+        self.assertIsNone(preview.parentWidget())
+        self.assertIsNotNone(preview.findChild(QPushButton, "enkyronMissionEditDetails"))
+        preview.close()
+
+        def edit():
+            dialog = QApplication.activeModalWidget()
+            try:
+                if not isinstance(dialog, QDialog):
+                    raise AssertionError("Independent editor missing")
+                self.assertIsNone(dialog.parentWidget())
+                title = dialog.findChild(QLineEdit, "enkyronWorkItemEditTitle")
+                note = dialog.findChild(
+                    QPlainTextEdit, "enkyronWorkItemEditDescription")
+                if title is None or note is None:
+                    raise AssertionError("Missing edit fields")
+                title.setText("Updated work item without duplicate")
+                note.setPlainText("Synthetic updated work item details")
+                dialog.findChild(QDialogButtonBox).button(
+                    QDialogButtonBox.StandardButton.Save).click()
+            except Exception as error:
+                errors.append(str(error))
+                if isinstance(dialog, QDialog):
+                    dialog.reject()
+        QTimer.singleShot(0, edit)
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.Yes):
+            self.view._edit_work_item_details(mission, work)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(saved), 1)
+        action, req = saved[0]
+        self.assertEqual(action, "psa-update-work-item")
+        self.assertEqual(req["task_id"], work["id"])
+        self.assertEqual(req["mission_id"], mission["id"])
+        self.assertEqual(req["expected_version"], work["version"])
+        self.assertEqual(req["description"], "Synthetic updated work item details")
+        self.assertNotIn("status", req)
+        self.assertNotIn("kind", req)
+
+    def test_work_item_edit_cancel_never_emits_write(self):
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import (
+            QApplication, QDialog, QDialogButtonBox, QMessageBox,
+        )
+        from unittest.mock import patch
+        row = demo_missions()[0]
+        row["work_items"][0]["status"] = "open"
+        self.view.show_live_board({
+            "available": True, "items": [row],
+            "can_write": True, "can_edit": True})
+        saved = []
+        self.view.writeRequested.connect(lambda action, req: saved.append((action, req)))
+        def cancel():
+            dialog = QApplication.activeModalWidget()
+            if isinstance(dialog, QDialog):
+                dialog.findChild(QDialogButtonBox).button(
+                    QDialogButtonBox.StandardButton.Cancel).click()
+        QTimer.singleShot(0, cancel)
+        with patch.object(QMessageBox, "question") as question:
+            self.view._edit_work_item_details(
+                self.view._visible[0], self.view._visible[0]["work_items"][0])
+            question.assert_not_called()
+        self.assertEqual(saved, [])
+
     def test_server_write_refusal_never_enables_editing(self):
         self.view.show_crm_companies({"available": True, "more": False, "items": [
             {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
