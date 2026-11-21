@@ -6588,19 +6588,39 @@ class EnkyronWindow(QMainWindow):
                     and not self.mission_board._live_can_edit)
                 or self.ux_preview_read_only
                 or os.environ.get("ENKYRON_UAT_DATABASE")):
-            QMessageBox.warning(
-                self, "Mission Board",
+            message = (
+                "Work-item editing is not available in this workspace. "
+                "The existing task remains unchanged."
+                if action == "psa-update-work-item" else
                 "This workspace cannot save a planning mission. "
-                "Nothing was recorded. Open Projects in the normal local workspace.")
+                "Nothing was recorded. Open Projects in the normal local workspace."
+            )
+            QMessageBox.warning(self, "Mission Board", message)
             return
         self.mission_board.set_write_busy(True)
         def received(data, error):
             self.mission_board.set_write_busy(False)
-            if error or not isinstance(data, dict):
-                QMessageBox.warning(
-                    self, "Mission Board",
+            update_readback_ok = (
+                action != "psa-update-work-item" or
+                (isinstance(data, dict)
+                 and data.get("id") == details.get("task_id")
+                 and data.get("mission_id") == details.get("mission_id")
+                 and data.get("status") == "open"
+                 and type(data.get("version")) is int
+                 and data["version"] == details.get("expected_version", 0) + 1
+                 and type(data.get("changed")) is bool)
+            )
+            if error or not isinstance(data, dict) or not update_readback_ok:
+                # PSA errors come from the trusted local bridge and are bounded
+                # there; never expose generic database or driver errors in Qt.
+                safe_error = str(error or "")
+                message = (
+                    safe_error[:250] + "\nNo new edit was confirmed; refresh before retrying."
+                    if safe_error.startswith("PSA ") else
                     "Save was not confirmed. Refresh missions before retrying; "
-                    "the operation may already have been recorded.")
+                    "the operation may already have been recorded."
+                )
+                QMessageBox.warning(self, "Mission Board", message)
                 self.load_mission_board()
                 return
             self.load_mission_board()

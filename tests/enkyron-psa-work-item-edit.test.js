@@ -102,3 +102,20 @@ test('schema 125 is review-only and preserves immutable audit history',()=>{
   assert.match(sql,/event_type IN \('created','updated','completed'\)/);
   assert.equal(fs.existsSync(new URL('../migrations/125_enkyron_psa_work_item_edits.sql',import.meta.url)),false);
 });
+
+test('Mission Board Qt shows bounded PSA revision errors and confirms exact edit readback',()=>{
+  const py=fs.readFileSync(new URL('../desktop/enkyron.py',import.meta.url),'utf8');
+  const start=py.indexOf('    def save_mission_board_action(self, action, details):');
+  const end=py.indexOf('    def load_mission_board(self):',start);
+  assert.ok(start>=0&&end>start,'Existing Mission Board write callback required');
+  const action=py.slice(start,end);
+  for(const guard of [
+    'data.get("id") == details.get("task_id")',
+    'data.get("mission_id") == details.get("mission_id")',
+    'data.get("status") == "open"',
+    'data["version"] == details.get("expected_version", 0) + 1',
+    'safe_error.startswith("PSA ")',
+    'The existing task remains unchanged.'
+  ])assert.ok(action.includes(guard),'Missing guarded edit feedback: '+guard);
+  assert.match(action,/self\.load_mission_board\(\)/);
+});
