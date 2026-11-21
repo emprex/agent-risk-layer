@@ -50,6 +50,8 @@ jobs:
           node --check desktop/enkyron-test-import.mjs
           node --test tests/enkyron-test-import.test.js
           node --test tests/enkyron-evidence-candidates-ux.test.js
+          node --check desktop/enkyron-psa-work-items.mjs
+          node --test tests/enkyron-psa-work-items.test.js tests/enkyron-psa-work-item-edit.test.js tests/enkyron-psa-missions.test.js
           node --check desktop/enkyron-evidence-register.mjs
           node --check desktop/enkyron-ticket-intake.mjs
           node --check desktop/enkyron-ticket-triage.mjs
