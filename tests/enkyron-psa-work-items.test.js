@@ -37,7 +37,7 @@ function db(options={}) {
     if(sql.includes('FROM enkyron_psa_work_items')&&sql.includes('FOR UPDATE'))
       return {rows:options.taskMissing?[]:[{id:task,mission_id:mission,
         status:options.taskStatus??'open',version:options.version??1}]};
-    if(sql.startsWith('UPDATE enkyron_psa_work_items'))return {rows:[{id:task}]};
+    if(sql.startsWith('UPDATE enkyron_psa_work_items'))return {rows:[{id:task,version:(options.version??1)+1}]};
     if(sql.startsWith('SELECT id FROM enkyron_psa_missions'))return {rows:[{id:mission}]};
     if(sql.startsWith('SELECT w.id'))return {rows:options.items??[]};
     throw Error('Unexpected SQL: '+sql);
@@ -90,7 +90,7 @@ test('ENK-08: completion is versioned, scoped and audited',async()=>{
 test('ENK-08: completed retry must match original task AND mission',async()=>{
   const sha=(await import('node:crypto')).createHash('sha256')
     .update(JSON.stringify([mission,task,1,true])).digest('hex');
-  const record={mission_id:mission,item_id:task,event_type:'completed',content_sha256:sha};
+  const record={mission_id:mission,item_id:task,version:2,event_type:'completed',content_sha256:sha};
   const x=db({event:record});
   assert.equal((await completeMissionWorkItem(x.pool,completeInput,'operator')).changed,false);
   const fakeMission='11111111-2222-4333-8444-555555555555';

@@ -137,12 +137,22 @@ export async function readMissionBoard(pool, actor) {
       notice: 'Mission Board tables not installed. CRM companies can be viewed separately.',
     };
   }
+  // Schema 125 is review-only until explicitly applied. Keep legacy reads
+  // working and hide the Edit affordance until all audited columns exist.
+  const schema=(await pool.query(
+    "SELECT COUNT(*) AS columns FROM information_schema.columns "+
+    "WHERE table_schema='public' AND "+
+    "((table_name='enkyron_psa_work_items' AND column_name='description') OR "+
+    "(table_name='enkyron_psa_work_item_events' AND column_name IN ('before_state','after_state')))"
+  )).rows[0];
+  const canEdit=Number(schema?.columns)===3;
   const missions = await listMissionPlans(pool, owner.actor);
   const items = [];
   for (const mission of missions.items) {
     const workItems = (await pool.query(
-      'SELECT id,mission_id,kind,title,due_date::text AS due_date,status,version '
-      + 'FROM enkyron_psa_work_items '
+      'SELECT id,mission_id,kind,title,due_date::text AS due_date,status,version,'+
+      (canEdit ? 'description ' : "''::text AS description ")+
+      'FROM enkyron_psa_work_items '
       + 'WHERE workspace_key=$1 AND mission_id=$2 '
       + 'ORDER BY created_at ASC,id ASC LIMIT 101',
       [owner.workspace, mission.id]
@@ -162,6 +172,7 @@ export async function readMissionBoard(pool, actor) {
   }
   return {
     available: true, items, more: missions.more, can_write: true,
+    can_edit: canEdit,
     notice: 'Local-operator internal planning enabled. Contract and testing approval are separate.',
   };
 }

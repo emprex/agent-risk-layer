@@ -14,11 +14,13 @@ def _id(value):
     return value.lower() if isinstance(value, str) and _UUID.fullmatch(value) else ""
 
 
-def _text(value, limit):
+def _text(value, limit, multiline=False):
     if not isinstance(value, str):
         return ""
     # This is display sanitisation, not an authorization boundary.
-    return "".join(ch for ch in value if ch.isprintable() and ch not in "\u202e\u202d").strip()[:limit]
+    return "".join(ch for ch in value
+                   if (ch.isprintable() or (multiline and ch == "\n"))
+                   and ch not in "\u202e\u202d").strip()[:limit]
 
 
 def _date(value):
@@ -67,11 +69,12 @@ def normalize_missions(rows):
             item_ids.add(tid)
             items.append({"id": tid, "mission_id": mission_id,
                           "kind": task["kind"], "title": task_title,
+                          "description": _text(task.get("description"), 2000, multiline=True),
                           "due_date": _date(task.get("due_date")),
                           "status": task["status"],
                           "version": (task.get("version")
                                       if type(task.get("version")) is int
-                                      and task.get("version") in (1, 2) else 1)})
+                                      and 1 <= task.get("version") <= 1000000 else 1)})
             if len(items) >= 100:
                 break
         time_entries = []

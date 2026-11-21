@@ -1,7 +1,8 @@
 // ENK-08: planning-only mission tasks/milestones. Not a second Calendar task store.
 // No remote RBAC; actor MUST originate from the trusted local OS bridge.
 import {createHash, randomUUID} from 'node:crypto';
-import {validateMissionTaskCreate, validateMissionTaskCompletion}
+import {validateMissionTaskCreate, validateMissionTaskCompletion,
+  validateMissionTaskUpdate}
   from './enkyron-psa-planning-contract.mjs';
 import {psaLocalScope, psaUuid, psaTransaction} from './enkyron-psa-db.mjs';
 
@@ -17,12 +18,26 @@ function sameCreate(row, sha, created) {
     notice:'Internal mission work item only; no customer or security approval.'};
 }
 
+const editHashFor = d => hash([d.mission_id,d.task_id,d.expected_version,
+  d.title,d.description,d.due_date]);
+
+function sameEdit(event,data,sha) {
+  if (!event || event.event_type !== 'updated' ||
+      event.item_id !== data.task_id || event.mission_id !== data.mission_id ||
+      event.content_sha256.trim() !== sha ||
+      event.version !== data.expected_version+1)
+    throw new Error('PSA request ID reused with different task edit content');
+  return {id:data.task_id,mission_id:data.mission_id,
+    version:event.version,changed:false,status:'open',
+    notice:'Previously recorded internal work item edit; no new audit event.'};
+}
+
 function sameCompletion(row, data, sha) {
   if (!row || row.event_type !== 'completed' || row.item_id !== data.task_id
       || row.mission_id !== data.mission_id
       || row.content_sha256.trim() !== sha)
     throw new Error('PSA request ID reused for another operation');
-  return {id:data.task_id,mission_id:data.mission_id,status:'completed',version:2,
+  return {id:data.task_id,mission_id:data.mission_id,status:'completed',version:row.version,
     changed:false,notice:'Task completion does not approve a customer engagement.'};
 }
 
@@ -74,12 +89,84 @@ export async function createMissionWorkItem(pool,input,actor,options={}) {
   });
 }
 
+/**
+ * Update a pre-existing OPEN task or milestone in place; never create a duplicate.
+ * The original creation hash remains immutable. Revisions have their own digest.
+ * A stale version or missing review-only schema fails without modifying data.
+ */
+export async function updateMissionWorkItem(pool,input,actor,options={}) {
+  const data=validateMissionTaskUpdate(input),owner=psaLocalScope(actor);
+  const sha=editHashFor(data),generateId=options.uuid??randomUUID;
+  return psaTransaction(pool,async c=>{
+    const installed=(await c.query(
+      "SELECT COUNT(*) AS columns FROM information_schema.columns "+
+      "WHERE table_schema='public' AND "+
+      "((table_name='enkyron_psa_work_items' AND column_name='description') OR "+
+      "(table_name='enkyron_psa_work_item_events' AND column_name IN ('before_state','after_state')))"
+    )).rows[0];
+    if(Number(installed?.columns)!==3)
+      throw new Error('PSA work item editing requires separately reviewed schema 125');
+    const findEvent=()=>c.query(
+      'SELECT mission_id,item_id,version,event_type,content_sha256 '+
+      'FROM enkyron_psa_work_item_events WHERE workspace_key=$1 AND request_id=$2',
+      [owner.workspace,data.request_id]);
+    const prev=(await findEvent()).rows[0];
+    if(prev)return sameEdit(prev,data,sha);
+    const mission=(await c.query(
+      'SELECT id,status FROM enkyron_psa_missions '+
+      'WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+      [owner.workspace,data.mission_id])).rows[0];
+    if(!mission||mission.status!=='planning')
+      throw new Error('PSA planning mission not found in local workspace');
+    const item=(await c.query(
+      'SELECT id,mission_id,kind,title,description,due_date::text AS due_date,'+
+      'status,version FROM enkyron_psa_work_items '+
+      'WHERE workspace_key=$1 AND id=$2 AND mission_id=$3 FOR UPDATE',
+      [owner.workspace,data.task_id,data.mission_id])).rows[0];
+    if(!item)throw new Error('PSA work item not found in local mission');
+    const committed=(await findEvent()).rows[0];
+    if(committed)return sameEdit(committed,data,sha);
+    if(item.status!=='open')throw new Error('PSA completed work item is read-only');
+    if(item.version!==data.expected_version)
+      throw new Error('PSA work item revision changed; reload before editing');
+    if(item.title===data.title && (item.description||'')===data.description &&
+        (item.due_date||null)===data.due_date)
+      throw new Error('PSA no work item changes to save');
+    const next=(await c.query(
+      'UPDATE enkyron_psa_work_items '+
+      'SET title=$4,description=$5,due_date=$6,version=version+1 '+
+      "WHERE workspace_key=$1 AND id=$2 AND mission_id=$3 AND status='open' AND version=$7 "+
+      'RETURNING id,mission_id,kind,title,description,due_date::text AS due_date,status,version',
+      [owner.workspace,data.task_id,data.mission_id,
+        data.title,data.description,data.due_date,data.expected_version])).rows[0];
+    if(!next || next.version!==data.expected_version+1 ||
+        next.status!=='open' || next.kind!==item.kind ||
+        next.title!==data.title || next.description!==data.description ||
+        (next.due_date||null)!==data.due_date)
+      throw new Error('PSA work item revision conflict or canonical readback mismatch');
+    const snapshot=x=>({title:x.title,description:x.description||'',
+      due_date:x.due_date||null,status:x.status,kind:x.kind,version:x.version});
+    await c.query(
+      'INSERT INTO enkyron_psa_work_item_events '+
+      '(id,workspace_key,mission_id,item_id,version,event_type,request_id,'+
+      'content_sha256,actor_local,before_state,after_state) '+
+      "VALUES($1,$2,$3,$4,$5,'updated',$6,$7,$8,$9::jsonb,$10::jsonb)",
+      [psaUuid(generateId(),'generated edit event ID'),owner.workspace,
+        data.mission_id,data.task_id,next.version,data.request_id,sha,owner.actor,
+        JSON.stringify(snapshot(item)),JSON.stringify(snapshot(next))]);
+    return {id:data.task_id,mission_id:data.mission_id,
+      status:'open',version:next.version,changed:true,
+      title:next.title,description:next.description,due_date:next.due_date,
+      notice:'Internal planning revision saved with append-only history; no security approval.'};
+  });
+}
+
 export async function completeMissionWorkItem(pool,input,actor,options={}) {
   const data=validateMissionTaskCompletion(input),owner=psaLocalScope(actor);
   const sha=completionHashFor(data),generateId=options.uuid??randomUUID;
   return psaTransaction(pool,async c=>{
     const findEvent=()=>c.query(
-      'SELECT mission_id,item_id,event_type,content_sha256 '
+      'SELECT mission_id,item_id,version,event_type,content_sha256 '
       +'FROM enkyron_psa_work_item_events WHERE workspace_key=$1 AND request_id=$2',
       [owner.workspace,data.request_id]
     );
@@ -101,20 +188,20 @@ export async function completeMissionWorkItem(pool,input,actor,options={}) {
       throw new Error('PSA task revision changed; reload before completion');
     const updated=(await c.query(
       'UPDATE enkyron_psa_work_items '
-      +"SET status='completed',version=2,completed_at=NOW(),completed_by=$4 "
+      +"SET status='completed',version=version+1,completed_at=NOW(),completed_by=$4 "
       +"WHERE workspace_key=$1 AND id=$2 AND mission_id=$3 AND status='open' AND version=$5 "
-      +'RETURNING id',
+      +'RETURNING id,version',
       [owner.workspace,data.task_id,data.mission_id,owner.actor,data.expected_version]
     )).rows[0];
-    if (!updated)throw new Error('PSA task revision conflict');
+    if (!updated || updated.version!==data.expected_version+1)throw new Error('PSA task revision conflict');
     await c.query(
       'INSERT INTO enkyron_psa_work_item_events '
       +'(id,workspace_key,mission_id,item_id,version,event_type,request_id,content_sha256,actor_local) '
-      +"VALUES($1,$2,$3,$4,2,'completed',$5,$6,$7)",
+      +"VALUES($1,$2,$3,$4,$5,'completed',$6,$7,$8)",
       [psaUuid(generateId(),'generated event ID'),owner.workspace,data.mission_id,data.task_id,
-       data.request_id,sha,owner.actor]
+       updated.version,data.request_id,sha,owner.actor]
     );
-    return {id:data.task_id,mission_id:data.mission_id,status:'completed',version:2,
+    return {id:data.task_id,mission_id:data.mission_id,status:'completed',version:updated.version,
       changed:true,notice:'Task completion does not approve a customer engagement.'};
   });
 }

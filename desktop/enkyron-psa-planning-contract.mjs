@@ -81,6 +81,30 @@ export function validateMissionTaskCreate(input) {
   };
 }
 
+/**
+ * Edit internal task/milestone text only; kind/status/mission cannot be changed.
+ * The backend must compare expected_version and append an immutable audit event.
+ */
+export function validateMissionTaskUpdate(input) {
+  const data = record(input, [
+    'mission_id', 'task_id', 'expected_version', 'title', 'description',
+    'due_date', 'request_id', 'confirmed'
+  ], 'work item edit');
+  if (!Number.isSafeInteger(data.expected_version) ||
+      data.expected_version < 1 || data.expected_version > 1000000) {
+    throw new Error('PSA invalid expected work item revision');
+  }
+  return {
+    mission_id: uuid(data.mission_id, 'mission ID'),
+    task_id: uuid(data.task_id, 'work item ID'),
+    expected_version: data.expected_version,
+    title: text(data.title, 'work item title', 5, 200),
+    description: text(data.description, 'work item description', 0, 2000, true),
+    due_date: date(data.due_date, 'work item due date'),
+    request_id: uuid(data.request_id, 'request ID')
+  };
+}
+
 export function validateMissionTaskCompletion(input) {
   const data = record(input, [
     'mission_id', 'task_id', 'expected_version', 'completed', 'request_id', 'confirmed'
