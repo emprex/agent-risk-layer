@@ -697,6 +697,10 @@ class EnkyronWindow(QMainWindow):
             ["Saved task", "Due"])
         self.home_calendar_tasks_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch)
+        # The task name takes the spare width; Due gets its actual text width.
+        # Avoid clipping "Overdue · 20 Nov 2026, 18:00 GMT" on laptop screens.
+        self.home_calendar_tasks_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents)
         self.home_calendar_tasks_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows)
         self.home_calendar_tasks_table.setEditTriggers(
@@ -7087,7 +7091,8 @@ class EnkyronWindow(QMainWindow):
                     if col == 0:
                         cell.setData(Qt.ItemDataRole.UserRole, task["id"])
                     else:
-                        cell.setToolTip("Local time in Europe/London (GMT/BST)")
+                        cell.setToolTip(
+                            label + "\nLocal time: Europe/London (GMT/BST)")
                     table.setItem(index, col, cell)
             table.setVisible(bool(shown))
             self.home_calendar_tasks_notice.setText(

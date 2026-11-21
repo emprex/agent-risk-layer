@@ -9,7 +9,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QHeaderView
 from desktop.enkyron import DesktopBridge, EnkyronWindow, calendar_home_due
 
 
@@ -190,6 +190,35 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
             self.assertEqual(
                 [x[0] for x in calls[previous_count:]],
                 ["crm-sales-overview", "calendar-list"])
+
+            # A readable due date must occupy its natural width; do not
+            # trade the entire task column away or force manual resizing.
+            task_table = window.home_calendar_tasks_table
+            self.assertEqual(
+                task_table.horizontalHeader().sectionResizeMode(1),
+                QHeaderView.ResizeMode.ResizeToContents)
+            window.resize(1250, 780)
+            window.show()
+            self.app.processEvents()
+            calendar_callback = [
+                x[3] for x in calls if x[0] == "calendar-list"][-1]
+            calendar_callback({"tasks": [{
+                "id": "99999999-aaaa-4bbb-8ccc-dddddddddddd",
+                "title": "Synthetic commercial follow-up",
+                "due_at": "2026-11-20T18:00:00Z",
+                "completed_at": None,
+            }]}, None)
+            self.app.processEvents()
+            self.assertEqual(task_table.rowCount(), 1)
+            date_cell = task_table.item(0, 1)
+            self.assertIsNotNone(date_cell)
+            self.assertIn("20 Nov 2026, 18:00 GMT", date_cell.text())
+            self.assertIn(date_cell.text(), date_cell.toolTip())
+            self.assertGreaterEqual(
+                task_table.columnWidth(1),
+                task_table.fontMetrics().horizontalAdvance(date_cell.text()) + 6)
+            self.assertGreater(
+                task_table.columnWidth(0), task_table.columnWidth(1))
 
             initial = [x for x in calls if x[0] == "crm-sales-overview"]
             self.assertTrue(initial)
