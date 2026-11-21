@@ -61,15 +61,22 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
         calls = []
         table = QTableWidget(0, 2)
         notice = QLabel()
+        from PySide6.QtWidgets import QLabel
+        summary = QLabel()
         stub = SimpleNamespace(
             home_calendar_tasks_seq=0, home_calendar_tasks_table=table,
             home_calendar_tasks_notice=notice,
+            home_priority_summary=summary,
+            _home_sales_priority="Opportunities: loading…",
             ux_preview_read_only=False, enk05_uat_ui=False,
             bridge=SimpleNamespace(call=lambda command, arg="", payload=None,
                 callback=None: (calls.append(command),
                                 callback({"tasks": records}, None)))
         )
         EnkyronWindow.load_home_calendar_tasks(stub)
+        self.assertIn("Calendar (dated, returned): 5 overdue",
+                      summary.text())
+        self.assertIn("Opportunities: loading", summary.text())
         self.assertEqual(calls, ["calendar-list"])
         self.assertEqual(table.rowCount(), 5)
         shown_ids = [
@@ -190,6 +197,8 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
             self.assertEqual(
                 [x[0] for x in calls[previous_count:]],
                 ["crm-sales-overview", "calendar-list"])
+            self.assertIn("Opportunities: loading", window.home_priority_summary.text())
+            self.assertIn("Calendar: loading", window.home_priority_summary.text())
 
             # A readable due date must occupy its natural width; do not
             # trade the entire task column away or force manual resizing.
@@ -219,6 +228,8 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                 task_table.fontMetrics().horizontalAdvance(date_cell.text()) + 6)
             self.assertGreater(
                 task_table.columnWidth(0), task_table.columnWidth(1))
+            self.assertIn("Calendar (dated, returned): 1 overdue",
+                          window.home_priority_summary.text())
 
             initial = [x for x in calls if x[0] == "crm-sales-overview"]
             self.assertTrue(initial)
@@ -233,6 +244,10 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                           window.sales_overview_empty.text())
             self.assertIn("Active opportunities: 2",
                           window.sales_overview_metrics.text())
+            self.assertIn("Opportunities: 0 overdue · 0 today · 0 next 7 days",
+                          window.home_priority_summary.text())
+            self.assertIn("as of 2026-11-12",
+                          window.sales_overview_attention.text())
 
             # A real priority row must restore the table and retain the
             # existing 4-column data and read-only behaviour.
@@ -274,6 +289,10 @@ class HomeEmptyFollowupsSmoke(unittest.TestCase):
                           window.sales_overview_empty.text())
             self.assertIn("Synthetic backend unavailable",
                           window.sales_overview_metrics.text())
+            self.assertIn("Opportunities: unavailable",
+                          window.home_priority_summary.text())
+            self.assertIn("Calendar (dated, returned): 1 overdue",
+                          window.home_priority_summary.text())
 
             self.assertFalse(any(
                 name in {

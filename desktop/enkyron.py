@@ -682,12 +682,16 @@ class EnkyronWindow(QMainWindow):
         refresh_my_work.clicked.connect(self.refresh_my_work)
         home_header.addWidget(refresh_my_work)
         home_l.addLayout(home_header)
-        introduction = QLabel(
-            "Your Calendar tasks and commercial follow-ups in one place. "
-            "Use the workspace menu on the left to take action."
-        )
-        introduction.setWordWrap(True)
-        home_l.addWidget(introduction)
+        # Live, read-only priorities from two distinct scoped data sources.
+        # A failed request is never presented as a zero-count success.
+        self._home_calendar_priority = "Calendar: loading…"
+        self._home_sales_priority = "Opportunities: loading…"
+        self.home_priority_summary = QLabel("")
+        self.home_priority_summary.setObjectName("enkyronHomePrioritySummary")
+        self.home_priority_summary.setWordWrap(True)
+        self.home_priority_summary.setTextFormat(Qt.TextFormat.PlainText)
+        self.update_home_priority_summary()
+        home_l.addWidget(self.home_priority_summary)
 
         # Home displays existing records only; navigation stays in the sidebar.
         home_l.addWidget(section_title("UPCOMING CALENDAR TASKS"))
@@ -7023,6 +7027,14 @@ class EnkyronWindow(QMainWindow):
             "company_name": existing.get("company_name_at_creation") or ""
         }, existing)
 
+    def update_home_priority_summary(self):
+        """Keep source-scoped daily priorities readable without extra controls."""
+        label = getattr(self, "home_priority_summary", None)
+        if label is not None:
+            label.setText("{}   |   {}".format(
+                getattr(self, "_home_calendar_priority", "Calendar: loading…"),
+                getattr(self, "_home_sales_priority", "Opportunities: loading…")))
+
     def refresh_my_work(self):
         """Refresh both Home summaries without modifying any business records."""
         self.load_sales_overview()
@@ -7036,7 +7048,11 @@ class EnkyronWindow(QMainWindow):
         table.setRowCount(0)
         table.setVisible(False)
         self.home_calendar_tasks_notice.setText("Loading saved Calendar tasks…")
+        self._home_calendar_priority = "Calendar: loading…"
+        EnkyronWindow.update_home_priority_summary(self)
         if self.ux_preview_read_only or self.enk05_uat_ui:
+            self._home_calendar_priority = "Calendar: unavailable in preview"
+            EnkyronWindow.update_home_priority_summary(self)
             self.home_calendar_tasks_notice.setText(
                 "Calendar tasks unavailable in this synthetic preview.")
             return
@@ -7051,6 +7067,8 @@ class EnkyronWindow(QMainWindow):
                 return
             tasks = data.get("tasks") if isinstance(data, dict) else None
             if error or not isinstance(tasks, list):
+                self._home_calendar_priority = "Calendar: unavailable"
+                EnkyronWindow.update_home_priority_summary(self)
                 self.home_calendar_tasks_notice.setText(
                     "Calendar tasks unavailable. " +
                     ((str(error)[:160] + " ") if error else "") +
@@ -7073,6 +7091,24 @@ class EnkyronWindow(QMainWindow):
                 if parsed is not None:
                     seen_ids.add(item["id"])
                     candidates.append((parsed[0], parsed[1], item))
+            london_today = now.astimezone(ZoneInfo("Europe/London")).date()
+            overdue_count = sum(due < now for due, _, _ in candidates)
+            today_count = sum(
+                due >= now and due.astimezone(
+                    ZoneInfo("Europe/London")).date() == london_today
+                for due, _, _ in candidates)
+            tomorrow_count = sum(
+                due >= now and due.astimezone(
+                    ZoneInfo("Europe/London")).date() == london_today +
+                    timedelta(days=1)
+                for due, _, _ in candidates)
+            later_count = (len(candidates) - overdue_count -
+                           today_count - tomorrow_count)
+            self._home_calendar_priority = (
+                "Calendar (dated, returned): {} overdue · {} today · "
+                "{} tomorrow · {} later".format(
+                    overdue_count, today_count, tomorrow_count, later_count))
+            EnkyronWindow.update_home_priority_summary(self)
             # Two most recent overdue + three soonest future tasks prevents
             # an old backlog from hiding today's work. Fill unused slots from
             # whichever group still has records; never claim global coverage.
@@ -7145,6 +7181,8 @@ class EnkyronWindow(QMainWindow):
         seq = self.sales_overview_seq
         self.sales_overview_metrics.setText("Loading commercial overview…")
         self.sales_overview_attention.clear()
+        self._home_sales_priority = "Opportunities: loading…"
+        EnkyronWindow.update_home_priority_summary(self)
         self.sales_overview_table.setRowCount(0)
         self.sales_overview_table.setVisible(False)
         self.sales_overview_empty.setText("Loading opportunity follow-ups…")
@@ -7155,6 +7193,8 @@ class EnkyronWindow(QMainWindow):
                 return
             self.sales_overview_loaded = True
             if error or not data or not data.get("available"):
+                self._home_sales_priority = "Opportunities: unavailable"
+                EnkyronWindow.update_home_priority_summary(self)
                 self.sales_overview_metrics.setText(
                     error or (data or {}).get(
                         "notice", "Commercial overview is unavailable."
@@ -7175,13 +7215,15 @@ class EnkyronWindow(QMainWindow):
                     numbers["saved_drafts"]
                 )
             )
+            self._home_sales_priority = (
+                "Opportunities: {} overdue · {} today · {} next 7 days"
+                .format(numbers["overdue"], numbers["due_today"],
+                        numbers["due_next_week"]))
+            EnkyronWindow.update_home_priority_summary(self)
+            # Keep provenance visible without duplicating the priority totals.
             self.sales_overview_attention.setText(
-                "Opportunity follow-ups: {} overdue  ·  {} due today  ·  "
-                "{} due in the next 7 days  |  As of {}".format(
-                    numbers["overdue"], numbers["due_today"],
-                    numbers["due_next_week"], numbers["as_of"]
-                )
-            )
+                "Opportunity follow-ups as of {}. Company-owned follow-ups "
+                "are separate.".format(numbers["as_of"]))
             priorities = numbers.get("priority_items", [])
             self.sales_overview_table.setRowCount(len(priorities))
             self.sales_overview_table.setVisible(bool(priorities))
