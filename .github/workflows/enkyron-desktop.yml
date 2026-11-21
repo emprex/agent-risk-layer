@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - 'feat/enkyron-desktop-*'
+      - 'integration/enkyron-*'
   pull_request:
     paths:
       - 'desktop/enkyron*'
       - 'tests/enkyron-desktop.test.js'
+      - 'tests/enkyron-archived-final-report.test.js'
       - 'tests/qt_enkyron_pilot_lab_smoke.py'
       - 'tests/enkyron-pilot-lab-handoff.test.js'
       - '.github/workflows/enkyron-desktop.yml'
@@ -42,7 +44,9 @@ jobs:
       - name: Desktop bridge and contract tests
         run: |
           node --check desktop/enkyron-contract.mjs
+          node --check desktop/enkyron-final-report-reader.mjs
           node --check desktop/enkyron-bridge.mjs
+          node --test tests/enkyron-archived-final-report.test.js
           node --check desktop/enkyron-evidence-register.mjs
           node --check desktop/enkyron-ticket-intake.mjs
           node --check desktop/enkyron-ticket-triage.mjs
