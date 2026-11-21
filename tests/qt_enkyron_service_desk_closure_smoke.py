@@ -100,12 +100,12 @@ class ServiceDeskCompletionSmoke(unittest.TestCase):
                         test_window.navigation.item(index).flags()
                         & Qt.ItemFlag.ItemIsEnabled
                     )
+                # Workspace navigation is now only in the guarded sidebar.
                 for object_name in (
                     "enkyronHomeOpenMail", "enkyronHomeOpenCalendar"
                 ):
-                    shortcut = test_window.findChild(QPushButton, object_name)
-                    self.assertIsNotNone(shortcut)
-                    self.assertFalse(shortcut.isEnabled())
+                    self.assertIsNone(
+                        test_window.findChild(QPushButton, object_name))
             finally:
                 test_window.close()
                 test_window.deleteLater()
