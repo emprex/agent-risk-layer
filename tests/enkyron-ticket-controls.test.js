@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {validateControlReviewRequest,recordTicketControlApplicability,prepareTicketSourceReview}
+import {validateControlReviewRequest,recordTicketControlApplicability,prepareTicketSourceReview,shapeFullLocalControlQueue,canCorrectApplicability}
   from '../desktop/enkyron-ticket-controls.mjs';
 
 const ticket='3385aa99-e08a-4471-b8e5-9d0b36a8412b';
@@ -110,4 +110,79 @@ test('source preparation refuses mismatched SHA and changed assessment',async()=
     inspector:verified,
     scopeReader:async()=>({...scope,snapshot_id:++calls===1?'sys_2':'sys_changed'})
   }),/changed while the source was inspected/);
+});
+
+test('single canonical local read produces exactly 108 validated control stages',()=>{
+  const scope={snapshot_id:'sys_example',project_id:'prj_1',assessment_id:'asm_1',
+    target_sha:'a'.repeat(40)};
+  const items=Array.from({length:108},(_,i)=>({
+    controlId:'ARL-KB-'+String(i+1).padStart(3,'0'),
+    controlTitle:'Canonical control '+(i+1),
+    currentStage:i<6?'test':'applicability'
+  }));
+  const response={systemSnapshot:{id:scope.snapshot_id},
+    total:108,items,hasMore:false,limit:108,offset:0};
+  const queue=shapeFullLocalControlQueue(response,scope);
+  assert.equal(queue.total,108);
+  assert.equal(queue.stages.test,6);
+  assert.equal(queue.stages.applicability,102);
+  assert.equal(queue.snapshot_id,scope.snapshot_id);
+  assert.equal(queue.tests_executed,0);
+  assert.equal(queue.human_review_required,true);
+  for(const change of [
+    {limit:50},{hasMore:true},{offset:50},{total:107},
+    {items:items.slice(0,107)},
+    {items:[items[0],...items.slice(0,107)]},
+    {items:[{...items[0],currentStage:'passed'},...items.slice(1)]},
+    {systemSnapshot:{id:'sys_changed'}}
+  ]){
+    assert.throws(()=>shapeFullLocalControlQueue({...response,...change},scope),
+      /Control review/);
+  }
+});
+
+test('trusted local full-queue capability is a non-serialisable symbol',async()=>{
+  const {LOCAL_OPERATOR_FULL_QUEUE}=await import('../src/agent/local-operator-full-queue.mjs');
+  assert.equal(typeof LOCAL_OPERATOR_FULL_QUEUE,'symbol');
+  assert.equal(JSON.stringify({[LOCAL_OPERATOR_FULL_QUEUE]:true}), '{}');
+  assert.equal(JSON.parse('{"LOCAL_OPERATOR_FULL_QUEUE":true}')[LOCAL_OPERATOR_FULL_QUEUE], undefined);
+});
+
+test('pre-test applicability correction appends a revision only if no downstream activity',()=>{
+  const detail={
+    chain:{currentStage:'test'},
+    applicability:{status:'applicable',history:[{id:'cap_old'}]},
+    tests:[],testHistory:[],evidence:[],findings:[],remediation:[],
+    runtimeDecisions:[],approvals:[],retests:[]
+  };
+  assert.equal(canCorrectApplicability(detail),true);
+  for(const key of ['tests','testHistory','evidence','findings','remediation',
+                    'runtimeDecisions','approvals','retests']){
+    assert.equal(canCorrectApplicability({...detail,[key]:[{id:'already_recorded'}]}),
+      false,key+' must prevent a corrective review');
+  }
+  assert.equal(canCorrectApplicability({...detail,chain:{currentStage:'evidence'}}),false);
+  assert.equal(canCorrectApplicability({...detail,applicability:{status:'context_required',history:[]}}),false);
+  assert.equal(canCorrectApplicability({...detail,applicability:{status:'applicable',history:[]}}),false);
+  assert.equal(canCorrectApplicability({...detail,tests:null}),false);
+});
+
+test('correction flag is explicitly typed and human confirmation remains mandatory',()=>{
+  const valid={
+    ticket_id:ticket,control_id:'ARL-KB-008',decision:'context_required',
+    reason:'The recorded reason was for another KB and must be corrected.',
+    snapshot_id:'sys_a1ea05c78ee64357a4c8a75b47ce4662',
+    evaluation_digest:'a'.repeat(64),architecture_fact_ids:[],
+    confirmed:true,correction:true
+  };
+  assert.deepEqual(validateControlReviewRequest(valid,{decision:true}),{
+    ticketId:ticket,controlId:'ARL-KB-008'
+  });
+  for(const change of [
+    {confirmed:false},{correction:'true'},{correction:1},{correction:null},
+    {evaluation_digest:'b'},{reason:'short'}
+  ])assert.throws(
+    ()=>validateControlReviewRequest({...valid,...change},{decision:true}),
+    /Control review/
+  );
 });

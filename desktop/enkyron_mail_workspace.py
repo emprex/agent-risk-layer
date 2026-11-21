@@ -119,8 +119,10 @@ class InlineMailBrowser(QTextBrowser):
         self._image_pending = {}
         self._image_seen = set()
         self._image_cache = {}
+        self.allow_remote_images = False
 
     def reset_remote_images(self):
+        self.allow_remote_images = False
         for reply in list(self._image_pending.values()):
             reply.abort()
             reply.deleteLater()
@@ -132,7 +134,7 @@ class InlineMailBrowser(QTextBrowser):
         if kind != QTextDocument.ResourceType.ImageResource:
             return super().loadResource(kind, name)
         url = name.toString() if isinstance(name, QUrl) else str(name)
-        if _mail_image_url(url) is None:
+        if not self.allow_remote_images or _mail_image_url(url) is None:
             return None
         if url in self._image_cache:
             return self._image_cache[url]
@@ -307,11 +309,11 @@ def _safe_sender_label(sender):
     return raw[:52] + ("…" if len(raw) > 52 else "")
 
 
-def format_mail_message_cards(messages):
+def format_mail_message_cards(messages, allow_remote_images=False):
     """Only OUR generated HTML. Provider HTML/URLs are never interpreted.
 
-    All external fields are escaped. No img, anchor, remote CSS, file URL,
-    JavaScript or raw attachment content can reach the QTextBrowser.
+    All external fields are escaped. No remote images are included by default.
+    Explicit consent permits bounded HTTPS images; no active HTML or links.
     """
     if not isinstance(messages, list):
         return ""
@@ -332,7 +334,7 @@ def format_mail_message_cards(messages):
         # The DB supplies a bounded inert archive preview. Never send this
         # source straight into Qt; rebuild from an allowlist first.
         html_source = item.get("html_inert")
-        formatted = safe_mail_html(html_source)
+        formatted = safe_mail_html(html_source, allow_remote_images=allow_remote_images)
         body = (formatted if formatted else
                 escape(plain, quote=True).replace("\r\n", "\n").replace(
                     "\r", "\n").replace("\n", "<br>"))
@@ -344,7 +346,10 @@ def format_mail_message_cards(messages):
             notices.append("HTML preview only — original message is stored "
                            "in NEMORYTH; showing the first 20,000 characters")
         if formatted:
-            notices.append("HTTPS images load inline; links remain inactive. External image servers may detect opens.")
+            if allow_remote_images:
+                notices.append("External images loaded by request; image servers may detect opens. Links remain inactive.")
+            else:
+                notices.append("External images blocked. Use Load external images to display them. Links remain inactive.")
         if item.get("archive_state") == "incomplete":
             notices.append("Archive incomplete — source verification required")
         try:
@@ -714,6 +719,13 @@ class MailInboxView(QWidget):
         self.full_text_button.clicked.connect(self._request_full_text)
         self.full_text_button.hide()
         reply_toolbar.addWidget(self.full_text_button)
+        self.load_images_button = QPushButton("Load external images")
+        self.load_images_button.setObjectName("enkyronMailLoadExternalImages")
+        self.load_images_button.setToolTip(
+            "Only after consent. Remote image servers can detect email opens and your IP address.")
+        self.load_images_button.clicked.connect(self._load_external_images)
+        self.load_images_button.hide()
+        reply_toolbar.addWidget(self.load_images_button)
         self.crm_link_button = QPushButton("Link to CRM…")
         self.crm_link_button.setObjectName("enkyronMailLinkCRM")
         self.crm_link_button.setToolTip(
@@ -2292,12 +2304,40 @@ class MailInboxView(QWidget):
         self.reply_add_people.setText("Add people…")
         self.reply_target.clear()
 
+    def _load_external_images(self):
+        """Allow external images only after confirmation for this conversation."""
+        if (not self.load_images_button.isVisible()
+                or not isinstance(self._attachment_snapshot, list)
+                or not self._attachment_snapshot):
+            return
+        consent = QMessageBox.question(
+            self, "Load external images?",
+            "External image servers may learn your IP address and that this email "
+            "was opened. Load them for this conversation only?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if consent != QMessageBox.StandardButton.Yes:
+            return
+        self.body.reset_remote_images()
+        self.body.allow_remote_images = True
+        self.body.setHtml(format_mail_message_cards(
+            self._attachment_snapshot, allow_remote_images=True))
+        self.load_images_button.hide()
+        self.meta.setText(
+            "{} message(s) · External images allowed for this conversation".format(
+                len(self._attachment_snapshot)))
+
     def show_messages(self, mailbox, thread_id, messages):
         """Render bounded HTML and HTTPS inline images; no active content."""
         if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id or not isinstance(messages, list)):
             return False
         self._attachment_snapshot = messages[:50]
+        self.load_images_button.setVisible(any(
+            isinstance(m, dict) and isinstance(m.get("html_inert"), str)
+            and "<img" in m["html_inert"].lower()
+            for m in messages[:50]))
         self._attachment_previous = None
         self.attachment_back_button.hide()
         self.attachment_image_label.clear()
@@ -2310,7 +2350,7 @@ class MailInboxView(QWidget):
         else:
             self.body.reset_remote_images()
             self.body.setPlainText("No messages in this conversation.")
-        self.meta.setText("{} message(s) · Safe mail preview · HTTPS images may load automatically".format(
+        self.meta.setText("{} message(s) · Safe mail preview · Remote images blocked".format(
             len(messages[:50])))
         self.reader_stack.setCurrentIndex(1)
         self.reply_button.setText("Reply")

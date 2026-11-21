@@ -39,7 +39,10 @@ test('manual report writes a single scoped immutable receipt in one transaction'
   const result=await recordManualSend(pool,request,'ci-operator',{uuid:()=>'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'});
   assert.equal(result.draft_id,id);
   assert.deepEqual(calls.map(x=>x.sql.match(/^[A-Z]+/)[0]),
-    ['BEGIN','SELECT','SELECT','INSERT','COMMIT','RELEASE']);
+    ['BEGIN','SELECT','SELECT','INSERT','SAVEPOINT','SELECT',
+     'RELEASE','COMMIT','RELEASE']);
+  assert.equal(calls[4].sql,'SAVEPOINT crm_outreach_followup');
+  assert.equal(calls[6].sql,'RELEASE SAVEPOINT crm_outreach_followup');
   const receipt=calls[3];
   assert.equal(receipt.params[1],'local:ci-operator');
   assert.equal(receipt.params[7],'buyer@example.invalid');

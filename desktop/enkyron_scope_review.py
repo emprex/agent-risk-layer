@@ -1,4 +1,6 @@
 """Native ENKYRON technical scope review: documentary records, never test execution."""
+import weakref
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel,
@@ -11,7 +13,18 @@ class ScopeReviewDialog(QDialog):
     """Append-only review tied to the exact frozen canonical assessment."""
 
     def __init__(self, parent, bridge, ticket_id, on_saved=None):
-        super().__init__(parent)
+        # Standalone, modeless operator form: unlike a parented dialog, it
+        # can move/minimise independently of the ENKYRON workstation.
+        flags = (Qt.WindowType.Window |
+                 Qt.WindowType.WindowMinMaxButtonsHint |
+                 Qt.WindowType.WindowCloseButtonHint)
+        super().__init__(None, flags)
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setModal(False)
+        self.setObjectName("enkyronScopeReviewWindow")
+        # Keep only a weak reference for the ticket-lifetime check: the
+        # workspace itself owns this dialog in scope_review_dialog.
+        self._owner_ref = weakref.ref(parent)
         self.bridge = bridge
         self.ticket_id = ticket_id
         self.on_saved = on_saved
@@ -99,7 +112,9 @@ class ScopeReviewDialog(QDialog):
         layout.addLayout(actions)
 
     def same_ticket(self):
-        return self.isVisible() and self.parent().current_id == self.ticket_id
+        owner = self._owner_ref()
+        return (self.isVisible() and owner is not None
+                and getattr(owner, "current_id", None) == self.ticket_id)
 
     def load(self):
         self.save.setEnabled(False)
@@ -196,13 +211,12 @@ class ScopeReviewDialog(QDialog):
                     ". Reload the current review before retrying."
                 )
                 return
-            self.status.setText(
-                "Recorded technical scope revision {} for {}. "
-                "No tests authorised; no Master or control verdict changed."
-                .format(result["revision"], result["snapshot_id"])
-            )
+            # The bridge returns saved=True only after its PostgreSQL COMMIT.
+            # Show the receipt in the main ticket and close this edit form;
+            # reopening is an explicit choice, not an invitation to duplicate
+            # an append-only scope revision.
             if callable(self.on_saved):
                 self.on_saved(result)
-            self.load()
+            self.accept()
 
         self.bridge.call("ticket-scope-save", payload=payload, callback=recorded)

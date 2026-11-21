@@ -146,6 +146,65 @@ async function ticketDetails(pool, id) {
     allowed_statuses: ticket.archived_at ? [] : TICKET_TRANSITIONS[ticket.status] || [] };
 }
 
+async function archivedAssessmentReport(pool, ticketId, actor) {
+  // LA-03: read the existing immutable PostgreSQL final report only.
+  // Local UNIX operator identity is supplied by the bridge, never by the UI.
+  const id = requireTicketId(ticketId);
+  const table = (await pool.query(
+    "SELECT to_regclass('public.enkyron_assessment_final_reports') AS name"
+  )).rows[0];
+  if (!table?.name) return {available:false,reason:'No final report archive is installed'};
+
+  // Scope and operator authorisation are rechecked server side.
+  // No report ID or filesystem path comes from the UI.
+  const rows = (await pool.query([
+    "SELECT r.report_id,r.ticket_id,r.project_id,r.assessment_id,",
+    "r.ticket_number,r.source_commit,r.file_name,r.mime_type,",
+    "r.confidentiality,r.document_kind,r.content_sha256,",
+    "r.byte_length,r.content,r.archived_by,r.archived_at",
+    "FROM enkyron_assessment_final_reports r",
+    "JOIN arl_workbench_tickets t ON t.id=r.ticket_id",
+    "JOIN security_projects p ON p.id=r.project_id",
+    "WHERE t.id=$1 AND t.target_kind='git'",
+    "AND t.linked_project_id=r.project_id",
+    "AND t.linked_assessment_id=r.assessment_id",
+    "AND t.ticket_number=r.ticket_number",
+    "AND p.agent_assessment_id=r.assessment_id",
+    "AND (t.assigned_to=$2 OR t.assessor_name=$2)",
+    "ORDER BY r.archived_at DESC,r.report_id DESC LIMIT 1"
+  ].join('\n'),[id,actor])).rows;
+  const row=rows[0];
+  if (!row) return {available:false,reason:'No accessible archived report for this ticket'};
+
+  const bytes=row.content;
+  const length=Number(row.byte_length);
+  if (!Buffer.isBuffer(bytes) || !Number.isSafeInteger(length) ||
+      length<1000 || length>25000000 || bytes.length!==length ||
+      !bytes.subarray(0,5).equals(Buffer.from('%PDF-')) ||
+      row.mime_type!=='application/pdf' ||
+      row.confidentiality!=='confidential' ||
+      row.document_kind!=='final_security_assessment_report' ||
+      !/^rpt_[a-f0-9]{32}$/.test(row.report_id||'') ||
+      !/^[a-f0-9]{40}$/.test(row.source_commit||'') ||
+      !/^[a-f0-9]{64}$/.test(row.content_sha256||'') ||
+      typeof row.file_name!=='string' || row.file_name.length>255 ||
+      row.file_name.length<4 ||
+      crypto.createHash('sha256').update(bytes).digest('hex')!==row.content_sha256) {
+    throw new Error('Archived report integrity check failed');
+  }
+  return {
+    available:true,report_id:row.report_id,ticket_id:row.ticket_id,
+    project_id:row.project_id,assessment_id:row.assessment_id,
+    ticket_number:row.ticket_number,source_commit:row.source_commit,
+    file_name:row.file_name,mime_type:row.mime_type,
+    confidentiality:row.confidentiality,byte_length:length,
+    content_sha256:row.content_sha256,archived_by:row.archived_by,
+    archived_at:row.archived_at,integrity:'sha256_verified',
+    // Bounded one-shot native IPC; no HTTP, stdout file path or DB mutation.
+    content_base64:bytes.toString('base64')
+  };
+}
+
 async function masterDetails(pool, ticketId) {
   const { ticket } = await ticketDetails(pool, ticketId);
   if (!ticket.linked_project_id || !ticket.linked_assessment_id) {
@@ -253,7 +312,7 @@ async function evidenceIntegrity(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'tickets-mine', 'tickets-mine-archived', 'ticket', 'master', 'master-init-preview', 'master-init-record', 'note', 'evidence-register', 'evidence-integrity-read', 't05-read', 't05-preview', 't05-record', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-actions', 'ticket-action-save', 'ticket-scope-review', 'ticket-scope-save', 'assessment-preflight', 'assessment-link', 'assessment-context', 'control-queue', 'control-detail', 'control-applicability-save', 'source-review', 'control-preparation', 'static-candidate-collect', 'batch-source-replay', 'static-batch-preview', 'static-batch-commit', 'pilot-lab-handoff', 'static-candidate-record', 'crm-prospects', 'crm-companies', 'psa-board', 'psa-create-mission', 'psa-add-work-item', 'psa-complete-work-item', 'psa-log-time', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'mail-unsent-drafts', 'crm-mail-recipients', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-status', 'mail-threads', 'mail-messages', 'mail-reply-preview', 'mail-thread-send-review', 'mail-sent', 'mail-professional-review', 'mail-send-draft', 'mail-reply-draft', 'mail-link-sent', 'mail-provider-status', 'mail-local-folders', 'mail-local-folder-create', 'mail-local-list', 'mail-local-company', 'mail-local-company-link', 'mail-local-ticket-links', 'mail-document-list', 'mail-document-links', 'mail-local-ticket-link', 'mail-ticket-conversations', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-archive-sync', 'mail-archive-status','mail-attachment-options','mail-attachment-quarantine','mail-attachment-preview','mail-attachment-binary', 'mail-local-full-text', 'mail-local-messages','mail-thread-conversation', 'mail-local-fetch', 'mail-local-move', 'mail-record-move', 'mail-filed-records', 'mail-trash-clear', 'mail-local-read', 'mail-local-labels', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-list', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'calendar-task-read', 'calendar-task-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page', 'crm-company-dossier', 'crm-company-followups', 'crm-company-followups-upcoming', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-sow-sources', 'crm-sow-draft', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'operator-profile', 'operator-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record', 'crm-invoice-issue-preflight', 'crm-invoice-issue', 'crm-invoices-issued', 'crm-invoice-issued', 'crm-invoice-payment-record', 'crm-quote-issue-preflight', 'crm-quote-evidence-review', 'crm-quote-evidence-record', 'crm-quote-external-report', 'crm-quote-external-record', 'crm-service-catalog-list', 'crm-service-catalog-read', 'crm-service-catalog-create', 'crm-service-catalog-update', 'crm-company-history', 'crm-company-proposal-readiness', 'crm-company-proposal-create', 'crm-company-proposal-versions', 'crm-company-proposal-revise', 'mail-document-link', 'mail-document-candidates'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'tickets-mine', 'tickets-mine-archived', 'ticket', 'assessment-report-open', 'master', 'master-init-preview', 'master-init-record', 'note', 'evidence-register', 'evidence-integrity-read', 't05-read', 't05-preview', 't05-record', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-actions', 'ticket-action-save', 'ticket-scope-review', 'ticket-scope-save', 'assessment-preflight', 'assessment-link', 'assessment-context', 'control-queue', 'control-detail', 'control-applicability-save', 'source-review', 'control-preparation', 'static-candidate-collect', 'batch-source-replay', 'static-batch-preview', 'static-batch-commit', 'pilot-lab-handoff', 'static-candidate-record', 'crm-prospects', 'crm-companies', 'psa-board', 'psa-create-mission', 'psa-add-work-item', 'psa-complete-work-item', 'psa-log-time', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'mail-unsent-drafts', 'crm-mail-recipients', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-status', 'mail-threads', 'mail-messages', 'mail-reply-preview', 'mail-thread-send-review', 'mail-sent', 'mail-professional-review', 'mail-send-draft', 'mail-reply-draft', 'mail-link-sent', 'mail-provider-status', 'mail-local-folders', 'mail-local-folder-create', 'mail-local-list', 'mail-local-company', 'mail-local-company-link', 'mail-local-ticket-links', 'mail-document-list', 'mail-document-links', 'mail-local-ticket-link', 'mail-ticket-conversations', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-archive-sync', 'mail-archive-status','mail-attachment-options','mail-attachment-quarantine','mail-attachment-preview','mail-attachment-binary', 'mail-local-full-text', 'mail-local-messages','mail-thread-conversation', 'mail-local-fetch', 'mail-local-move', 'mail-record-move', 'mail-filed-records', 'mail-trash-clear', 'mail-local-read', 'mail-local-labels', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-list', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'calendar-task-read', 'calendar-task-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page', 'crm-company-dossier', 'crm-company-followups', 'crm-company-followups-upcoming', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-sow-sources', 'crm-sow-draft', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'operator-profile', 'operator-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record', 'crm-invoice-issue-preflight', 'crm-invoice-issue', 'crm-invoices-issued', 'crm-invoice-issued', 'crm-invoice-payment-record', 'crm-quote-issue-preflight', 'crm-quote-evidence-review', 'crm-quote-evidence-record', 'crm-quote-external-report', 'crm-quote-external-record', 'crm-service-catalog-list', 'crm-service-catalog-read', 'crm-service-catalog-create', 'crm-service-catalog-update', 'crm-company-history', 'crm-company-proposal-readiness', 'crm-company-proposal-create', 'crm-company-proposal-versions', 'crm-company-proposal-revise', 'mail-document-link', 'mail-document-candidates'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
@@ -274,7 +333,7 @@ async function main() {
   if (command === 'crm-csv-export-history') requireCompanyId(arg);
   if (['crm-proposal','crm-proposal-lines','crm-proposal-export','crm-sow-sources','crm-sow-draft','crm-tax-reviews','crm-buyer-review','crm-commercial-terms','crm-internal-review','crm-billing-preparation','crm-invoice-draft','crm-invoice-prepare','crm-invoice-issue-review','crm-invoice-issue-preflight','crm-invoice-issued','crm-quote-issue-preflight','crm-quote-evidence-review','crm-quote-external-report','crm-service-catalog-read'].includes(command) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM proposal ID');
   if (command === 'crm-ticket-company') requireTicketId(arg);
-  if (['ticket', 'master', 'master-init-preview', 'ticket-actions', 'ticket-scope-review', 'assessment-context', 'control-queue', 'source-review', 'control-preparation', 'static-candidate-collect', 'batch-source-replay', 'static-batch-preview'].includes(command)) requireTicketId(arg);
+  if (['ticket', 'assessment-report-open', 'master', 'master-init-preview', 'ticket-actions', 'ticket-scope-review', 'assessment-context', 'control-queue', 'source-review', 'control-preparation', 'static-candidate-collect', 'batch-source-replay', 'static-batch-preview'].includes(command)) requireTicketId(arg);
   if (command === 'crm-prospect-review') requireProspectId(arg);
   if (command === 'crm-prospect-opportunity') requireProspectId(arg);
   if (command === 'crm-activity-timeline') requireOpportunityId(arg);
@@ -587,6 +646,7 @@ async function main() {
       command === 'crm-edit-contact' ? await updateContact(pool, payload, os.userInfo().username) :
       command === 'crm-record-changes' ? await listRecordChanges(pool, arg.split(':',1)[0], arg.slice(arg.indexOf(':')+1), os.userInfo().username) :
       command === 'ticket' ? await ticketDetails(pool, arg) :
+      command === 'assessment-report-open' ? await archivedAssessmentReport(pool,arg,os.userInfo().username) :
       command === 'ticket-actions' ? await listTicketActions(pool, arg) :
       command === 'ticket-scope-review' ? await readTicketScopeReview(pool, arg, os.userInfo().username) :
       command === 'ticket-scope-save' ? await recordTicketScopeReview(pool, payload, os.userInfo().username) :

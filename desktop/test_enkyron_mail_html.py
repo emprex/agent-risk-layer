@@ -7,9 +7,11 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QTextBrowser
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QTextDocument
 
 from desktop.enkyron_mail_html import safe_mail_html
-from desktop.enkyron_mail_workspace import format_mail_message_cards
+from desktop.enkyron_mail_workspace import format_mail_message_cards, InlineMailBrowser
 
 
 class InertHTMLMailTests(unittest.TestCase):
@@ -70,6 +72,24 @@ class InertHTMLMailTests(unittest.TestCase):
         self.assertIn("Register", safe)
         self.assertIn("https://example.org/register", safe)
         self.assertIn("[Image blocked: Event flyer]", safe)
+
+    def test_images_are_blocked_until_explicit_opt_in(self):
+        source = '<p>Hello <img src="https://images.example.invalid/pixel" alt="Tracking pixel"></p>'
+        blocked = safe_mail_html(source)
+        self.assertIn("[Image blocked: Tracking pixel]", blocked)
+        self.assertNotIn("<img", blocked)
+        permitted = safe_mail_html(source, allow_remote_images=True)
+        self.assertIn('<img src="https://images.example.invalid/pixel" alt="Tracking pixel">',
+                      permitted)
+        app = QApplication.instance() or QApplication([])
+        browser = InlineMailBrowser()
+        try:
+            self.assertFalse(browser.allow_remote_images)
+            self.assertIsNone(browser.loadResource(
+                QTextDocument.ResourceType.ImageResource,
+                QUrl("https://images.example.invalid/pixel")))
+        finally:
+            browser.close()
 
     def test_html_parser_bounds_and_plain_text_fallback(self):
         self.assertEqual(safe_mail_html(None), "")

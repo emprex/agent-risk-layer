@@ -5,6 +5,8 @@ import { getSeveritySemantics } from './risk-knowledge-core.js';
 import { runtimeApprovalActionDigest } from './access-control.js';
 import { effectiveEvidenceTrust, evidenceTrustRows } from './control-evidence-effective-trust.js';
 import { ARCHITECTURE_FACTS, suggestControls, suggestionProfile } from './control-suggestions.js';
+import { isLocalCliModeEnabled } from './agent/local-cli-mode.mjs';
+import { LOCAL_OPERATOR_FULL_QUEUE } from './agent/local-operator-full-queue.mjs';
 
 const VIEW_ROLES = new Set(['viewer','analyst','developer','admin','owner']);
 const RECORD_ROLES = new Set(['analyst','developer','admin','owner']);
@@ -846,9 +848,12 @@ export async function getDerivedDeploymentReadiness({ projectId, userId } = {}) 
   };
 }
 
-export async function getControlIntelligence({ projectId, userId, limit = 25, offset = 0, status = '' }) {
+export async function getControlIntelligence({ projectId, userId, limit = 25, offset = 0, status = '', ...options }) {
   const access = await requireAccess(projectId, userId, VIEW_ROLES);
-  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 25));
+  const privateOperatorQueue = isLocalCliModeEnabled() &&
+    options[LOCAL_OPERATOR_FULL_QUEUE] === true &&
+    Number(limit) === 108 && Number(offset) === 0 && status === '';
+  const safeLimit = Math.max(1, Math.min(privateOperatorQueue ? 108 : 50, Number(limit) || 25));
   const safeOffset = Math.max(0, Number(offset) || 0);
   const snapshot = await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1").get(access.project.workspace_id, projectId);
   if (!snapshot) return emptyGraph(access, safeLimit, safeOffset);

@@ -1,17 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
+import { delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const desktopPath = fileURLToPath(new URL('../desktop/', import.meta.url));
+const qtTests = new Set([
+  'test_enkyron_followup_window_qt.py',
+  'test_enkyron_mail_html.py',
+  'test_enkyron_mail_ux.py'
+]);
+const headlessTests = readdirSync(new URL('../desktop/', import.meta.url))
+  .filter(name => /^test_.*\.py$/.test(name) && !qtTests.has(name))
+  .sort()
+  .map(name => 'desktop.' + name.slice(0, -3));
 
 test('Python desktop Operator passes headless read-only regressions', t => {
   const result = spawnSync(
     'python3',
-    ['-m', 'unittest', 'discover', '-s', 'desktop', '-p', 'test_*.py'],
+    ['-m', 'unittest', ...headlessTests],
     {
       cwd: root,
-      env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1',
+             PYTHONPATH: [desktopPath, process.env.PYTHONPATH].filter(Boolean).join(delimiter) },
       encoding: 'utf8',
       timeout: 20_000
     }
@@ -21,7 +34,7 @@ test('Python desktop Operator passes headless read-only regressions', t => {
     return;
   }
   assert.equal(result.status, 0, result.stderr || result.error?.message);
-  assert.match(result.stderr, /OK\s*$/);
+  assert.match(result.stderr, /\bOK(?: \(skipped=\d+\))?\s*$/);
 });
 
 test('Python desktop Operator prints diagnostics without a graphical display', t => {

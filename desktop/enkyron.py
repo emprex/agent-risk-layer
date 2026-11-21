@@ -344,7 +344,7 @@ class DesktopBridge:
         # return a structured refusal before the Qt supervisor terminates it.
         timer.start(95000 if action in ("pilot-lab-run", "pilot-lab-handoff", "operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "static-candidate-collect", "static-candidate-record", "batch-source-replay", "static-batch-preview", "static-batch-commit", "master-init-preview", "master-init-record") else
                     60000 if action in ("evidence-summary", "evidence-pack", "mail-attachment-quarantine", "mail-attachment-preview") else
-                    45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies", "mail-attachment-binary", "mail-thread-conversation") else
+                    45000 if action in ("assessment-report-open", "crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies", "mail-attachment-binary", "mail-thread-conversation") else
                     15000)
 
 
@@ -1005,6 +1005,21 @@ class EnkyronWindow(QMainWindow):
         self.engine_button.setEnabled(False)
         self.engine_button.clicked.connect(self.inspect_engine)
         engine_l.addWidget(self.engine_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.archived_report_button = QPushButton("Open archived final report…")
+        self.archived_report_button.setObjectName("enkyronOpenArchivedAssessmentReport")
+        self.archived_report_button.setToolTip(
+            "Read and verify the existing final PDF archived for this assessment")
+        self.archived_report_button.setEnabled(False)
+        self.archived_report_button.clicked.connect(self.open_archived_assessment_report)
+        engine_l.addWidget(self.archived_report_button,
+                           alignment=Qt.AlignmentFlag.AlignLeft)
+        self.archived_report_meta = QLabel("No archived final report opened.")
+        self.archived_report_meta.setObjectName("enkyronArchivedAssessmentReportMeta")
+        self.archived_report_meta.setTextFormat(Qt.TextFormat.PlainText)
+        self.archived_report_meta.setWordWrap(True)
+        self.archived_report_meta.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        engine_l.addWidget(self.archived_report_meta)
         self.engine_view = make_text_area()
         self.engine_view.setPlaceholderText("Select a linked Git ticket, then inspect.")
         engine_l.addWidget(self.engine_view, 1)
@@ -3269,7 +3284,7 @@ class EnkyronWindow(QMainWindow):
             "thread_id": thread_id,
         }, callback=options_loaded)
 
-    def _open_mail_pdf_with_system(self, filename, raw):
+    def _open_mail_pdf_with_system(self, filename, raw, *, prefix="enkyron-mail-pdf-"):
         """Open PDF in Debian's configured viewer using private runtime storage."""
         runtime = Path(
             os.environ.get("XDG_RUNTIME_DIR")
@@ -3286,7 +3301,7 @@ class EnkyronWindow(QMainWindow):
                 raise OSError("No private Debian session directory")
 
             fd, path = tempfile.mkstemp(
-                prefix="enkyron-mail-pdf-",
+                prefix=prefix,
                 suffix=".pdf",
                 dir=str(runtime)
             )
@@ -6527,6 +6542,10 @@ class EnkyronWindow(QMainWindow):
         if not self.bridge.shutdown():
             event.ignore()
             return
+        # Scope review is now an unparented, movable operator window.
+        # Close it with ENKYRON to avoid an orphaned sensitive review form.
+        if self.scope_review_dialog is not None:
+            self.scope_review_dialog.close()
         super().closeEvent(event)
 
     def save_mission_board_action(self, action, details):
@@ -9150,8 +9169,11 @@ class EnkyronWindow(QMainWindow):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
         if self.crm_dossier_company_editor is not None:
-            current = {key: field.text() for key, field in
-                       self.crm_dossier_company_inputs.items()}
+            current = {
+                key: (field.currentText() if isinstance(field, QComboBox)
+                      else field.text())
+                for key, field in self.crm_dossier_company_inputs.items()
+            }
             if (current != self.crm_dossier_company_initial or
                     self.crm_dossier_company_reason.toPlainText().strip()):
                 pending.append("company details")
@@ -21043,9 +21065,21 @@ class EnkyronWindow(QMainWindow):
                 dialog.activateWindow()
                 return
             dialog.reject()
-        dialog = ScopeReviewDialog(self, self.bridge, ticket_id)
+        def scope_recorded(result):
+            # A verified, committed revision is a receipt, not an active-test grant.
+            if self.current_id == ticket_id:
+                self.status.setText(
+                    "Technical scope review recorded — revision {}. "
+                    "Active tests remain NOT AUTHORISED."
+                    .format(result["revision"])
+                )
+
+        dialog = ScopeReviewDialog(
+            self, self.bridge, ticket_id, on_saved=scope_recorded
+        )
         self.scope_review_dialog = dialog
-        dialog.open()
+        # show() preserves NonModal; QDialog.open() would re-enable modality.
+        dialog.show()
         dialog.load()
 
     def open_ticket_triage(self):
@@ -21709,7 +21743,9 @@ class EnkyronWindow(QMainWindow):
         self.master_create.setVisible(False)
         self.master_meta.setText("Master dossier not loaded.")
         self.engine_view.clear()
+        self.archived_report_meta.setText("No archived final report opened.")
         self.engine_button.setEnabled(False)
+        self.archived_report_button.setEnabled(False)
         self.control_review_button.setEnabled(False)
         self.static_collect_button.setEnabled(False)
         self.batch_replay_button.setEnabled(False)
@@ -21910,6 +21946,7 @@ class EnkyronWindow(QMainWindow):
                 and bool(ticket.get("linked_project_id"))
                 and bool(ticket.get("linked_assessment_id"))
             )
+            self.archived_report_button.setEnabled(self.engine_button.isEnabled())
             self.evidence_button.setEnabled(self.engine_button.isEnabled())
             self.control_review_button.setEnabled(
                 self.engine_button.isEnabled()
@@ -22050,6 +22087,112 @@ class EnkyronWindow(QMainWindow):
             )
             self.master_create.setText("Confirm and record revision 1…")
         self.bridge.call("master-init-preview", ticket_id, callback=prepared)
+
+    def open_archived_assessment_report(self):
+        """LA-03: open an existing verified PDF without modifying the dossier."""
+        ticket_id = self.current_id
+        ticket = self.current_ticket or {}
+        if (not ticket_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")):
+            return
+        expected_project = ticket["linked_project_id"]
+        expected_assessment = ticket["linked_assessment_id"]
+        expected_number = ticket.get("ticket_number")
+        self.archived_report_button.setEnabled(False)
+        self.status.setText("Retrieving the existing final report from PostgreSQL…")
+
+        def received(data, error):
+            if self.current_id != ticket_id:
+                return  # Do not show a previous client's report after switching tickets.
+            self.archived_report_button.setEnabled(True)
+            if error:
+                self.status.setText("Archive retrieval refused; nothing opened.")
+                self.archived_report_meta.setText(
+                    "Archive retrieval or verification failed; nothing opened.")
+                QMessageBox.warning(
+                    self, "Archived assessment report",
+                    "The archive could not be safely retrieved. Nothing was opened."
+                )
+                return
+            if not isinstance(data, dict) or not data.get("available"):
+                self.status.setText("No accessible archived final report for this ticket.")
+                self.archived_report_meta.setText(
+                    "No accessible archived report for this ticket.")
+                QMessageBox.information(
+                    self, "Archived assessment report",
+                    "No archived final report is available for this ticket."
+                )
+                return
+            try:
+                if (data.get("ticket_id") != ticket_id
+                        or data.get("project_id") != expected_project
+                        or data.get("assessment_id") != expected_assessment
+                        or data.get("ticket_number") != expected_number
+                        or data.get("confidentiality") != "confidential"
+                        or data.get("mime_type") != "application/pdf"
+                        or data.get("integrity") != "sha256_verified"
+                        or not re.fullmatch(r"rpt_[a-f0-9]{32}",
+                                            str(data.get("report_id") or ""))
+                        or not re.fullmatch(r"[a-f0-9]{40}",
+                                            str(data.get("source_commit") or ""))
+                        or not re.fullmatch(r"[a-f0-9]{64}",
+                                            str(data.get("content_sha256") or ""))):
+                    raise ValueError("Archive identity mismatch")
+                content64 = data.get("content_base64")
+                length = data.get("byte_length")
+                if (not isinstance(content64, str)
+                        or len(content64) > 33333336
+                        or type(length) is not int
+                        or not 1000 <= length <= 25000000):
+                    raise ValueError("Archive size mismatch")
+                raw = base64.b64decode(content64, validate=True)
+                if (len(raw) != length or not raw.startswith(b"%PDF-")
+                        or hashlib.sha256(raw).hexdigest()
+                        != data["content_sha256"]):
+                    raise ValueError("Archive SHA-256 mismatch")
+            except (ValueError, TypeError, KeyError, base64.binascii.Error):
+                self.status.setText("Archived report verification failed. Nothing opened.")
+                self.archived_report_meta.setText(
+                    "Archived report failed integrity or scope verification.")
+                QMessageBox.warning(
+                    self, "Archived assessment report",
+                    "The archived PDF failed its identity or integrity check."
+                )
+                return
+
+            if not self._open_mail_pdf_with_system(
+                    data.get("file_name"), raw,
+                    prefix="enkyron-assessment-report-"):
+                self.status.setText("Verified PDF could not open in the Debian viewer.")
+                self.archived_report_meta.setText(
+                    "Archived report verified, but the local PDF viewer is unavailable.")
+                QMessageBox.warning(
+                    self, "Archived assessment report",
+                    "The PDF was verified, but the local viewer could not open it."
+                )
+                return
+            self.archived_report_meta.setText(
+                "Archived report: {}\nReport ID: {}\nArchived: {} by {}\n"
+                "Source commit: {}\nSize: {} bytes\n"
+                "SHA-256 (matching stored digest): {}\n"
+                "Read-only consultation; not a security certification.".format(
+                    data.get("file_name") or "final assessment report",
+                    data["report_id"], display_date(data.get("archived_at")),
+                    data.get("archived_by") or "unknown",
+                    data["source_commit"], length, data["content_sha256"]
+                )
+            )
+            self.status.setText(
+                "Archived final report opened · SHA-256 verified · "
+                "{} bytes · recorded by {} on {} · source {}".format(
+                    length, data.get("archived_by") or "unknown",
+                    display_date(data.get("archived_at")),
+                    data["source_commit"][:12]
+                )
+            )
+
+        self.bridge.call("assessment-report-open", ticket_id, callback=received)
 
     def inspect_engine(self):
         """Inspect the canonical current Git snapshot even before a Master is written."""

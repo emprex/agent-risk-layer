@@ -76,7 +76,7 @@ class PipelineCompanyUpdateSmoke(unittest.TestCase):
         self.assertTrue(dialog.isVisible())
         displayed = "\n".join(item.text() for item in dialog.findChildren(QLabel))
         self.assertIn("CRM company", displayed)
-        self.assertIn("Local owner: synthetic-operator", displayed)
+        self.assertIn("Commercial owner: synthetic-operator", displayed)
         window.crm_followup_stage.setCurrentIndex(
             window.crm_followup_stage.findData("qualified")
         )

@@ -104,17 +104,16 @@ export function shapeControlPreparation({scope,rows,items}){
   };
 }
 
-export async function prepareTicketControlDossiers(pool,ticketId,{
-  scopeReader=readLinkedAssessmentContext,
-  queueReader=null
-}={}){
+/**
+ * Construct checklists from a previously verified scope and canonical queue.
+ * This does not establish authority on its own: both public entrypoints
+ * verify the frozen target again AFTER this read-only construction.
+ */
+export async function prepareBoundControlDossiers(pool,ticketId,scope,queue){
   if(typeof ticketId!=='string'||!UUID.test(ticketId))
     refusal('exact linked ticket required');
-  const scope=await scopeReader(pool,ticketId);
-  const {readTicketControlQueue}=await import('./enkyron-ticket-controls.mjs');
-  const queue=await (queueReader||readTicketControlQueue)(pool,ticketId);
-  if(queue?.total!==108||queue?.snapshot_id!==scope.snapshot_id||
-     queue?.project_id!==scope.project_id||queue?.target_sha!==scope.target_sha)
+  if(queue?.total!==108||queue?.snapshot_id!==scope?.snapshot_id||
+     queue?.project_id!==scope?.project_id||queue?.target_sha!==scope?.target_sha)
     refusal('canonical workflow queue is not bound to the current ticket snapshot');
   // Only existing, already-evaluated KB controls are joined. No synthetic
   // check definition, inferred rule mapping, or assessment record is inserted.
@@ -133,14 +132,28 @@ export async function prepareTicketControlDossiers(pool,ticketId,{
     WHERE c.project_id=$1 AND c.system_snapshot_id=$2
     ORDER BY c.entry_id
   `,[scope.project_id,scope.snapshot_id]);
-  const rows=result?.rows;
-  const proposal=shapeControlPreparation({scope,rows,items:queue.items});
+  return {...shapeControlPreparation({scope,rows:result?.rows,items:queue.items}),
+    ticket_id:ticketId};
+}
+
+export async function prepareTicketControlDossiers(pool,ticketId,{
+  scopeReader=readLinkedAssessmentContext,
+  queueReader=null
+}={}){
+  if(typeof ticketId!=='string'||!UUID.test(ticketId))
+    refusal('exact linked ticket required');
+  const scope=await scopeReader(pool,ticketId);
+  const {readTicketControlQueue}=await import('./enkyron-ticket-controls.mjs');
+  const queue=await (queueReader||readTicketControlQueue)(pool,ticketId);
+  const proposal=await prepareBoundControlDossiers(pool,ticketId,scope,queue);
   const after=await scopeReader(pool,ticketId);
   if(after.snapshot_id!==scope.snapshot_id ||
      after.target_sha!==scope.target_sha ||
-     after.project_id!==scope.project_id)
+     after.project_id!==scope.project_id ||
+     after.assessment_id!==scope.assessment_id ||
+     after.target_reference!==scope.target_reference)
     refusal('assessment changed during preparation; reopen the ticket');
-  return {...proposal,ticket_id:ticketId};
+  return proposal;
 }
 
 /**
@@ -153,6 +166,13 @@ export async function readPreparedTicketControlQueue(pool,ticketId,{
   scopeReader=readLinkedAssessmentContext
 }={}){
   const {readTicketControlQueue}=await import('./enkyron-ticket-controls.mjs');
+  if(queueReader===null && scopeReader===readLinkedAssessmentContext){
+    // The normal dialog path reuses one canonical graph and scope throughout
+    // checklist preparation, then revalidates the exact frozen target once.
+    // No caching across requests, no loss of snapshot/change detection.
+    return readTicketControlQueue(pool,ticketId,{withPreparation:true});
+  }
+  // Explicit test injection retains the independently guarded preparation API.
   const queue=await (queueReader||readTicketControlQueue)(pool,ticketId);
   const preparation=await prepareTicketControlDossiers(pool,ticketId,{
     scopeReader,queueReader:async()=>queue
