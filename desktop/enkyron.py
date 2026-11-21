@@ -43,6 +43,7 @@ if __package__:
     from .enkyron_pilot_lab import PilotLabPanel
     from .enkyron_control_review import ControlReviewDialog
     from .enkyron_scope_review import ScopeReviewDialog
+    from .enkyron_t05_dialog import T05QualificationDialog
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -56,6 +57,7 @@ else:
     from enkyron_pilot_lab import PilotLabPanel
     from enkyron_control_review import ControlReviewDialog
     from enkyron_scope_review import ScopeReviewDialog
+    from enkyron_t05_dialog import T05QualificationDialog
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -1239,6 +1241,11 @@ class EnkyronWindow(QMainWindow):
         self.record_integrity_button.setEnabled(False)
         self.record_integrity_button.clicked.connect(self.inspect_record_integrity)
         toolbar.addWidget(self.record_integrity_button)
+        self.t05_review_button = QPushButton("Qualify source evidence…")
+        self.t05_review_button.setObjectName("enkyronT05CandidateQualification")
+        self.t05_review_button.setEnabled(False)
+        self.t05_review_button.clicked.connect(self.open_t05_qualification)
+        toolbar.addWidget(self.t05_review_button)
         toolbar.addStretch()
         ledger_l.addLayout(toolbar)
         self.records_notice = QLabel("Select a linked assessment ticket.")
@@ -23163,6 +23170,7 @@ class EnkyronWindow(QMainWindow):
             self.record_control.setValue(number)
 
     def invalidate_records(self, _number):
+        self.t05_review_button.setEnabled(False)
         if self.current_id and self.current_ticket:
             self.active_control_by_ticket[self.current_id] = self.record_control.value()
         self.records_seq += 1
@@ -23292,6 +23300,7 @@ class EnkyronWindow(QMainWindow):
 
     def show_record_details(self):
         self.record_integrity_button.setEnabled(False)
+        self.t05_review_button.setEnabled(False)
         if self.record_views.currentIndex() != 0:
             return
         rows = self.records_table.selectionModel().selectedRows()
@@ -23302,6 +23311,15 @@ class EnkyronWindow(QMainWindow):
         if not 0 <= index < len(self.record_items):
             return
         record = self.record_items[index]
+        self.t05_review_button.setEnabled(
+            record.get("verification_state") == "unverified"
+            and record.get("retention_status") == "active"
+            and record.get("source_type") in (
+                "arl_static_projection_bundle", "arl_frozen_source_candidate"
+            )
+            and self.current_ticket is not None
+            and self.current_ticket.get("status") != "closed"
+        )
         self.record_integrity_button.setEnabled(
             record.get("entry_id") == "ARL-KB-001"
             and record.get("source_type") == "arl_frozen_source_candidate"
@@ -23335,6 +23353,37 @@ class EnkyronWindow(QMainWindow):
             "No raw evidence or credential source displayed. Human verification required.",
         ]
         self.record_details.setPlainText("\n".join(details))
+
+
+    def open_t05_qualification(self):
+        """Review one T04 candidate without reimport, tests or trust promotion."""
+        if not self.t05_review_button.isEnabled() or not self.current_id:
+            return
+        selected = self.records_table.selectionModel().selectedRows()
+        if len(selected) != 1:
+            return
+        index = selected[0].row()
+        if not 0 <= index < len(self.record_items):
+            return
+        candidate = self.record_items[index]
+        control_id = "ARL-KB-{:03d}".format(self.record_control.value())
+        if (candidate.get("entry_id") != control_id or
+                candidate.get("verification_state") != "unverified" or
+                candidate.get("retention_status") != "active" or
+                candidate.get("source_type") not in (
+                    "arl_static_projection_bundle", "arl_frozen_source_candidate")):
+            return
+        existing = getattr(self, "t05_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = T05QualificationDialog(
+            self, self.bridge, self.current_id, control_id,
+            candidate["id"], on_recorded=self.inspect_records
+        )
+        self.t05_dialog = dialog
+        dialog.show()
 
     def inspect_record_integrity(self):
         """Inspect the stored ARL digest and claimed Git binding without writes."""
