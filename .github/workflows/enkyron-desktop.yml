@@ -187,6 +187,13 @@ jobs:
             desktop.test_enkyron_followup_window_qt \
             desktop.test_enkyron_mail_html \
             desktop.test_enkyron_mail_ux -v
+      - name: Mission Board independent detail windows (synthetic Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: desktop
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest desktop.test_enkyron_mission_board_qt -v
       - name: Native pilot assessment lab UI smoke (offline)
         env:
           QT_QPA_PLATFORM: offscreen
