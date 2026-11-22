@@ -53,10 +53,12 @@ export function validateUnifiedMailFiling(input,{commit=false}={}){
     out.attachment={
       message_id:uuid(a.message_id,'Mail message'),
       attachment_id:uuid(a.attachment_id,'attachment'),
-      content_sha256_at_review:text(a.content_sha256_at_review,'reviewed attachment digest',64,64),
+      content_sha256_at_review:a.content_sha256_at_review==null&&!commit?null:
+        text(a.content_sha256_at_review,'reviewed attachment digest',64,64),
       destinations:[...destinations]
     };
-    if(!SHA.test(out.attachment.content_sha256_at_review))
+    if(out.attachment.content_sha256_at_review!==null &&
+       !SHA.test(out.attachment.content_sha256_at_review))
       throw Error('Invalid reviewed attachment digest');
   }
   if(!out.ticket&&!out.attachment)
@@ -147,7 +149,7 @@ async function inspect(db,key,input,{lock=false}={}){
     if(doc.safety_state!=='quarantined_unscanned'||doc.stored!==true
       ||!SHA.test(doc.content_sha256||''))
       throw Error('Attachment needs explicit retrieval into unscanned quarantine first');
-    if(doc.content_sha256!==a.content_sha256_at_review)
+    if(a.content_sha256_at_review && doc.content_sha256!==a.content_sha256_at_review)
       throw Error('Attachment digest changed since review; review again');
     const destinations=[];
     for(const kind of a.destinations){
