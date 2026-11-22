@@ -18,6 +18,8 @@ import {validateEnk06LaunchEnv,verifySyntheticSeed}
 import {requireFreshEnk06Database,requirePrecreatedEnk06Database,
   requirePrepareEnvironment}
   from '../scripts/enkyron-enk06-uat-prepare.mjs';
+import {requireMailboxCompletionTarget}
+  from '../scripts/enkyron-enk06-uat-complete-mailboxes.mjs';
 
 const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk06',
   ENKYRON_UAT_GUARD:'ENK06_SYNTHETIC_ONLY'};
@@ -287,4 +289,27 @@ test('DBA-precreated ENK-06 database must be exact, peer-owned and unique',()=>{
   // The original --apply path must continue to refuse an existing database.
   assert.throws(()=>requireFreshEnk06Database(identity,existing,actor),
     /database exists/);
+});
+
+test('post-seed Support ACL correction is exclusively synthetic, local and no-send',()=>{
+  const actor=os.userInfo().username;
+  const identity={database:ENKYRON_ENK06_UAT_DATABASE,
+    role:actor,owner:actor,port:'5432',read_only:'off'};
+  const correct={role:'organization_owner_l5',can_read:true,can_send:false};
+  assert.doesNotThrow(()=>requireMailboxCompletionTarget(
+    target,identity,actor,null));
+  assert.doesNotThrow(()=>requireMailboxCompletionTarget(
+    target,identity,actor,correct));
+  for(const invalid of [
+    [{...target,database:'arl_local'},identity,actor,null],
+    [{...target,marker:ENKYRON_UAT_MARKER},identity,actor,null],
+    [target,{...identity,database:'arl_local'},actor,null],
+    [target,{...identity,owner:'postgres'},actor,null],
+    [target,{...identity,port:'5433'},actor,null],
+    [target,{...identity,read_only:'on'},actor,null],
+    [target,identity,'wrong!user',null],
+    [target,identity,actor,{...correct,can_send:true}],
+    [target,identity,actor,{...correct,can_read:false}],
+    [target,identity,actor,{...correct,role:'other'}]
+  ])assert.throws(()=>requireMailboxCompletionTarget(...invalid),/Refusing/);
 });
