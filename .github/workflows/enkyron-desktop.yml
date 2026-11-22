@@ -41,6 +41,11 @@ jobs:
           node --test tests/enkyron-enk05-uat-database.test.js
           node --check scripts/enkyron-enk05-uat-preflight.mjs
           node --test tests/enkyron-enk05-uat-preflight.test.js
+      - name: ENK-06 separate synthetic dossier database safety gate (no DB writes)
+        run: |
+          node --check scripts/enkyron-enk06-uat-bootstrap.mjs
+          node --check scripts/enkyron-enk06-uat-preflight.mjs
+          node --test tests/enkyron-enk06-uat-database.test.js
       - name: Desktop bridge and contract tests
         run: |
           node --check desktop/enkyron-contract.mjs
