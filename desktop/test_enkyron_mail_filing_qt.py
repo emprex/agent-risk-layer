@@ -2,7 +2,7 @@
 import os
 import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtWidgets import QApplication, QWidget, QComboBox, QCheckBox, QPlainTextEdit, QPushButton
+from PySide6.QtWidgets import QApplication, QWidget, QComboBox, QCheckBox, QPlainTextEdit, QPushButton, QLabel
 from desktop.enkyron_mail_filing import open_reviewed_mail_filing
 
 THREAD = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
@@ -128,11 +128,9 @@ class FilingTests(unittest.TestCase):
             "mail-local-ticket-link"
         ])
         self.assertEqual(self.owner.refresh_count, 2)
-        self.assertIn("PASS:", dialog.findChildren(
-            type(dialog.findChild(QPushButton, "enkyronUnifiedFilingSave")))[0].text()
-            if False else next(x.text() for x in dialog.findChildren(
-                __import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel
-            ) if "PASS:" in x.text()))
+        self.assertTrue(any(
+            "PASS:" in label.text() for label in dialog.findChildren(QLabel)
+        ))
 
     def test_prelinked_records_are_not_inserted_twice(self):
         self.owner.bridge = Bridge(existing=True)
