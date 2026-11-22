@@ -25,7 +25,8 @@ const ENK05_COMMANDS = new Set([
  // Only the human-reviewed atomic dossier link is writable in this mode.
 const ENK06_COMMANDS = new Set([
   'crm-companies', 'crm-company-tickets', 'crm-company-dossier',
-  'mail-local-folders', 'mail-local-list', 'mail-local-messages',
+  'mail-status', 'mail-local-folders', 'mail-local-labels',
+  'mail-local-list', 'mail-local-messages', 'mail-thread-conversation',
   'mail-local-company', 'mail-local-ticket-links',
   'mail-document-list', 'mail-document-links', 'mail-ticket-conversations',
   'mail-attachment-options', 'mail-dossier-file'
