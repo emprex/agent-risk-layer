@@ -9384,6 +9384,17 @@ class EnkyronWindow(QMainWindow):
                 confirmation.setChecked(False)
                 if mode == "create":
                     action.clear()
+                # Calendar projects CRM reminders read-only. After the backend
+                # confirms a create/edit/completion, reload the visible period
+                # so stale dates and completed reminders disappear. No copy or
+                # Calendar write is created.
+                calendar_visible = (
+                    self.navigation.currentRow() == 4
+                    or (self.calendar_detached_window is not None
+                        and self.calendar_detached_window.isVisible())
+                )
+                if calendar_visible:
+                    self.calendar_view.request_range()
                 reload()
                 if (self.crm_dossier_dialog
                         and self.crm_dossier_dialog.isVisible()

@@ -6,7 +6,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QDate, QEvent
-from PySide6.QtWidgets import QApplication, QLineEdit, QTableWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QLineEdit, QPushButton, QTableWidget
 from desktop.enkyron_calendar_view import MailCalendarView
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
@@ -134,6 +134,78 @@ class CalendarCrmFollowupSmoke(unittest.TestCase):
             window.calendar_view.companyFollowupRequested.emit(
                 OTHER_COMPANY, "invalid-reference")
             self.assertEqual(len(calls), before)
+        finally:
+            if window is not None:
+                for top in list(QApplication.topLevelWidgets()):
+                    top.close()
+                    top.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.app.processEvents()
+                gc.collect()
+            DesktopBridge.call = original_call
+
+    def test_calendar_refreshes_once_after_confirmed_crm_completion_not_on_error(self):
+        """A verified CRM edit rereads the visible month without creating a task."""
+        calls = []
+        active = {"value": True}
+        original_call = DesktopBridge.call
+
+        def fake(_self, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload, callback))
+            if command == "calendar-list" and callback:
+                callback({
+                    "events": [], "tasks": [],
+                    "company_followups": [SOURCE] if active["value"] else [],
+                    "company_followups_available": True,
+                    "company_followups_more": False,
+                }, None)
+
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.calendar_view.calendar.setSelectedDate(QDate(2026, 11, 22))
+            window.navigation.setCurrentRow(4)
+            self.assertEqual(len(window.calendar_view.crm_followup_rows), 1)
+            window.calendar_view.companyFollowupRequested.emit(COMPANY, TARGET)
+            query = [x for x in calls if x[0] == "crm-company-followups"][-1]
+            query[3]({"available": True, "items": [SOURCE], "more": False}, None)
+            dialog = window.crm_company_followups_dialog
+            self.assertEqual(dialog.findChild(QTableWidget).currentRow(), 0)
+            confirm = dialog.findChild(QCheckBox)
+            complete = next(
+                button for button in dialog.findChildren(QPushButton)
+                if button.text() == "Mark completed"
+            )
+            confirm.setChecked(True)
+            self.assertTrue(complete.isEnabled())
+            complete.click()
+            update = [x for x in calls if x[0] == "crm-company-followup-update"][-1]
+            self.assertEqual(update[2]["id"], TARGET)
+            self.assertEqual(update[2]["status"], "completed")
+            self.assertEqual(update[2]["expected_version"], 3)
+            before = len([x for x in calls if x[0] == "calendar-list"])
+            # An unconfirmed backend result must not hide an open reminder.
+            update[3](None, "Synthetic network error")
+            self.assertEqual(
+                len([x for x in calls if x[0] == "calendar-list"]), before
+            )
+            self.assertEqual(len(window.calendar_view.crm_followup_rows), 1)
+
+            complete.click()
+            saved = [x for x in calls if x[0] == "crm-company-followup-update"][-1]
+            active["value"] = False
+            saved[3]({"id": TARGET, "version": 4}, None)
+            self.assertEqual(
+                len([x for x in calls if x[0] == "calendar-list"]), before + 1
+            )
+            self.assertEqual(len(window.calendar_view.crm_followup_rows), 0)
+            self.assertIn("0 CRM follow-up(s)", window.calendar_view.status.text())
+            self.assertFalse(any(
+                command in ("calendar-task-create", "calendar-create",
+                            "crm-company-followup-create", "mail-send-draft")
+                for command, *_ in calls
+            ))
         finally:
             if window is not None:
                 for top in list(QApplication.topLevelWidgets()):
