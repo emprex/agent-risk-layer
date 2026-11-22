@@ -122,6 +122,61 @@ test('reviewed Mail + one quarantined document + existing ticket: atomic synthet
       [workspace,attachment_id])).rows[0];
     assert.equal(q.safety_state,'quarantined_unscanned');
     assert.equal(q.content_sha256,hash);
+
+    // Real database rollback after a successful first INSERT. Force the same
+    // link_id for the second destination: ON CONFLICT must not manufacture a
+    // partial success. Exact readback rejects it and ROLLBACK removes the
+    // first, previously inserted company-document link as well.
+    const second_message_id=randomUUID(),second_attachment_id=randomUUID();
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_messages '+
+      '(workspace_key,mailbox_key,thread_id,message_id) '+
+      "VALUES($1,'direction',$2,$3)",
+      [workspace,thread_id,second_message_id]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_mail_attachment_quarantine '+
+      '(workspace_key,mailbox_key,message_id,attachment_id,original_filename,'+
+      'content_bytes,content_sha256,safety_state,declared_size) '+
+      "VALUES($1,'direction',$2,$3,'rollback-proof.pdf',$4,$5,'quarantined_unscanned',$6)",
+      [workspace,second_message_id,second_attachment_id,bytes,hash,bytes.length]
+    );
+    const unsafe={...request,message_id:second_message_id,
+      attachment_id:second_attachment_id,filename_at_review:'rollback-proof.pdf'};
+    const reusedLinkId=randomUUID();
+    await assert.rejects(
+      fileReviewedMailDossier(pool,actor,unsafe,{uuid:()=>reusedLinkId}),
+      /exact readback/i
+    );
+    const partial=(await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_document_dossier_links '+
+      'WHERE workspace_key=$1 AND attachment_id=$2',
+      [workspace,second_attachment_id]
+    )).rows[0];
+    assert.equal(partial.n,0,'ROLLBACK must undo the first successful INSERT');
+    const stable=(await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_ticket_links '+
+      'WHERE workspace_key=$1 AND thread_id=$2',
+      [workspace,thread_id]
+    )).rows[0];
+    assert.equal(stable.n,1,'Earlier committed canonical link must remain intact');
+
+    // Even when bytes are present, a blocked attachment is never linkable.
+    await pool.query(
+      "UPDATE enkyron_mail_attachment_quarantine SET safety_state='blocked' "+
+      'WHERE workspace_key=$1 AND attachment_id=$2',
+      [workspace,second_attachment_id]
+    );
+    await assert.rejects(
+      fileReviewedMailDossier(pool,actor,unsafe),
+      /securely quarantined/i
+    );
+    const blocked=(await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_document_dossier_links '+
+      'WHERE workspace_key=$1 AND attachment_id=$2',
+      [workspace,second_attachment_id]
+    )).rows[0];
+    assert.equal(blocked.n,0);
   }finally{
     await pool.end();
   }
