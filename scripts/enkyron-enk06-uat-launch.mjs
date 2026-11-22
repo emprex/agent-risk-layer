@@ -23,11 +23,9 @@ export function validateEnk06LaunchEnv(env){
     throw Error('Refusing ENK-06 launch: conflicting UAT/preview/headless environment');
   return {database:DB,guard:MARKER};
 }
-export async function verifySyntheticSeed(pool,actor,{allowMissingSupport=false}={}){
-  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
-    throw Error('Refusing ENK-06 launch: invalid peer identity');
-  const key='local:'+actor,ids=SYNTHETIC_IDS;
-  const row=(await pool.query(
+// This query is also parsed against real PostgreSQL in CI, so a UUID/TEXT
+// mismatch cannot slip through a mock-based launcher test.
+export const SYNTHETIC_SEED_READBACK_SQL =
     'SELECT '+
     '(SELECT count(*)::int FROM enkyron_crm_companies '+
     'WHERE workspace_key=$1 AND id=$2 AND name=$3) AS company,'+
@@ -35,7 +33,7 @@ export async function verifySyntheticSeed(pool,actor,{allowMissingSupport=false}
     'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$4) AS ticket,'+
     '(SELECT count(*)::int FROM enkyron_mail_local_threads '+
     "WHERE workspace_key=$1 AND mailbox_key='direction' AND thread_id=$5 "+
-    "AND crm_company_id=$2 AND folder_key='inbox') AS thread,"+
+    "AND crm_company_id::text=$2 AND folder_key='inbox') AS thread,"+
     '(SELECT count(*)::int FROM enkyron_mail_attachment_quarantine '+
     "WHERE workspace_key=$1 AND mailbox_key='direction' "+
     'AND attachment_id=$6 AND message_id=$7 '+
@@ -48,7 +46,14 @@ export async function verifySyntheticSeed(pool,actor,{allowMissingSupport=false}
     '(SELECT count(*)::int FROM enkyron_local_mail_access '+
     "WHERE workspace_key=$1 AND mailbox_key='support' "+
     "AND role='organization_owner_l5' AND can_read=true "+
-    'AND can_send=false) AS support_access',
+    'AND can_send=false) AS support_access';
+
+export async function verifySyntheticSeed(pool,actor,{allowMissingSupport=false}={}){
+  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
+    throw Error('Refusing ENK-06 launch: invalid peer identity');
+  const key='local:'+actor,ids=SYNTHETIC_IDS;
+  const row=(await pool.query(
+    SYNTHETIC_SEED_READBACK_SQL,
     [key,ids.company_id,NAME,ids.ticket_id,ids.thread_id,
       ids.attachment_id,ids.message_id]
   )).rows[0];
