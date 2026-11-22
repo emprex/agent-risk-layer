@@ -184,6 +184,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_filing_smoke.py' -v
 
+      - name: ENK-06 full ENKYRON Mail window and button (offline synthetic)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_filing_full_app_smoke.py' -v
+
       - name: Control applicability dialog and fast-next regression (offline)
         env:
           QT_QPA_PLATFORM: offscreen
