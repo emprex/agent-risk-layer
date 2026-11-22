@@ -108,7 +108,8 @@ export async function seedUat(){
         await client.query(
           'INSERT INTO enkyron_local_mail_access '+
           '(workspace_key,mailbox_key,role,can_read,can_send,granted_by) '+
-          "VALUES($1,'direction','organization_owner_l5',true,false,$2)",
+          "VALUES($1,'direction','organization_owner_l5',true,false,$2),"+
+          "($1,'support','organization_owner_l5',true,false,$2)",
           [key,actor]
         );
         await client.query(
