@@ -5,7 +5,8 @@ import pg from 'pg';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
 import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
 import {fileReviewedMailDossier} from '../desktop/enkyron-mail-reviewed-dossier.mjs';
-import {SYNTHETIC_SEED_READBACK_SQL,SYNTHETIC_IDS} from '../scripts/enkyron-enk06-uat-launch.mjs';
+import {SYNTHETIC_SEED_READBACK_SQL} from '../scripts/enkyron-enk06-uat-launch.mjs';
+import {SYNTHETIC_IDS} from '../scripts/enkyron-enk06-uat-seed.mjs';
 
 const raw=process.env.ARL_CI_POSTGRES_URL||'';
 function disposable(){
