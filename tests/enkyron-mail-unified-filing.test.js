@@ -23,7 +23,7 @@ class FakeDb{
   constructor(){
     this.companyOnThread=null;this.ticketLink=false;
     this.documents=new Set();this.calls=[];this.releases=0;
-    this.readAllowed=true;this.attachmentStored=true;
+    this.readAllowed=true;this.attachmentStored=true;this.attachmentState='quarantined_unscanned';
     this.ticketCompany=COMPANY;this.failDocumentLink=false;
     this.tx=null;
   }
@@ -62,7 +62,7 @@ class FakeDb{
       return {rows:this.ticketLink?[{ticket_id:TICKET}]:[]};
     if(sql.includes('FROM enkyron_mail_attachment_quarantine'))
       return {rows:[{original_filename:'ARL-Louvain-Report-READONLY.pdf',
-        content_sha256:SHA,safety_state:'quarantined_unscanned',
+        content_sha256:this.attachmentStored?SHA:null,safety_state:this.attachmentState,
         stored:this.attachmentStored}]};
     if(sql.startsWith('SELECT link_id FROM enkyron_mail_document_dossier_links')){
       const kind=sql.includes('company_id=$5')?'company':'ticket';
@@ -150,6 +150,17 @@ test('mismatched company vs ticket fails without writes',async()=>{
   assert.equal(db.ticketLink,false);
   assert.equal(db.calls.some(x=>/^(UPDATE|INSERT)/.test(x.sql)),false);
   assert.equal(db.calls.filter(x=>x.sql==='ROLLBACK').length,1);
+});
+test('metadata-only attachment is previewed but not fetched before consent',async()=>{
+  const db=new FakeDb();db.attachmentStored=false;db.attachmentState='metadata_only';
+  const input=request();delete input.attachment.content_sha256_at_review;
+  const plan=await previewUnifiedMailFiling(db,'emprex',input);
+  assert.equal(plan.attachment.needs_retrieval,true);
+  assert.equal(plan.attachment.sha256,null);
+  assert.deepEqual(plan.attachment.destinations.map(x=>x.status),
+    ['needs_quarantine','needs_quarantine']);
+  assert.equal(db.calls.some(x=>/^(UPDATE|INSERT)/.test(x.sql)),false);
+  await assert.rejects(commitUnifiedMailFiling(db,'emprex',request()),/quarantine first/);
 });
 test('unretrieved attachment cannot be linked or marked safe',async()=>{
   const db=new FakeDb();db.attachmentStored=false;
