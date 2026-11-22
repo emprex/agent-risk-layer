@@ -265,7 +265,6 @@ class FilingTests(unittest.TestCase):
                 self.assertNotIn("Filed:", self.status())
                 self.assertFalse(save.isEnabled())
                 self.owner.mail_filing_dialog.close()
-                self.owner.mail_filing_dialog = None
 
     def test_uncertain_commit_never_shows_success_or_retries(self):
         self.owner.bridge = Bridge(uncertain=True)
