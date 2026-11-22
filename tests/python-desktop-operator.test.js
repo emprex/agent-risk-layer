@@ -9,6 +9,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const desktopPath = fileURLToPath(new URL('../desktop/', import.meta.url));
 const qtTests = new Set([
   'test_enkyron_followup_window_qt.py',
+  'test_enkyron_mail_filing_dialog.py',
   'test_enkyron_mail_html.py',
   'test_enkyron_mail_ux.py'
 ]);

@@ -318,6 +318,11 @@ jobs:
           CI: 'true'
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-mail-ticket-links-postgres.test.js
+      - name: ENK-06 one reviewed Mail filing (disposable PostgreSQL only)
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-mail-unified-filing-postgres.test.js
 
       - name: ENKYRON CRM local unsent mail draft PostgreSQL integration
         env:
