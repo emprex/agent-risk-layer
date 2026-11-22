@@ -45,6 +45,7 @@ jobs:
         run: |
           node --check scripts/enkyron-enk06-uat-bootstrap.mjs
           node --check scripts/enkyron-enk06-uat-preflight.mjs
+          node --check scripts/enkyron-enk06-uat-seed.mjs
           node --test tests/enkyron-enk06-uat-database.test.js
       - name: Desktop bridge and contract tests
         run: |
