@@ -183,7 +183,11 @@ class UnifiedMailFilingDialog(QDialog):
             if reported:
                 statuses.extend(f"Document → {d['kind']}: {d['status']}"
                                 for d in reported["destinations"])
-            self.status.setText(" | ".join(statuses) + " · Quarantine retained.")
+            quarantine_note = (" · Attachment will be retrieved into unscanned quarantine "
+                               "only after your approval."
+                               if reported and reported.get("needs_retrieval")
+                               else " · Quarantine retained.")
+            self.status.setText(" | ".join(statuses) + quarantine_note)
             self._set_busy(False)
             return True
         except (KeyError, TypeError, ValueError) as exc:
@@ -209,8 +213,11 @@ class UnifiedMailFilingDialog(QDialog):
 
     def show_commit_result(self, result):
         """Called after server-confirmed transactional readback, not before."""
-        if result.get("saved") is not True:
-            self.show_error("The associations were not confirmed.")
+        if (result.get("saved") is not True
+                or not self._reviewed
+                or result.get("mailbox") != self._reviewed["mailbox"]
+                or result.get("thread_id") != self._reviewed["thread_id"]):
+            self.show_error("The exact filing result was not confirmed. Inspect links before retrying.")
             return
         entries = result.get("entries", {})
         statuses = [f"CRM: {entries.get('company', 'unknown')}",
