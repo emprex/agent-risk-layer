@@ -34,8 +34,8 @@ test('calendar lists canonical company follow-ups by London date without new tas
   assert.equal(calls.length,3);
   assert.ok(calls.every(x=>/^\s*SELECT/i.test(x.sql)));
   assert.ok(calls.every(x=>x.params[0]===scope));
-  assert.ok(calls.every(x=>x.params[1]===interval.start &&
-                          x.params[2]===interval.end));
+  assert.ok(calls.every(x=>x.params[1]===new Date(interval.start).toISOString() &&
+                          x.params[2]===new Date(interval.end).toISOString()));
   const sql=calls[2].sql;
   assert.match(sql,/JOIN enkyron_crm_companies/);
   assert.match(sql,/c\.workspace_key=f\.workspace_key/);
