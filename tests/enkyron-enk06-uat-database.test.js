@@ -9,6 +9,8 @@ import {
 } from '../desktop/enkyron-uat-database.mjs';
 import {validateBootstrapTarget}
   from '../scripts/enkyron-enk06-uat-bootstrap.mjs';
+import {REQUIRED_RELATIONS,requireEnk06PreflightIdentity,
+  inspectEnk06Preflight} from '../scripts/enkyron-enk06-uat-preflight.mjs';
 
 const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk06',
   ENKYRON_UAT_GUARD:'ENK06_SYNTHETIC_ONLY'};
@@ -123,4 +125,42 @@ test('bootstrap accepts only fresh operator-owned exact synthetic database',()=>
     [target,identity,[{schemaname:'public',tablename:'customer'}]],
     [target,identity,null],
   ])assert.throws(()=>validateBootstrapTarget(...invalid),/Refusing/);
+});
+
+test('preflight requires exact read-only peer owner, port and all schemas',async()=>{
+  const identity={database:ENKYRON_ENK06_UAT_DATABASE,
+    role:os.userInfo().username,owner:os.userInfo().username,
+    read_only:'on',port:'5432'};
+  assert.doesNotThrow(()=>requireEnk06PreflightIdentity(target,identity));
+  for(const bad of [
+    {...identity,database:'arl_local'}, {...identity,owner:'other'},
+    {...identity,read_only:'off'}, {...identity,port:'5433'}
+  ])assert.throws(()=>requireEnk06PreflightIdentity(target,bad),/Refusing/);
+  const statements=[];
+  const pool={async query(sql,params){
+    statements.push({sql,params});
+    if(sql.includes('enkyron_uat_guard'))
+      return {rows:[{database:ENKYRON_ENK06_UAT_DATABASE,verified:true}]};
+    if(sql.includes('pg_database'))return {rows:[identity]};
+    if(sql.includes('unnest'))return {rows:REQUIRED_RELATIONS.map(
+      identifier=>({identifier,present:true})
+    )};
+    throw Error('Unexpected preflight SQL');
+  }};
+  const good=await inspectEnk06Preflight(pool,target);
+  assert.equal(good.read_only,true);
+  assert.equal(good.checked_relations,REQUIRED_RELATIONS.length);
+  assert.ok(statements.every(x=>x.sql.startsWith('SELECT ')));
+  assert.deepEqual(statements.at(-1).params,[REQUIRED_RELATIONS]);
+
+  await assert.rejects(()=>inspectEnk06Preflight({
+    async query(sql){
+      if(sql.includes('enkyron_uat_guard'))
+        return {rows:[{database:ENKYRON_ENK06_UAT_DATABASE,verified:true}]};
+      if(sql.includes('pg_database'))return {rows:[identity]};
+      return {rows:REQUIRED_RELATIONS.map(
+        identifier=>({identifier,present:identifier!==REQUIRED_RELATIONS[0]})
+      )};
+    }
+  },target),/missing schema objects/);
 });
