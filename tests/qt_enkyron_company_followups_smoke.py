@@ -6,7 +6,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QDateEdit, QLineEdit, QPushButton, QTableWidget, QMessageBox
+    QApplication, QCheckBox, QDateEdit, QLineEdit, QPushButton, QTableWidget, QMessageBox, QLabel
 )
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 
@@ -244,6 +244,84 @@ class CompanyFollowupsSmoke(unittest.TestCase):
                 if window.crm_dossier_dialog:
                     window.crm_dossier_dialog.close_guard = lambda: True
                     window.crm_dossier_dialog.reject()
+                window.close()
+                window.deleteLater()
+                self.app.processEvents()
+            DesktopBridge.call = previous
+
+    def test_selected_followup_requires_edit_and_new_record_is_explicit(self):
+        """Prevent a selected CRM reminder from accidentally being duplicated."""
+        calls = []
+        previous = DesktopBridge.call
+        record = {
+            "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            "company_id": COMPANY,
+            "action_text": "Review whether synthetic assessment got a reply",
+            "due_date": "2026-11-28",
+            "status": "open",
+            "version": 2,
+            "updated_at": "2026-11-22T01:35:00Z",
+        }
+
+        def fake_call(_self, action, arg="", payload=None, callback=None):
+            calls.append((action, arg, payload, callback))
+
+        DesktopBridge.call = fake_call
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.open_company_followups(COMPANY)
+            query = calls[-1]
+            self.assertEqual(query[0], "crm-company-followups")
+            query[3]({"available": True, "items": [record], "more": False}, None)
+            dialog = window.crm_company_followups_dialog
+            table = dialog.findChild(QTableWidget)
+            action = dialog.findChild(QLineEdit, "crmCompanyFollowupAction")
+            hint = next(label for label in dialog.findChildren(QLabel)
+                        if label.objectName() == "crmCompanyFollowupModeHint")
+            create = next(button for button in dialog.findChildren(QPushButton)
+                          if button.text() == "Add follow-up")
+            edit = next(button for button in dialog.findChildren(QPushButton)
+                        if button.text() == "Reschedule / edit")
+            start_new = dialog.findChild(QPushButton, "crmCompanyFollowupStartNew")
+            confirm = dialog.findChild(QCheckBox)
+
+            self.assertEqual(table.currentRow(), 0)
+            self.assertIn("Editing selected follow-up (revision 2)", hint.text())
+            self.assertEqual(action.text(), record["action_text"])
+            self.assertFalse(create.isEnabled())
+            self.assertFalse(edit.isEnabled())
+            confirm.setChecked(True)
+            self.assertTrue(edit.isEnabled())
+            self.assertFalse(create.isEnabled())
+            create.click()
+            self.assertEqual(len([x for x in calls
+                                  if x[0] == "crm-company-followup-create"]), 0)
+
+            # New is an explicit mode switch, not an implicit interpretation
+            # of a selected record's form edits.
+            start_new.click()
+            self.assertEqual(table.currentRow(), -1)
+            self.assertEqual(action.text(), "")
+            self.assertFalse(confirm.isChecked())
+            self.assertIn("New follow-up:", hint.text())
+            action.setText("New synthetic follow-up, separate record")
+            confirm.setChecked(True)
+            self.assertTrue(create.isEnabled())
+            self.assertFalse(edit.isEnabled())
+            create.click()
+            mutation = calls[-1]
+            self.assertEqual(mutation[0], "crm-company-followup-create")
+            self.assertEqual(mutation[2]["company_id"], COMPANY)
+            self.assertTrue(mutation[2]["confirmed"])
+            self.assertNotIn("id", mutation[2])
+            self.assertNotIn("expected_version", mutation[2])
+            self.assertFalse(any(
+                x[0] in ("calendar-task-create", "mail-send-draft")
+                for x in calls))
+            dialog.reject()
+        finally:
+            if window is not None:
                 window.close()
                 window.deleteLater()
                 self.app.processEvents()

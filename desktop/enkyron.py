@@ -9195,7 +9195,15 @@ class EnkyronWindow(QMainWindow):
         table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         layout.addWidget(table, 1)
-        state = {"items": [], "pending": False, "seq": 0,
+        mode_hint = QLabel(
+            "Select a follow-up to edit it. Tick the confirmation box to "
+            "enable changes. Creating another follow-up is a separate action."
+        )
+        mode_hint.setObjectName("crmCompanyFollowupModeHint")
+        mode_hint.setWordWrap(True)
+        if company_id:
+            layout.addWidget(mode_hint)
+        state = {"items": [], "pending": False, "seq": 0, "creating": False,
                  "focus_id": focus_followup_id if company_id else None}
         form = QFormLayout()
         action = QLineEdit()
@@ -9217,6 +9225,8 @@ class EnkyronWindow(QMainWindow):
             layout.addWidget(confirmation)
         buttons = QHBoxLayout()
         refresh = QPushButton("Refresh")
+        new = QPushButton("New follow-up")
+        new.setObjectName("crmCompanyFollowupStartNew")
         create = QPushButton("Add follow-up")
         update = QPushButton("Reschedule / edit")
         complete = QPushButton("Mark completed")
@@ -9224,7 +9234,7 @@ class EnkyronWindow(QMainWindow):
         close = QPushButton("Close")
         buttons.addWidget(refresh)
         if company_id:
-            for button in (create, update, complete, cancel_task):
+            for button in (new, create, update, complete, cancel_task):
                 buttons.addWidget(button)
         buttons.addStretch()
         buttons.addWidget(close)
@@ -9232,6 +9242,8 @@ class EnkyronWindow(QMainWindow):
         close.clicked.connect(dialog.reject)
 
         def selected():
+            if state["creating"]:
+                return None
             row = table.currentRow()
             return state["items"][row] if 0 <= row < len(state["items"]) else None
 
@@ -9242,13 +9254,29 @@ class EnkyronWindow(QMainWindow):
                 and due.date().isValid()
             )
             item = selected()
-            create.setEnabled(bool(company_id and ready))
+            create.setEnabled(bool(company_id and ready and item is None))
+            new.setEnabled(bool(company_id and not state["pending"]))
             editable = bool(item and item.get("status") == "open")
             update.setEnabled(bool(company_id and ready and editable))
             complete.setEnabled(bool(company_id and not state["pending"]
                                      and editable and confirmation.isChecked()))
             cancel_task.setEnabled(bool(company_id and not state["pending"]
                                         and editable and confirmation.isChecked()))
+            if company_id:
+                if state["creating"]:
+                    mode_hint.setText(
+                        "New follow-up: this creates a separate CRM record. "
+                        "Enter the action and due date, then tick confirmation.")
+                elif item is not None:
+                    mode_hint.setText(
+                        "Editing selected follow-up (revision {}). Change the "
+                        "action or due date, tick confirmation, then choose "
+                        "Reschedule / edit. Add follow-up cannot duplicate "
+                        "this selected record.".format(item.get("version") or "?"))
+                else:
+                    mode_hint.setText(
+                        "No follow-up selected. Select an existing row to edit, "
+                        "or choose New follow-up to create a separate reminder.")
 
         def reload():
             if not dialog.isVisible():
@@ -9328,6 +9356,7 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call(command, company_id or "", callback=received)
 
         def load_selected():
+            state["creating"] = False
             item = selected()
             if company_id:
                 if item is None:
@@ -9343,10 +9372,29 @@ class EnkyronWindow(QMainWindow):
                 confirmation.setChecked(False)
             controls()
 
+        def start_new():
+            if not company_id or state["pending"]:
+                return
+            # An explicit mode switch is necessary: never interpret edits to
+            # an existing selected row as a request to duplicate it.
+            state["creating"] = True
+            table.blockSignals(True)
+            try:
+                table.clearSelection()
+                table.setCurrentCell(-1, -1)
+            finally:
+                table.blockSignals(False)
+            action.clear()
+            due.setDate(QDate.currentDate().addDays(7))
+            confirmation.setChecked(False)
+            controls()
+
         def save(mode):
             if not company_id or state["pending"] or not confirmation.isChecked():
                 return
             item = selected()
+            if mode == "create" and item is not None:
+                return
             if mode != "create" and (not item or item.get("status") != "open"):
                 return
             payload = {
@@ -9383,6 +9431,7 @@ class EnkyronWindow(QMainWindow):
                     return
                 confirmation.setChecked(False)
                 if mode == "create":
+                    state["creating"] = False
                     action.clear()
                 # Calendar projects CRM reminders read-only. After the backend
                 # confirms a create/edit/completion, reload the visible period
@@ -9405,6 +9454,7 @@ class EnkyronWindow(QMainWindow):
         table.itemSelectionChanged.connect(load_selected)
         refresh.clicked.connect(reload)
         if company_id:
+            new.clicked.connect(start_new)
             action.textChanged.connect(controls)
             due.dateChanged.connect(controls)
             confirmation.toggled.connect(controls)
