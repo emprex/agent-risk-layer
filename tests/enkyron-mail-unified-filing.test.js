@@ -110,6 +110,14 @@ test('read-only preview identifies proposals and never mutates DB',async()=>{
   assert.equal(db.calls.some(x=>/^(BEGIN|UPDATE|INSERT|COMMIT)/.test(x.sql)),false);
   assert.equal(db.companyOnThread,null);
 });
+test('preview exposes digest for exact review, but committing without it fails',async()=>{
+  const db=new FakeDb(),input=request();
+  delete input.attachment.content_sha256_at_review;
+  const preview=await previewUnifiedMailFiling(db,'emprex',input);
+  assert.equal(preview.attachment.sha256,SHA);
+  await assert.rejects(commitUnifiedMailFiling(db,'emprex',input),/reviewed attachment digest/);
+  assert.equal(db.companyOnThread,null);
+});
 test('one confirmed operation links company, ticket and one quarantine file to two dossiers',async()=>{
   const db=new FakeDb();
   const result=await commitUnifiedMailFiling(db,'emprex',request());
