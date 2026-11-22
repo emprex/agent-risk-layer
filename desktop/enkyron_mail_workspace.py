@@ -2458,13 +2458,12 @@ class MailInboxView(QWidget):
             for record in self.items
         ):
             self.localReadRequested.emit(mailbox, thread_id, False)
+        # ENK-06 also files Mail ↔ Ticket without an attachment.
+        # The dialog itself requires a verified CRM company before any write.
         self.document_dossier_button.setVisible(
             self.local_mode and bool(messages)
-            and self.selected_folder not in ('sent', 'drafts')
-            and any(isinstance(m, dict) and
-                    (m.get('attachment_count') or
-                     m.get('attachment_previews'))
-                    for m in messages)
+            and self.selected_folder not in (
+                'sent', 'drafts', 'spam', 'trash')
         )
         return True
 
