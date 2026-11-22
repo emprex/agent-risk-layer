@@ -11,6 +11,8 @@ import {validateBootstrapTarget}
   from '../scripts/enkyron-enk06-uat-bootstrap.mjs';
 import {REQUIRED_RELATIONS,requireEnk06PreflightIdentity,
   inspectEnk06Preflight} from '../scripts/enkyron-enk06-uat-preflight.mjs';
+import {requireEnk06SeedIdentity,SYNTHETIC_IDS}
+  from '../scripts/enkyron-enk06-uat-seed.mjs';
 
 const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk06',
   ENKYRON_UAT_GUARD:'ENK06_SYNTHETIC_ONLY'};
@@ -46,7 +48,8 @@ test('exact ENK-06 marker and database are required; legacy targets unchanged',(
 test('only local dossier readers and exactly one reviewed write are allowed',()=>{
   for(const command of [
     'crm-companies','crm-company-tickets','crm-company-dossier',
-    'mail-local-folders','mail-local-list','mail-local-messages',
+    'mail-status','mail-local-folders','mail-local-labels',
+    'mail-local-list','mail-local-messages','mail-thread-conversation',
     'mail-local-company','mail-local-ticket-links',
     'mail-document-list','mail-document-links','mail-ticket-conversations',
     'mail-attachment-options','mail-dossier-file'
@@ -163,4 +166,24 @@ test('preflight requires exact read-only peer owner, port and all schemas',async
       )};
     }
   },target),/missing schema objects/);
+});
+
+test('seed refuses wrong identity, nonempty business DB or readonly session',()=>{
+  const identity={database:ENKYRON_ENK06_UAT_DATABASE,
+    role:os.userInfo().username,owner:os.userInfo().username,
+    read_only:'off',port:'5432'};
+  assert.equal(Object.values(SYNTHETIC_IDS).length,5);
+  assert.doesNotThrow(()=>requireEnk06SeedIdentity(target,identity,
+    [0,0,0,0,0,0]));
+  for(const invalid of [
+    [{...target,database:'arl_local'},identity,[0,0,0,0,0,0]],
+    [{...target,marker:ENKYRON_UAT_MARKER},identity,[0,0,0,0,0,0]],
+    [target,{...identity,database:'arl_local'},[0,0,0,0,0,0]],
+    [target,{...identity,owner:'other'},[0,0,0,0,0,0]],
+    [target,{...identity,read_only:'on'},[0,0,0,0,0,0]],
+    [target,identity,[1,0,0,0,0,0]],
+    [target,identity,[0,0,0,0,1,0]],
+    [target,identity,[0,0,0,0,0]],
+    [target,identity,null],
+  ])assert.throws(()=>requireEnk06SeedIdentity(...invalid),/Refusing/);
 });
