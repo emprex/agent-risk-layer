@@ -75,7 +75,7 @@ test('My Work second-resolution London-offset window is accepted by Calendar',as
   const crm=reads.find(x=>x.sql.includes('FROM enkyron_crm_company_followups'));
   assert.ok(crm,'CRM follow-ups must be projected read-only');
   assert.deepEqual(crm.params,[
-    'local:operator','2026-10-22T19:18:00+00:00','2027-01-20T19:18:00+00:00'
+    'local:operator','2026-10-22T19:18:00.000Z','2027-01-20T19:18:00.000Z'
   ]);
   assert.match(crm.sql,/AT TIME ZONE 'Europe\/London'/);
   assert.equal(f.statements.some(x=>/^\s*(INSERT|UPDATE|DELETE)\b/i.test(x.sql)),false);
