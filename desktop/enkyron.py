@@ -1873,7 +1873,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox = MailInboxView()
         self.mail_inbox.set_local_mode()
         self.mail_inbox.document_dossier_button.clicked.connect(
-            self.open_mail_save_to_dossier
+            self.open_mail_unified_filing
         )
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
         self.mail_inbox.localRecordMoveRequested.connect(self.move_saved_mail_record)
@@ -3520,6 +3520,14 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-attachment-options", payload={
             "mailbox": mailbox, "thread_id": thread_id
         }, callback=options_loaded)
+
+    def open_mail_unified_filing(self):
+        """One reviewed Mail filing dialog; legacy specialist dialogs remain."""
+        if __package__:
+            from .enkyron_mail_filing import open_reviewed_mail_filing
+        else:
+            from enkyron_mail_filing import open_reviewed_mail_filing
+        open_reviewed_mail_filing(self)
 
     def open_mail_save_to_dossier(self):
         """Reviewed human association of a real archived mail attachment."""
