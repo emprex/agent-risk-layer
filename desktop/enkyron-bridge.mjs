@@ -7,7 +7,7 @@ import pg from 'pg';
 import {listMailDocumentCandidates} from './enkyron-mail-document-candidates.mjs';
 import {linkAttachmentToDossier as saveMailDossier, validateDossierLink as validateMailDossier} from './enkyron-mail-document-dossier-links.mjs';
 import {fileReviewedMailDossier,validateReviewedMailFiling} from './enkyron-mail-reviewed-dossier.mjs';
-import { resolveEnkyronDatabase, requireEnkyronUatCommand, requireEnkyronUatPayload, requireEnkyronUxPreviewCommand, verifyEnkyronUatDatabase } from './enkyron-uat-database.mjs';
+import { resolveEnkyronDatabase, requireEnkyronUatCommand, requireEnkyronUatPayload, requireEnkyronUxPreviewCommand, verifyEnkyronUatDatabase, ENKYRON_ENK06_UAT_DATABASE } from './enkyron-uat-database.mjs';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import {archivedAssessmentReport} from './enkyron-final-report-reader.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
@@ -571,7 +571,12 @@ async function main() {
       command === 'crm-mail-create' ? await createMailDraft(pool, payload, os.userInfo().username) :
       command === 'crm-mail-update' ? await updateMailDraft(pool, payload, os.userInfo().username) :
       command === 'crm-mail-manual-send' ? await recordManualSend(pool, payload, os.userInfo().username) :
-      command === 'mail-status' ? await mailStatus(pool,os.userInfo().username) :
+      command === 'mail-status' ?
+        (dbTarget.uat && dbTarget.database === ENKYRON_ENK06_UAT_DATABASE
+          ? {...await mailAccess(pool,os.userInfo().username),
+             provider_configured:false,
+             notice:'ENK-06 synthetic dossier review; provider disabled.'}
+          : await mailStatus(pool,os.userInfo().username)) :
       command === 'mail-threads' ? await mailThreads(pool,os.userInfo().username,payload?.mailbox,payload?.folder??'inbox') :
       command === 'mail-local-folders' ? await localMailFolders(pool,os.userInfo().username) :
       command === 'mail-local-folder-create' ? await createLocalMailFolder(pool,os.userInfo().username,payload) :
@@ -598,7 +603,10 @@ async function main() {
       command === 'mail-attachment-binary' ? await previewBinaryAttachment(pool,os.userInfo().username,payload) :
       command === 'mail-local-full-text' ? await readArchivedFullText(pool,os.userInfo().username,payload) :
       command === 'mail-local-messages' ? await localMailMessages(pool,os.userInfo().username,payload) :
-      command === 'mail-thread-conversation' ? await mergedMailConversation(pool,os.userInfo().username,payload) :
+      command === 'mail-thread-conversation' ?
+        (dbTarget.uat && dbTarget.database === ENKYRON_ENK06_UAT_DATABASE
+          ? await localMailMessages(pool,os.userInfo().username,payload)
+          : await mergedMailConversation(pool,os.userInfo().username,payload)) :
       command === 'mail-local-fetch' ? await fetchAndCacheThread(pool,os.userInfo().username,payload) :
       command === 'mail-local-move' ? await moveLocalThread(pool,os.userInfo().username,payload) :
       command === 'mail-record-move' ? await moveSavedMailRecord(pool,os.userInfo().username,payload) :
