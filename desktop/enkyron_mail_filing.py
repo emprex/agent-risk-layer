@@ -153,7 +153,9 @@ def open_reviewed_mail_filing(owner):
         ticket.clear()
         ticket.addItem("No ticket — file attachment with CRM company only", None)
         rows = result.get("items") if isinstance(result, dict) else None
-        if error or not isinstance(rows, list):
+        if (error or not isinstance(result, dict)
+                or result.get("available") is not True
+                or not isinstance(rows, list)):
             status.setText("Ticket lookup unavailable. No new link permitted.")
             return
         for row in rows[:100]:
@@ -194,6 +196,8 @@ def open_reviewed_mail_filing(owner):
             # "ready". Blocked and unknown states must never be selectable.
             safety_state = row.get("state")
             if (not row.get("message_id") or not row.get("attachment_id")
+                    or not isinstance(row.get("filename"), str)
+                    or not row["filename"]
                     or safety_state not in (
                         "quarantined_unscanned", "metadata_only")):
                 continue
@@ -252,12 +256,19 @@ def open_reviewed_mail_filing(owner):
             if not active():
                 return
             if (error or not isinstance(result, dict)
+                    or result.get("available") is not True
                     or result.get("verified") is not True
+                    or result.get("provider_unchanged") is not True
+                    or result.get("mailbox") != mailbox
                     or result.get("thread_id") != thread_id
                     or result.get("company_id") != state["company_id"]
                     or result.get("ticket_id") != (tid or None)
+                    or result.get("message_id")
+                       != (document["message_id"] if document else None)
                     or result.get("attachment_id")
-                       != (document["attachment_id"] if document else None)):
+                       != (document["attachment_id"] if document else None)
+                    or result.get("safety_state")
+                       != ("quarantined_unscanned" if document else None)):
                 error_notice(
                     "Dossier filing result uncertain. No automatic retry. "
                     "Review the canonical dossier links before trying again."
