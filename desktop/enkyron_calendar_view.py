@@ -215,6 +215,7 @@ class MailCalendarView(QWidget):
     taskCompleteRequested = Signal(dict)
     taskUpdateRequested = Signal(dict)
     sourceMailRequested = Signal(dict)
+    companyFollowupRequested = Signal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -224,6 +225,7 @@ class MailCalendarView(QWidget):
         self._focus_saved_task_id = None
         self.task_rows = []
         self.event_rows = []
+        self.crm_followup_rows = []
         self._agenda_records = []
         self._window_start = None
         self._window_end = None
@@ -410,11 +412,30 @@ class MailCalendarView(QWidget):
         self._agenda_records = []
         self.events_table.setRowCount(0)
         self.tasks_table.setRowCount(0)
-        self.event_rows, self.task_rows = [], []
+        self.event_rows, self.task_rows, self.crm_followup_rows = [], [], []
         self.status.setText("Loading " + mode + " agenda…")
         self.rangeRequested.emit({
             "start": _utc_string(start), "end": _utc_string(end)
         })
+
+    @staticmethod
+    def _crm_followup_day(record):
+        """Validate a canonical CRM date and IDs; never invent a time of day."""
+        if not isinstance(record, dict) or record.get("status") != "open":
+            return None
+        pattern = r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}"
+        if (not isinstance(record.get("id"), str)
+                or re.fullmatch(pattern, record["id"], re.I) is None
+                or not isinstance(record.get("company_id"), str)
+                or re.fullmatch(pattern, record["company_id"], re.I) is None
+                or not isinstance(record.get("action_text"), str)
+                or not record["action_text"].strip()
+                or not isinstance(record.get("due_date"), str)
+                or re.fullmatch(r"\d{4}-\d{2}-\d{2}",
+                                record["due_date"]) is None):
+            return None
+        due = QDate.fromString(record["due_date"], "yyyy-MM-dd")
+        return date(due.year(), due.month(), due.day()) if due.isValid() else None
 
     @staticmethod
     def _local_stamp(value):
@@ -461,6 +482,11 @@ class MailCalendarView(QWidget):
                 by_day.setdefault(stamp.date(), []).append(
                     ("✓ " if task.get("completed_at") else "□ ")
                     + stamp.strftime("%H:%M") + " " + str(task.get("title") or ""))
+        for followup in self.crm_followup_rows:
+            due = self._crm_followup_day(followup)
+            if due:
+                by_day.setdefault(due, []).append(
+                    "CRM · " + str(followup.get("action_text") or "")[:70])
         for row in range(6):
             for column in range(7):
                 day = start.addDays(row * 7 + column)
@@ -499,6 +525,11 @@ class MailCalendarView(QWidget):
             if (due and start <= due < end) or (due is None and
                     record.get("due_at") is None and mode == "month"):
                 self.task_rows.append(record)
+        self.crm_followup_rows = []
+        for record in data.get("company_followups") or []:
+            due = self._crm_followup_day(record)
+            if due is not None and start.date() <= due < end.date():
+                self.crm_followup_rows.append(record)
         self.events_table.setRowCount(len(self.event_rows))
         agenda = []
         for index, entry in enumerate(self.event_rows):
@@ -523,13 +554,26 @@ class MailCalendarView(QWidget):
                     item.setToolTip(notes)
                 self.tasks_table.setItem(index, col, item)
             agenda.append((stamp, "Task", str(entry.get("title") or ""), entry))
-        agenda.sort(key=lambda row: (row[0] is None, row[0] or end, row[1], row[2]))
+        for followup in self.crm_followup_rows:
+            due = self._crm_followup_day(followup)
+            label = (str(followup.get("company_name") or "CRM company")[:75]
+                     + " · " + followup["action_text"][:200])
+            agenda.append((due, "CRM follow-up", label, followup))
+        # A CRM DATE has no fabricated clock time; sorting must safely combine
+        # date-only follow-ups with offset-aware appointments and tasks.
+        agenda.sort(key=lambda row: (
+            row[0] is None,
+            row[0].isoformat()[:10] if row[0] is not None else "9999-12-31",
+            row[0].isoformat()[11:] if isinstance(row[0], datetime) else "",
+            row[1], row[2]))
         display_rows = []
         if mode == "week":
             # Seven visible days, including days with nothing scheduled.
             for offset in range(7):
                 target = (start + timedelta(days=offset)).date()
-                on_day = [row for row in agenda if row[0] and row[0].date() == target]
+                on_day = [row for row in agenda if row[0] and
+                          (row[0].date() if isinstance(row[0], datetime)
+                           else row[0]) == target]
                 if on_day:
                     display_rows.extend(on_day)
                 else:
@@ -550,9 +594,17 @@ class MailCalendarView(QWidget):
                 self.agenda_table.setItem(index, col, QTableWidgetItem(value))
         if mode == "month":
             self._show_month_grid()
+        crm_status = (
+            "CRM follow-ups unavailable (schema 105 required)"
+            if data.get("company_followups_available") is False else
+            "{} CRM follow-up(s) · read-only{}".format(
+                len(self.crm_followup_rows),
+                " · first 200 only" if data.get("company_followups_more") else "")
+        )
         self.status.setText(
-            "{} appointment(s) · {} task(s) · {} view · Stored in ENKYRON.".format(
-                len(self.event_rows), len(self.task_rows), mode.capitalize())
+            "{} appointment(s) · {} task(s) · {} · {} view · Stored in ENKYRON.".format(
+                len(self.event_rows), len(self.task_rows), crm_status,
+                mode.capitalize())
         )
         focus_id = self._focus_saved_task_id
         self._focus_saved_task_id = None
@@ -698,6 +750,10 @@ class MailCalendarView(QWidget):
             kind, record = self._agenda_records[row]
             if kind in ("Task", "Appointment") and isinstance(record, dict):
                 self._show_item_details(kind, record)
+            elif kind == "CRM follow-up" and self._crm_followup_day(record):
+                # Open the canonical CRM follow-up, never create a Calendar task.
+                self.companyFollowupRequested.emit(
+                    record["company_id"], record["id"])
 
     def _show_item_details(self, kind, record):
         dialog = QDialog(None)

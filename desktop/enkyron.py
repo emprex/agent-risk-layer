@@ -2390,6 +2390,8 @@ class EnkyronWindow(QMainWindow):
         self.calendar_view.taskUpdateRequested.connect(self.update_calendar_task)
         self.calendar_view.sourceMailRequested.connect(
             self.open_calendar_source_mail)
+        self.calendar_view.companyFollowupRequested.connect(
+            self.open_calendar_company_followup)
         self.pages.addWidget(self.calendar_view)
         # ENK-08: internal planning Mission Board; audited edits are schema-gated.
         self.mission_board = MissionBoardView()
@@ -9136,7 +9138,18 @@ class EnkyronWindow(QMainWindow):
         # the operator choosing a due date and explicitly confirming.
         self.open_company_followups(company_id, suggested_action=suggestion)
 
-    def open_company_followups(self, company_id=None, suggested_action=None):
+    def open_calendar_company_followup(self, company_id, followup_id):
+        """Open the exact CRM source of a Calendar read-only follow-up."""
+        pattern = r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}"
+        if (not isinstance(company_id, str)
+                or re.fullmatch(pattern, company_id, re.I) is None
+                or not isinstance(followup_id, str)
+                or re.fullmatch(pattern, followup_id, re.I) is None):
+            return
+        self.open_company_followups(company_id, focus_followup_id=followup_id)
+
+    def open_company_followups(
+            self, company_id=None, suggested_action=None, focus_followup_id=None):
         """Company-owned dated tasks, or a read-only cross-company upcoming view."""
         if (self.crm_company_followups_dialog is not None
                 and self.crm_company_followups_dialog.isVisible()):
@@ -9182,7 +9195,8 @@ class EnkyronWindow(QMainWindow):
         table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         layout.addWidget(table, 1)
-        state = {"items": [], "pending": False, "seq": 0}
+        state = {"items": [], "pending": False, "seq": 0,
+                 "focus_id": focus_followup_id if company_id else None}
         form = QFormLayout()
         action = QLineEdit()
         action.setObjectName("crmCompanyFollowupAction")
@@ -9280,20 +9294,34 @@ class EnkyronWindow(QMainWindow):
                     )
                     for col, value in enumerate(values):
                         table.setItem(row, col, QTableWidgetItem(str(value)))
+                missed_focus = False
                 if company_id:
-                    restore_row = next(
-                        (index for index, item in enumerate(state["items"])
-                         if previous_id and item.get("id") == previous_id),
-                        -1
-                    )
-                    if restore_row < 0 and len(state["items"]) == 1:
-                        restore_row = 0
+                    target_id = state.pop("focus_id", None)
+                    if target_id is not None:
+                        # Never fall back to a same-subject/different-ID record.
+                        restore_row = next(
+                            (index for index, item in enumerate(state["items"])
+                             if isinstance(item, dict)
+                             and item.get("id") == target_id
+                             and item.get("company_id") == company_id),
+                            -1)
+                        missed_focus = restore_row < 0
+                    else:
+                        restore_row = next(
+                            (index for index, item in enumerate(state["items"])
+                             if previous_id and item.get("id") == previous_id),
+                            -1)
+                        if restore_row < 0 and len(state["items"]) == 1:
+                            restore_row = 0
                     if restore_row >= 0:
                         table.selectRow(restore_row)
                 notice.setText(
-                    "Showing {} company follow-ups{}".format(
-                        len(state["items"]),
-                        " (first 100 only)" if data.get("more") else ""
+                    ("Exact CRM follow-up unavailable in this bounded list. "
+                     "Refresh the company record; no other reminder was selected."
+                     if missed_focus else
+                     "Showing {} company follow-ups{}".format(
+                         len(state["items"]),
+                         " (first 100 only)" if data.get("more") else "")
                     )
                 )
                 controls()

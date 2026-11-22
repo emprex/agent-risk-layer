@@ -59,7 +59,35 @@ export async function calendarList(pool,actor,input={}){
       [key,start,end]
     )
   ]);
-  return {events:events.rows,tasks:tasks.rows};
+  // Read-only projection of the canonical CRM follow-ups. Never create a
+  // second Calendar task: the CRM follow-up ID and company scope stay intact.
+  // The CRM due date is a London calendar DATE, not an invented timestamp.
+  let followups={rows:[]},followupsAvailable=true;
+  try{
+    followups=await pool.query(
+      'SELECT f.id,f.company_id,c.name AS company_name,f.action_text,'+
+      'f.due_date::text AS due_date,f.status,f.version '+
+      'FROM enkyron_crm_company_followups f '+
+      'JOIN enkyron_crm_companies c ON c.workspace_key=f.workspace_key '+
+      'AND c.id=f.company_id '+
+      "WHERE f.workspace_key=$1 AND f.status='open' "+
+      "AND f.due_date>=($2::timestamptz AT TIME ZONE 'Europe/London')::date "+
+      "AND f.due_date<($3::timestamptz AT TIME ZONE 'Europe/London')::date "+
+      'ORDER BY f.due_date,f.id LIMIT 201',
+      [key,start,end]
+    );
+  }catch(error){
+    if(error?.code!=='42P01')throw error;
+    // Older installations may not yet have the separate CRM schema 105.
+    // Keep the existing Calendar usable and report the missing projection.
+    followupsAvailable=false;
+  }
+  return {
+    events:events.rows,tasks:tasks.rows,
+    company_followups:followups.rows.slice(0,200),
+    company_followups_more:followups.rows.length>200,
+    company_followups_available:followupsAvailable
+  };
 }
 export async function calendarCreate(pool,actor,input){
   const key=scope(actor),data=validateCalendarEvent(input),id=randomUUID();
