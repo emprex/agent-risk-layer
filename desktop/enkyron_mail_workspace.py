@@ -749,9 +749,13 @@ class MailInboxView(QWidget):
         self.followup_task_button.clicked.connect(self._request_followup_task)
         self.followup_task_button.hide()
         reply_toolbar.addWidget(self.followup_task_button)
-        self.document_dossier_button = QPushButton("Save to dossier…")
+        self.document_dossier_button = QPushButton("File in dossier…")
         self.document_dossier_button.setObjectName(
             "enkyronMailSaveToDossier"
+        )
+        self.document_dossier_button.setToolTip(
+            "One reviewed filing for a conversation already linked to a verified CRM company. "
+            "No email is sent; attachments remain unscanned in quarantine."
         )
         self.document_dossier_button.hide()
         reply_toolbar.addWidget(self.document_dossier_button)
