@@ -144,6 +144,8 @@ jobs:
           node --check desktop/enkyron-crm-pipeline.mjs
           node --check desktop/enkyron-mail-ticket-links.mjs
           node --test tests/enkyron-mail-ticket-links.test.js
+          node --check desktop/enkyron-mail-reviewed-dossier.mjs
+          node --test tests/enkyron-mail-reviewed-dossier.test.js
           node --check scripts/enkyron-mail-ticket-links-schema.mjs
           node --test tests/enkyron-mail-ticket-links-schema.test.js
           node --check scripts/enkyron-crm-mail-schema.mjs
