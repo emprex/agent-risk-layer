@@ -17,10 +17,13 @@ ATT = "44444444-5555-4666-8777-888888888888"
 
 
 class Bridge:
-    def __init__(self, verified=True, existing=False, ready=True, uncertain=False):
+    def __init__(self, verified=True, existing=False, ready=True, uncertain=False,
+                 include_attachment=True, blocked=False):
         self.verified = verified
         self.existing = existing
         self.ready = ready
+        self.include_attachment = include_attachment
+        self.blocked = blocked
         self.uncertain = uncertain
         self.calls = []
         self.writes = []
@@ -44,12 +47,15 @@ class Bridge:
                 "title": "Synthetic assessment", "archived_at": None
             }]}
         elif command == "mail-attachment-options":
-            data = {"available": True, "items": [{
+            # Match the *real* Node listAttachmentOptions response: "state",
+            # not invented "ready"/"safety_state" UI fields.
+            items = [{
                 "message_id": MSG, "attachment_id": ATT, "filename": "synthetic.pdf",
-                "ready": self.ready,
-                "safety_state": ("quarantined_unscanned" if self.ready
-                                 else "metadata_only")
-            }]}
+                "state": ("blocked" if self.blocked else
+                          "quarantined_unscanned" if self.ready else
+                          "metadata_only")
+            }] if self.include_attachment else []
+            data = {"available": True, "items": items}
         elif command == "mail-attachment-quarantine":
             self.writes.append("quarantine")
             data = {
@@ -62,11 +68,16 @@ class Bridge:
             data = {
                 "verified": not self.uncertain,
                 "thread_id": THREAD, "company_id": COMPANY,
-                "ticket_id": TICKET, "attachment_id": ATT,
+                "ticket_id": p.get("ticket_id"),
+                "attachment_id": p.get("attachment_id"),
                 "created": {
-                    "company_document": not self.existing,
-                    "ticket_document": not self.existing,
-                    "mail_ticket": not self.existing,
+                    "company_document": ("attachment_id" in p and
+                                         not self.existing),
+                    "ticket_document": ("attachment_id" in p and
+                                        "ticket_id" in p and
+                                        not self.existing),
+                    "mail_ticket": ("ticket_id" in p and
+                                    not self.existing),
                 }
             }
         else:
@@ -144,7 +155,7 @@ class FilingTests(unittest.TestCase):
         self.assertEqual(request["ticket_id"], TICKET)
         self.assertEqual(request["filename_at_review"], "synthetic.pdf")
         self.assertTrue(request["confirmed"])
-        self.assertIn("PASS:", self.status())
+        self.assertIn("Filed: 3 new link(s); 0 already linked", self.status())
 
     def test_existing_references_are_reported_without_phantom_new_links(self):
         self.owner.bridge = Bridge(existing=True)
@@ -152,7 +163,7 @@ class FilingTests(unittest.TestCase):
         _dialog, save = self.selected()
         save.click()
         self.assertEqual(self.owner.bridge.writes, ["mail-dossier-file"])
-        self.assertIn("0 new association(s), 3 already linked", self.status())
+        self.assertIn("0 new link(s); 3 already linked", self.status())
 
     def test_metadata_only_attachment_is_quarantined_before_transaction(self):
         self.owner.bridge = Bridge(ready=False)
@@ -161,7 +172,63 @@ class FilingTests(unittest.TestCase):
         save.click()
         self.assertEqual(self.owner.bridge.writes,
                          ["quarantine", "mail-dossier-file"])
-        self.assertIn("PASS:", self.status())
+        self.assertIn("Filed: 3 new link(s); 0 already linked", self.status())
+
+    def test_real_inventory_state_and_clear_quarantine_label(self):
+        open_reviewed_mail_filing(self.owner)
+        dialog = self.owner.mail_filing_dialog
+        attachment = dialog.findChild(
+            QComboBox, "enkyronUnifiedFilingAttachment")
+        self.assertEqual(attachment.count(), 2)
+        self.assertIn("Quarantined — not scanned", attachment.itemText(1))
+        self.assertTrue(attachment.itemData(1)["ready"])
+
+    def test_ticket_only_works_with_no_attachment_in_inventory(self):
+        self.owner.bridge = Bridge(include_attachment=False)
+        open_reviewed_mail_filing(self.owner)
+        dialog = self.owner.mail_filing_dialog
+        ticket = dialog.findChild(QComboBox, "enkyronUnifiedFilingTicket")
+        attachment = dialog.findChild(QComboBox, "enkyronUnifiedFilingAttachment")
+        note = dialog.findChild(QPlainTextEdit, "enkyronUnifiedFilingReason")
+        confirm = dialog.findChild(QCheckBox, "enkyronUnifiedFilingConfirm")
+        save = dialog.findChild(QPushButton, "enkyronUnifiedFilingSave")
+        self.assertEqual(attachment.count(), 1)
+        ticket.setCurrentIndex(1)
+        note.setPlainText("Synthetic reviewed ticket is associated with saved email.")
+        confirm.setChecked(True)
+        self.assertTrue(save.isEnabled())
+        save.click()
+        self.assertEqual(self.owner.bridge.writes, ["mail-dossier-file"])
+        request = self.owner.bridge.requests[1]
+        self.assertNotIn("attachment_id", request)
+        self.assertIn("Filed: 1 new link(s); 0 already linked", self.status())
+        self.assertIn("No attachment was transferred", self.status())
+
+    def test_document_only_reports_one_link_not_phantom_existing_links(self):
+        open_reviewed_mail_filing(self.owner)
+        dialog = self.owner.mail_filing_dialog
+        ticket = dialog.findChild(QComboBox, "enkyronUnifiedFilingTicket")
+        attachment = dialog.findChild(QComboBox, "enkyronUnifiedFilingAttachment")
+        note = dialog.findChild(QPlainTextEdit, "enkyronUnifiedFilingReason")
+        confirm = dialog.findChild(QCheckBox, "enkyronUnifiedFilingConfirm")
+        save = dialog.findChild(QPushButton, "enkyronUnifiedFilingSave")
+        self.assertEqual(ticket.currentIndex(), 0)
+        attachment.setCurrentIndex(1)
+        note.setPlainText("Synthetic document belongs to verified CRM company.")
+        confirm.setChecked(True)
+        self.assertTrue(save.isEnabled())
+        save.click()
+        request = self.owner.bridge.requests[1]
+        self.assertNotIn("ticket_id", request)
+        self.assertIn("Filed: 1 new link(s); 0 already linked", self.status())
+
+    def test_blocked_attachment_cannot_be_selected(self):
+        self.owner.bridge = Bridge(blocked=True)
+        open_reviewed_mail_filing(self.owner)
+        dialog = self.owner.mail_filing_dialog
+        attachment = dialog.findChild(QComboBox, "enkyronUnifiedFilingAttachment")
+        self.assertEqual(attachment.count(), 1)
+        self.assertEqual(self.owner.bridge.writes, [])
 
     def test_uncertain_commit_never_shows_success_or_retries(self):
         self.owner.bridge = Bridge(uncertain=True)
