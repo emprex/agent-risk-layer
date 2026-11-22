@@ -76,7 +76,7 @@ async function requireRead(db,key,mailbox){
   )).rows[0];
   if(row?.can_read!==true)throw Error('Mailbox read permission denied');
 }
-async function inspect(db,key,input,{lock=false}={}){
+async function inspect(db,key,input,{lock=false,allowUnstored=false}={}){
   await requireRead(db,key,input.mailbox);
   const args=[key,input.mailbox,input.thread_id];
   const thread=(await db.query(
@@ -146,8 +146,9 @@ async function inspect(db,key,input,{lock=false}={}){
       [key,input.mailbox,a.message_id,a.attachment_id,input.thread_id]
     )).rows[0];
     if(!doc)throw Error('Attachment does not belong to the selected conversation');
-    if(doc.safety_state!=='quarantined_unscanned'||doc.stored!==true
-      ||!SHA.test(doc.content_sha256||''))
+    const ready=doc.safety_state==='quarantined_unscanned'&&doc.stored===true
+      &&SHA.test(doc.content_sha256||'');
+    if(!ready&&!(allowUnstored&&doc.safety_state==='metadata_only'&&!doc.stored))
       throw Error('Attachment needs explicit retrieval into unscanned quarantine first');
     if(a.content_sha256_at_review && doc.content_sha256!==a.content_sha256_at_review)
       throw Error('Attachment digest changed since review; review again');
@@ -161,11 +162,12 @@ async function inspect(db,key,input,{lock=false}={}){
         'AND attachment_id=$4 AND '+where+'=$5',
         [key,input.mailbox,a.message_id,a.attachment_id,destination_id]
       )).rows[0];
-      destinations.push({kind,id:destination_id,status:old?'already_linked':'will_link'});
+      destinations.push({kind,id:destination_id,
+        status:old?'already_linked':ready?'will_link':'needs_quarantine'});
     }
     result.attachment={message_id:a.message_id,attachment_id:a.attachment_id,
-      filename:doc.original_filename,sha256:doc.content_sha256,
-      safety_state:'quarantined_unscanned',destinations};
+      filename:doc.original_filename,sha256:ready?doc.content_sha256:null,
+      safety_state:doc.safety_state,needs_retrieval:!ready,destinations};
   }
   return result;
 }
@@ -173,7 +175,7 @@ export async function previewUnifiedMailFiling(pool,actor,request){
   const input=validateUnifiedMailFiling(request);
   const key=scope(actor);
   // A preview is a read-only proposal; commit always revalidates from DB.
-  return {preview:true,...await inspect(pool,key,input)};
+  return {preview:true,...await inspect(pool,key,input,{allowUnstored:true})};
 }
 export async function commitUnifiedMailFiling(pool,actor,request,{newId=randomUUID}={}){
   const input=validateUnifiedMailFiling(request,{commit:true});
