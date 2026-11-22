@@ -23,7 +23,7 @@ export function validateEnk06LaunchEnv(env){
     throw Error('Refusing ENK-06 launch: conflicting UAT/preview/headless environment');
   return {database:DB,guard:MARKER};
 }
-export async function verifySyntheticSeed(pool,actor){
+export async function verifySyntheticSeed(pool,actor,{allowMissingSupport=false}={}){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
     throw Error('Refusing ENK-06 launch: invalid peer identity');
   const key='local:'+actor,ids=SYNTHETIC_IDS;
@@ -44,15 +44,21 @@ export async function verifySyntheticSeed(pool,actor){
     '(SELECT count(*)::int FROM enkyron_local_mail_access '+
     "WHERE workspace_key=$1 AND mailbox_key='direction' "+
     "AND role='organization_owner_l5' AND can_read=true "+
-    'AND can_send=false) AS access',
+    'AND can_send=false) AS access,'+
+    '(SELECT count(*)::int FROM enkyron_local_mail_access '+
+    "WHERE workspace_key=$1 AND mailbox_key='support' "+
+    "AND role='organization_owner_l5' AND can_read=true "+
+    'AND can_send=false) AS support_access',
     [key,ids.company_id,NAME,ids.ticket_id,ids.thread_id,
       ids.attachment_id,ids.message_id]
   )).rows[0];
   if(!row||['company','ticket','thread','attachment','access']
-      .some(k=>row[k]!==1))
+      .some(k=>row[k]!==1) ||
+      (!allowMissingSupport && row.support_access!==1))
     throw Error('Refusing ENK-06 launch: expected synthetic seed missing or invalid');
   return {verified:true,company:ids.company_id,ticket:ids.ticket_id,
-    thread:ids.thread_id,provider_disabled:true};
+    thread:ids.thread_id,provider_disabled:true,
+    support_ready:row.support_access===1};
 }
 const PYTHON=`from PySide6.QtWidgets import QApplication
 from desktop.enkyron import EnkyronWindow, STYLE
