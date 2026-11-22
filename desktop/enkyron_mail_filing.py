@@ -186,7 +186,7 @@ def open_reviewed_mail_filing(owner):
         attachment.clear()
         attachment.addItem("No attachment — link conversation only", None)
         rows = result.get("items") if isinstance(result, dict) else None
-        if error or not result.get("available") or not isinstance(rows, list):
+        if error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list):
             status.setText("Attachment inventory unavailable; no filing possible.")
             return
         for row in rows[:50]:
@@ -262,7 +262,7 @@ def open_reviewed_mail_filing(owner):
             if not active():
                 return
             rows = result.get("items") if isinstance(result, dict) else None
-            if error or not result.get("available") or not isinstance(rows, list):
+            if error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list):
                 error_notice("Existing Mail-ticket links are unavailable.")
                 return
             state["ticket_exists"] = any(
@@ -282,7 +282,7 @@ def open_reviewed_mail_filing(owner):
             if not active():
                 return
             rows = result.get("items") if isinstance(result, dict) else None
-            if error or not result.get("available") or not isinstance(rows, list):
+            if error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list):
                 error_notice("Existing attachment links are unavailable.")
                 return
             state["doc_company_exists"] = any(
@@ -407,7 +407,7 @@ def open_reviewed_mail_filing(owner):
             if not active():
                 return
             rows = result.get("items") if isinstance(result, dict) else None
-            if (error or not result.get("available")
+            if (error or not isinstance(result, dict) or not result.get("available")
                     or not isinstance(rows, list)
                     or (tid and not any(isinstance(x, dict)
                         and x.get("ticket_id") == tid for x in rows))):
@@ -426,7 +426,7 @@ def open_reviewed_mail_filing(owner):
             if not active():
                 return
             rows = result.get("items") if isinstance(result, dict) else None
-            if (error or not result.get("available") or not isinstance(rows, list)
+            if (error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list)
                     or (document and not any(
                         isinstance(x, dict)
                         and str(x.get("company_id")) == target_company
