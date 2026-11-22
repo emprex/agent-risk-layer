@@ -13,6 +13,8 @@ import {REQUIRED_RELATIONS,requireEnk06PreflightIdentity,
   inspectEnk06Preflight} from '../scripts/enkyron-enk06-uat-preflight.mjs';
 import {requireEnk06SeedIdentity,SYNTHETIC_IDS}
   from '../scripts/enkyron-enk06-uat-seed.mjs';
+import {validateEnk06LaunchEnv,verifySyntheticSeed}
+  from '../scripts/enkyron-enk06-uat-launch.mjs';
 
 const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk06',
   ENKYRON_UAT_GUARD:'ENK06_SYNTHETIC_ONLY'};
@@ -186,4 +188,41 @@ test('seed refuses wrong identity, nonempty business DB or readonly session',()=
     [target,identity,[0,0,0,0,0]],
     [target,identity,null],
   ])assert.throws(()=>requireEnk06SeedIdentity(...invalid),/Refusing/);
+});
+
+test('native launcher refuses all non-synthetic inherited environments',()=>{
+  assert.deepEqual(validateEnk06LaunchEnv({}),{
+    database:ENKYRON_ENK06_UAT_DATABASE,guard:ENKYRON_ENK06_UAT_MARKER
+  });
+  for(const env of [
+    {ENKYRON_UAT_DATABASE:'arl_local'},
+    {ENKYRON_UAT_DATABASE:'enkyron_uat_enk05'},
+    {ENKYRON_UAT_GUARD:ENKYRON_UAT_MARKER},
+    {ENKYRON_UX_PREVIEW_READ_ONLY:'1'},
+    {QT_QPA_PLATFORM:'offscreen'},
+  ])assert.throws(()=>validateEnk06LaunchEnv(env),/Refusing/);
+});
+test('native launcher requires exact existing synthetic seed before any Qt process',async()=>{
+  const queries=[];
+  const fake=values=>({async query(sql,args){
+    queries.push({sql,args});
+    return {rows:[values]};
+  }});
+  const good={company:1,ticket:1,thread:1,attachment:1,access:1};
+  assert.equal((await verifySyntheticSeed(fake(good),os.userInfo().username))
+    .provider_disabled,true);
+  assert.deepEqual(queries[0].args.slice(1),[
+    SYNTHETIC_IDS.company_id,'ENK06 Synthetic Demo Company — NOT REAL',
+    SYNTHETIC_IDS.ticket_id,SYNTHETIC_IDS.thread_id,
+    SYNTHETIC_IDS.attachment_id,SYNTHETIC_IDS.message_id
+  ]);
+  assert.match(queries[0].sql,/can_send=false/);
+  assert.ok(queries.every(x=>x.sql.startsWith('SELECT ')));
+  for(const field of Object.keys(good)){
+    await assert.rejects(()=>verifySyntheticSeed(
+      fake({...good,[field]:0}),os.userInfo().username
+    ),/synthetic seed missing/);
+  }
+  await assert.rejects(()=>verifySyntheticSeed(fake(good),'invalid actor!'),
+    /invalid peer identity/);
 });
