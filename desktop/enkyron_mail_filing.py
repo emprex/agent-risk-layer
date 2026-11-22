@@ -143,7 +143,7 @@ def open_reviewed_mail_filing(owner):
         state["company_name"] = str(result["company_name"])
         state["company_loaded"] = True
         company.setText("Verified CRM company: " + state["company_name"])
-        owner.bridge.call("tickets", state["company_name"], callback=load_tickets)
+        owner.bridge.call("crm-company-tickets", state["company_id"], callback=load_tickets)
         owner.bridge.call("mail-attachment-options", payload={
             "mailbox": mailbox, "thread_id": thread_id
         }, callback=load_attachments)
@@ -160,13 +160,12 @@ def open_reviewed_mail_filing(owner):
         for row in rows[:100]:
             if not isinstance(row, dict) or row.get("archived_at"):
                 continue
-            ident = row.get("id")
+            ident = row.get("ticket_id")
             number, client = row.get("ticket_number"), row.get("client_name")
             if (not isinstance(ident, str) or len(ident) != 36
                     or not isinstance(number, str)
                     or not isinstance(client, str)
-                    or client.strip().casefold()
-                    != state["company_name"].strip().casefold()):
+                    ):
                 continue
             state["tickets"][ident] = (number, client)
             ticket.addItem(
@@ -209,103 +208,92 @@ def open_reviewed_mail_filing(owner):
         tid, document = ticket.currentData(), attachment.currentData()
         rationale = note.toPlainText().strip()
         if (state["busy"] or not state["company_loaded"]
+                or not state["tickets_loaded"] or not state["attachments_loaded"]
                 or not approve.isChecked()
                 or not 30 <= len(rationale) <= 1000
                 or not (tid or document) or not active()
                 or (tid and tid not in state["tickets"])):
             return
+
+        payload = {
+            "mailbox": mailbox,
+            "thread_id": thread_id,
+            "company_id": state["company_id"],
+            "company_name_at_review": state["company_name"],
+            "review_note": rationale,
+            "confirmed": True,
+        }
+        if tid:
+            number, client = state["tickets"][tid]
+            payload.update({
+                "ticket_id": tid,
+                "ticket_number_at_review": number,
+                "client_name_at_review": client,
+            })
+        if document:
+            payload.update({
+                "message_id": document["message_id"],
+                "attachment_id": document["attachment_id"],
+                "filename_at_review": document["filename"],
+            })
+
         state["busy"] = True
-        state["steps"] = []
         for widget in (ticket, attachment, note, approve):
             widget.setEnabled(False)
         save.setEnabled(False)
-        status.setText("Checking exact existing associations before filing…")
-        target_company = state["company_id"]
+        status.setText("Preparing exact reviewed dossier links…")
 
-        def check_current_company(result, error):
+        def filed(result, error):
             if not active():
                 return
             if (error or not isinstance(result, dict)
-                    or result.get("linked") is not True
-                    or str(result.get("company_id")) != target_company):
-                error_notice("CRM company changed or cannot be verified.")
-                return
-            if tid:
-                owner.bridge.call("crm-ticket-company", tid,
-                                  callback=check_ticket_company)
-            else:
-                check_existing_tickets(None, None)
-
-        def check_ticket_company(result, error):
-            if not active():
-                return
-            linked = result.get("link") if isinstance(result, dict) else None
-            if (error or not isinstance(result, dict)
-                    or result.get("available") is not True
-                    or not isinstance(linked, dict)
-                    or str(linked.get("company_id")) != target_company):
+                    or result.get("verified") is not True
+                    or result.get("thread_id") != thread_id
+                    or result.get("company_id") != state["company_id"]
+                    or result.get("ticket_id") != (tid or None)
+                    or result.get("attachment_id")
+                       != (document["attachment_id"] if document else None)):
                 error_notice(
-                    "Ticket has no verified association to this CRM company."
+                    "Dossier filing result uncertain. No automatic retry. "
+                    "Review the canonical dossier links before trying again."
                 )
                 return
-            check_existing_tickets(None, None)
+            created = result.get("created")
+            if not isinstance(created, dict):
+                error_notice("Dossier filing response incomplete.")
+                return
+            new_count = sum(value is True for value in created.values())
+            existing_count = sum(value is False for value in created.values())
+            if not tid:
+                existing_count -= 1
+            if not document:
+                existing_count -= (2 if tid else 1)
+            status.setText(
+                "PASS: {} new association(s), {} already linked. "
+                "Exact CRM/Ticket/NEMORYTH readback verified in one database "
+                "transaction. {} No email was sent.".format(
+                    new_count, max(existing_count, 0),
+                    "Attachment remains quarantined and unscanned."
+                    if document else "No attachment was transferred."
+                )
+            )
+            owner.load_mail_company_link(mailbox, thread_id)
+            owner.load_mail_ticket_links(mailbox, thread_id)
+            cancel.setText("Close")
 
-        def check_existing_tickets(_result, _error):
-            if tid:
-                owner.bridge.call("mail-local-ticket-links", payload={
-                    "mailbox": mailbox, "thread_id": thread_id
-                }, callback=existing_tickets)
-            else:
-                existing_tickets({"available": True, "items": []}, None)
-
-        def existing_tickets(result, error):
+        def file_in_one_transaction():
             if not active():
                 return
-            rows = result.get("items") if isinstance(result, dict) else None
-            if error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list):
-                error_notice("Existing Mail-ticket links are unavailable.")
-                return
-            state["ticket_exists"] = any(
-                isinstance(row, dict) and row.get("ticket_id") == tid
-                for row in rows
-            ) if tid else False
-            if document:
-                owner.bridge.call("mail-document-links", payload={
-                    "mailbox": mailbox,
-                    "message_id": document["message_id"],
-                    "attachment_id": document["attachment_id"]
-                }, callback=existing_documents)
-            else:
-                existing_documents({"available": True, "items": []}, None)
+            status.setText("Recording and verifying selected dossier references…")
+            owner.bridge.call("mail-dossier-file", payload=payload, callback=filed)
 
-        def existing_documents(result, error):
-            if not active():
-                return
-            rows = result.get("items") if isinstance(result, dict) else None
-            if error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list):
-                error_notice("Existing attachment links are unavailable.")
-                return
-            state["doc_company_exists"] = any(
-                isinstance(row, dict)
-                and str(row.get("company_id")) == target_company
-                for row in rows
-            )
-            state["doc_ticket_exists"] = bool(tid) and any(
-                isinstance(row, dict) and row.get("ticket_id") == tid
-                for row in rows
-            )
-            if (document and not document.get("ready")
-                    and (not state["doc_company_exists"]
-                         or (tid and not state["doc_ticket_exists"]))):
-                status.setText("Retrieving attachment into unscanned quarantine…")
-                owner.bridge.call("mail-attachment-quarantine", payload={
-                    "mailbox": mailbox, "thread_id": thread_id,
-                    "message_id": document["message_id"],
-                    "attachment_id": document["attachment_id"],
-                    "confirmed": True
-                }, callback=quarantined)
-            else:
-                write_documents()
+        if not document or document.get("ready"):
+            file_in_one_transaction()
+            return
+
+        status.setText(
+            "Retrieving the reviewed attachment into unscanned quarantine…"
+        )
 
         def quarantined(result, error):
             if not active():
@@ -317,139 +305,18 @@ def open_reviewed_mail_filing(owner):
                     or not isinstance(digest, str) or len(digest) != 64
                     or any(c not in "0123456789abcdef" for c in digest)):
                 error_notice(
-                    "Quarantine retrieval not confirmed. No association attempted."
+                    "Quarantine retrieval not verified. "
+                    "No new dossier link was attempted."
                 )
                 return
-            state["steps"].append("attachment quarantined (unscanned)")
-            write_documents()
+            file_in_one_transaction()
 
-        def write_documents():
-            if document and not state["doc_company_exists"]:
-                write_document("company", target_company, document_company_done)
-            else:
-                write_ticket_document()
-
-        def write_document(kind, ident, callback):
-            status.setText("Recording reviewed " + kind + " document link…")
-            owner.bridge.call("mail-document-link", payload={
-                "mailbox": mailbox,
-                "message_id": document["message_id"],
-                "attachment_id": document["attachment_id"],
-                "destination_kind": kind,
-                "destination_id": ident,
-                "review_note": rationale,
-                "confirmed": True
-            }, callback=callback)
-
-        def document_company_done(result, error):
-            if not active():
-                return
-            if (error or not isinstance(result, dict)
-                    or result.get("linked") is not True
-                    or result.get("destination_id") != target_company):
-                error_notice("CRM document-link result uncertain.")
-                return
-            state["steps"].append("document linked to company")
-            write_ticket_document()
-
-        def write_ticket_document():
-            if document and tid and not state["doc_ticket_exists"]:
-                write_document("ticket", tid, document_ticket_done)
-            else:
-                write_ticket_link()
-
-        def document_ticket_done(result, error):
-            if not active():
-                return
-            if (error or not isinstance(result, dict)
-                    or result.get("linked") is not True
-                    or result.get("destination_id") != tid):
-                error_notice("Ticket document-link result uncertain.")
-                return
-            state["steps"].append("document linked to ticket")
-            write_ticket_link()
-
-        def write_ticket_link():
-            if tid and not state["ticket_exists"]:
-                number, client = state["tickets"][tid]
-                status.setText("Recording reviewed conversation-to-ticket link…")
-                owner.bridge.call("mail-local-ticket-link", payload={
-                    "mailbox": mailbox, "thread_id": thread_id,
-                    "ticket_id": tid,
-                    "ticket_number_at_review": number,
-                    "client_name_at_review": client,
-                    "review_note": rationale, "confirmed": True
-                }, callback=ticket_linked)
-            else:
-                readback()
-
-        def ticket_linked(result, error):
-            if not active():
-                return
-            if (error or not isinstance(result, dict)
-                    or result.get("linked") is not True
-                    or result.get("ticket_id") != tid):
-                error_notice("Conversation-to-ticket outcome uncertain.")
-                return
-            state["steps"].append("conversation linked to ticket")
-            readback()
-
-        def readback():
-            status.setText("Reading canonical links to verify the result…")
-            if tid:
-                owner.bridge.call("mail-local-ticket-links", payload={
-                    "mailbox": mailbox, "thread_id": thread_id
-                }, callback=verify_ticket)
-            else:
-                verify_ticket({"available": True, "items": []}, None)
-
-        def verify_ticket(result, error):
-            if not active():
-                return
-            rows = result.get("items") if isinstance(result, dict) else None
-            if (error or not isinstance(result, dict) or not result.get("available")
-                    or not isinstance(rows, list)
-                    or (tid and not any(isinstance(x, dict)
-                        and x.get("ticket_id") == tid for x in rows))):
-                error_notice("Ticket link could not be verified after filing.")
-                return
-            if document:
-                owner.bridge.call("mail-document-links", payload={
-                    "mailbox": mailbox,
-                    "message_id": document["message_id"],
-                    "attachment_id": document["attachment_id"]
-                }, callback=verify_documents)
-            else:
-                verify_documents({"available": True, "items": []}, None)
-
-        def verify_documents(result, error):
-            if not active():
-                return
-            rows = result.get("items") if isinstance(result, dict) else None
-            if (error or not isinstance(result, dict) or not result.get("available") or not isinstance(rows, list)
-                    or (document and not any(
-                        isinstance(x, dict)
-                        and str(x.get("company_id")) == target_company
-                        for x in rows))
-                    or (document and tid and not any(
-                        isinstance(x, dict) and x.get("ticket_id") == tid
-                        for x in rows))):
-                error_notice("Document links could not be verified after filing.")
-                return
-            state["steps"].append("exact links verified by readback")
-            status.setText(
-                "PASS: selected associations are linked to the reviewed "
-                "company and ticket. The document remains unscanned in quarantine. "
-                "No message was sent."
-            )
-            owner.load_mail_company_link(mailbox, thread_id)
-            owner.load_mail_ticket_links(mailbox, thread_id)
-            cancel.setText("Close")
-            save.setEnabled(False)
-
-        owner.bridge.call("mail-local-company", payload={
-            "mailbox": mailbox, "thread_id": thread_id
-        }, callback=check_current_company)
+        owner.bridge.call("mail-attachment-quarantine", payload={
+            "mailbox": mailbox, "thread_id": thread_id,
+            "message_id": document["message_id"],
+            "attachment_id": document["attachment_id"],
+            "confirmed": True
+        }, callback=quarantined)
 
     save.clicked.connect(submit)
     owner.mail_filing_dialog = dialog
