@@ -39,6 +39,7 @@ if __package__:
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
+    from .enkyron_mail_filing_dialog import UnifiedMailFilingDialog
     from .enkyron_calendar_view import MailCalendarView, parse_task_mail_source
     from .enkyron_mission_board import MissionBoardView
     from .enkyron_pilot_lab import PilotLabPanel
@@ -54,6 +55,7 @@ else:
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
+    from enkyron_mail_filing_dialog import UnifiedMailFilingDialog
     from enkyron_calendar_view import MailCalendarView, parse_task_mail_source
     from enkyron_mission_board import MissionBoardView
     from enkyron_pilot_lab import PilotLabPanel
@@ -1873,7 +1875,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox = MailInboxView()
         self.mail_inbox.set_local_mode()
         self.mail_inbox.document_dossier_button.clicked.connect(
-            self.open_mail_save_to_dossier
+            self.open_mail_unified_filing
         )
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
         self.mail_inbox.localRecordMoveRequested.connect(self.move_saved_mail_record)
@@ -3520,6 +3522,199 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-attachment-options", payload={
             "mailbox": mailbox, "thread_id": thread_id
         }, callback=options_loaded)
+
+    def open_mail_unified_filing(self):
+        """One reviewed Mail → CRM → Ticket → NEMORYTH flow; no automatic sends."""
+        mailbox = self.mail_inbox.current_thread_mailbox
+        thread_id = self.mail_inbox.current_thread_id
+        if (mailbox not in ("direction", "support") or not thread_id
+                or self.mail_inbox.selected_folder in ("spam", "trash", "sent", "drafts")):
+            return
+        context = {"mailbox": mailbox, "thread_id": thread_id}
+        subject = self.mail_inbox.subject.text()
+
+        def current():
+            return (mailbox == self.mail_inbox.current_thread_mailbox
+                    and thread_id == self.mail_inbox.current_thread_id)
+
+        def unavailable(reason):
+            if current():
+                QMessageBox.warning(
+                    self, "File in dossier unavailable",
+                    "Could not verify the current records. No association was changed.\n"
+                    + str(reason or "")[:220]
+                )
+
+        def company_loaded(data, error):
+            if not current():
+                return
+            records = data.get("items") if isinstance(data, dict) else None
+            if error or not isinstance(records, list):
+                unavailable(error or "CRM search unavailable")
+                return
+            companies = [
+                {"id": str(row["id"]), "name": str(row["name"])}
+                for row in records[:100] if isinstance(row, dict)
+                and isinstance(row.get("id"), str) and len(row["id"]) == 36
+                and isinstance(row.get("name"), str) and row["name"].strip()
+                and row.get("relationship_state") != "inactive"
+            ]
+
+            def ticket_loaded(ticket_data, ticket_error):
+                if not current():
+                    return
+                rows = ticket_data.get("items") if isinstance(ticket_data, dict) else None
+                if ticket_error or not isinstance(rows, list):
+                    unavailable(ticket_error or "Ticket lookup unavailable")
+                    return
+                tickets = [
+                    {"id": str(row["id"]),
+                     "ticket_number": str(row["ticket_number"]),
+                     "title": str(row.get("title") or ""),
+                     "client_name": str(row["client_name"])}
+                    for row in rows[:100] if isinstance(row, dict)
+                    and isinstance(row.get("id"), str) and len(row["id"]) == 36
+                    and row.get("ticket_number") and row.get("client_name")
+                    and not row.get("archived_at")
+                ]
+
+                def documents_loaded(doc_data, doc_error):
+                    if not current():
+                        return
+                    items = doc_data.get("items") if isinstance(doc_data, dict) else None
+                    if doc_error or not isinstance(items, list) or not doc_data.get("available"):
+                        unavailable(doc_error or "NEMORYTH document list unavailable")
+                        return
+                    documents = [
+                        {"message_id": row["message_id"],
+                         "attachment_id": row["attachment_id"],
+                         "filename": str(row.get("filename") or "Attachment")}
+                        for row in items if isinstance(row, dict)
+                        and row.get("message_id") and row.get("attachment_id")
+                        and (row.get("ready")
+                             or row.get("safety_state") == "metadata_only")
+                    ]
+
+                    def existing_company_loaded(linked, linked_error):
+                        if not current():
+                            return
+                        if (linked_error or not isinstance(linked, dict)
+                                or linked.get("mailbox") != mailbox
+                                or linked.get("thread_id") != thread_id):
+                            unavailable(linked_error or "Existing CRM association unavailable")
+                            return
+                        reviewed_id = linked.get("company_id")
+                        if reviewed_id and not any(x["id"] == reviewed_id for x in companies):
+                            reviewed_name = linked.get("company_name")
+                            if not isinstance(reviewed_name, str) or not reviewed_name.strip():
+                                unavailable("Cannot verify the existing company name")
+                                return
+                            companies.insert(0, {"id": reviewed_id, "name": reviewed_name})
+                        dialog = UnifiedMailFilingDialog(
+                            {"mailbox": mailbox, "thread_id": thread_id,
+                             "subject": subject},
+                            companies, tickets, documents, parent=self
+                        )
+                        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+                        self.mail_unified_filing_dialog = dialog
+                        if reviewed_id:
+                            for index in range(1, dialog.company.count()):
+                                choice = dialog.company.itemData(index)
+                                if isinstance(choice, dict) and choice.get("id") == reviewed_id:
+                                    dialog.company.setCurrentIndex(index)
+                                    break
+
+                        def preview_requested(payload):
+                            if not dialog.isVisible() or not current():
+                                dialog.show_error("Selected email changed; no action taken.")
+                                return
+                            def shown(result, err):
+                                if not dialog.isVisible():
+                                    return
+                                if err or not isinstance(result, dict):
+                                    dialog.show_error(
+                                        "Preview unavailable. Nothing was saved. "
+                                        + str(err or "")[:180]
+                                    )
+                                    return
+                                dialog.show_preview_result(result)
+                            self.bridge.call("mail-unified-preview",
+                                             payload=payload, callback=shown)
+
+                        def commit_requested(payload):
+                            if not dialog.isVisible() or not current():
+                                dialog.show_error("Selected email changed; nothing saved.")
+                                return
+
+                            def saved(result, err):
+                                if not dialog.isVisible():
+                                    return
+                                if err or not isinstance(result, dict):
+                                    dialog.show_error(
+                                        "Filing outcome uncertain. Inspect existing dossier "
+                                        "links before trying again. "
+                                        + str(err or "")[:120]
+                                    )
+                                    return
+                                dialog.show_commit_result(result)
+                                if result.get("saved") is True:
+                                    self.load_mail_company_link(mailbox, thread_id)
+                                    self.load_mail_ticket_links(mailbox, thread_id)
+
+                            def commit_link(exact_request):
+                                self.bridge.call("mail-unified-commit",
+                                                 payload=exact_request, callback=saved)
+
+                            attachment = payload.get("attachment")
+                            if (not isinstance(attachment, dict)
+                                    or attachment.get("content_sha256_at_review")):
+                                commit_link(payload)
+                                return
+
+                            def quarantined(result, err):
+                                if not dialog.isVisible():
+                                    return
+                                digest = result.get("sha256") if isinstance(result, dict) else None
+                                if (err or not isinstance(result, dict)
+                                        or result.get("quarantined") is not True
+                                        or result.get("safety_state") != "quarantined_unscanned"
+                                        or not isinstance(digest, str)
+                                        or re.fullmatch("[a-f0-9]{64}", digest) is None):
+                                    dialog.show_error(
+                                        "Retrieval into quarantine failed. No dossier links "
+                                        "were submitted. " + str(err or "")[:120]
+                                    )
+                                    return
+                                pinned = dict(payload)
+                                pinned["attachment"] = dict(attachment)
+                                pinned["attachment"]["content_sha256_at_review"] = digest
+                                commit_link(pinned)
+
+                            self.bridge.call("mail-attachment-quarantine", payload={
+                                "mailbox": mailbox, "thread_id": thread_id,
+                                "message_id": attachment["message_id"],
+                                "attachment_id": attachment["attachment_id"],
+                                "confirmed": True
+                            }, callback=quarantined)
+
+                        dialog.previewRequested.connect(preview_requested)
+                        dialog.commitRequested.connect(commit_requested)
+                        dialog.open()
+                        dialog.raise_()
+
+                    self.bridge.call(
+                        "mail-local-company", payload=context,
+                        callback=existing_company_loaded
+                    )
+
+                self.bridge.call(
+                    "mail-document-candidates", payload=context,
+                    callback=documents_loaded
+                )
+
+            self.bridge.call("tickets", "", callback=ticket_loaded)
+
+        self.bridge.call("crm-companies", "", callback=company_loaded)
 
     def open_mail_save_to_dossier(self):
         """Reviewed human association of a real archived mail attachment."""
