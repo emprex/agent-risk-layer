@@ -3,6 +3,7 @@ import os
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtWidgets import (
     QApplication, QWidget, QComboBox, QCheckBox, QPlainTextEdit,
     QPushButton, QLabel
@@ -113,9 +114,15 @@ class FilingTests(unittest.TestCase):
         self.owner = Owner(Bridge())
 
     def tearDown(self):
+        # Explicitly destroy native widgets while QApplication still exists.
+        # Otherwise the offscreen Qt plugin can segfault during interpreter exit.
         if hasattr(self.owner, "mail_filing_dialog"):
             self.owner.mail_filing_dialog.close()
+            self.owner.mail_filing_dialog.deleteLater()
         self.owner.close()
+        self.owner.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.app.processEvents()
 
     def selected(self):
         dialog = self.owner.mail_filing_dialog
