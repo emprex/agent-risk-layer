@@ -15,6 +15,8 @@ import {requireEnk06SeedIdentity,SYNTHETIC_IDS}
   from '../scripts/enkyron-enk06-uat-seed.mjs';
 import {validateEnk06LaunchEnv,verifySyntheticSeed}
   from '../scripts/enkyron-enk06-uat-launch.mjs';
+import {requireFreshEnk06Database,requirePrepareEnvironment}
+  from '../scripts/enkyron-enk06-uat-prepare.mjs';
 
 const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk06',
   ENKYRON_UAT_GUARD:'ENK06_SYNTHETIC_ONLY'};
@@ -225,4 +227,34 @@ test('native launcher requires exact existing synthetic seed before any Qt proce
   }
   await assert.rejects(()=>verifySyntheticSeed(fake(good),'invalid actor!'),
     /invalid peer identity/);
+});
+
+test('single-step setup refuses existing DB and any wrong maintenance peer',()=>{
+  const actor=os.userInfo().username;
+  const identity={database:'postgres',role:actor,port:'5432'};
+  assert.doesNotThrow(()=>
+    requireFreshEnk06Database(identity,[],actor));
+  for(const args of [
+    [{...identity,database:'arl_local'},[],actor],
+    [{...identity,database:'enkyron_uat_enk06'},[],actor],
+    [{...identity,role:'other'},[],actor],
+    [{...identity,port:'5433'},[],actor],
+    [identity,[{datname:ENKYRON_ENK06_UAT_DATABASE}],actor],
+    [identity,null,actor],
+    [identity,[],'wrong!'],
+  ])assert.throws(()=>requireFreshEnk06Database(...args),/Refusing/);
+});
+test('single-step setup rejects inherited database, wrong marker and preview',()=>{
+  assert.doesNotThrow(()=>requirePrepareEnvironment({}));
+  assert.doesNotThrow(()=>requirePrepareEnvironment({
+    ENKYRON_UAT_DATABASE:ENKYRON_ENK06_UAT_DATABASE,
+    ENKYRON_UAT_GUARD:ENKYRON_ENK06_UAT_MARKER
+  }));
+  for(const env of [
+    {ENKYRON_UAT_DATABASE:'arl_local'},
+    {ENKYRON_UAT_DATABASE:'enkyron_uat_enk03'},
+    {ENKYRON_UAT_DATABASE:'enkyron_uat_enk05'},
+    {ENKYRON_UAT_GUARD:'WRONG'},
+    {ENKYRON_UX_PREVIEW_READ_ONLY:'1'},
+  ])assert.throws(()=>requirePrepareEnvironment(env),/Refusing/);
 });
