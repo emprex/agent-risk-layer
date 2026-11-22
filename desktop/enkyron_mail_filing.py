@@ -1,11 +1,12 @@
 """ENK-06: one reviewed Mail filing dialog for an already verified CRM company.
 
-Uses existing narrow backend commands. Operations may partially succeed; never
-assume multi-command atomicity or retry an uncertain write automatically.
+Uses one guarded PostgreSQL transaction for the selected dossier links.
+An explicitly authorised quarantine retrieval, when necessary, precedes it.
+Never repeat an uncertain write automatically.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit,
+    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel,
     QPlainTextEdit, QPushButton, QVBoxLayout,
 )
 
@@ -29,9 +30,9 @@ def open_reviewed_mail_filing(owner):
     layout = QVBoxLayout(dialog)
 
     intro = QLabel(
-        "Classify this saved conversation and one attachment in existing, "
-        "human-reviewed dossiers. No email is sent and unscanned files remain "
-        "in quarantine. Existing links are reused, never duplicated."
+        "File this saved email with an existing ticket and/or an attachment. "
+        "Only references are added to the reviewed CRM dossier; no email is sent "
+        "and no file is released. Unscanned files stay in quarantine."
     )
     intro.setWordWrap(True)
     layout.addWidget(intro)
@@ -40,34 +41,34 @@ def open_reviewed_mail_filing(owner):
     company.setWordWrap(True)
     layout.addWidget(company)
 
-    layout.addWidget(QLabel("Optional existing Client Desk ticket"))
+    layout.addWidget(QLabel("Existing Client Desk ticket (optional)"))
     ticket = QComboBox()
     ticket.setObjectName("enkyronUnifiedFilingTicket")
     ticket.addItem("Loading tickets…", None)
     layout.addWidget(ticket)
 
-    layout.addWidget(QLabel("Optional email attachment"))
+    layout.addWidget(QLabel("Email attachment (optional)"))
     attachment = QComboBox()
     attachment.setObjectName("enkyronUnifiedFilingAttachment")
     attachment.addItem("Loading archived attachments…", None)
     layout.addWidget(attachment)
 
+    layout.addWidget(QLabel("Reason for filing (30–1,000 characters)"))
     note = QPlainTextEdit()
     note.setObjectName("enkyronUnifiedFilingReason")
     note.setPlaceholderText(
-        "One explanation for the selected exact links (30–1000 characters)"
+        "Why do these selected records belong together?"
     )
     note.setMaximumHeight(90)
     layout.addWidget(note)
 
     approve = QCheckBox(
-        "I reviewed the company, ticket and attachment shown above. "
-        "I approve these exact associations and, if required, retrieval "
-        "into unscanned quarantine."
+        "I reviewed the selected company, ticket and attachment. "
+        "I approve these links and any required quarantine retrieval."
     )
     approve.setObjectName("enkyronUnifiedFilingConfirm")
     layout.addWidget(approve)
-    status = QLabel("Reading existing records. Nothing has been changed.")
+    status = QLabel("Loading verified records. No changes have been made.")
     status.setTextFormat(Qt.TextFormat.PlainText)
     status.setWordWrap(True)
     layout.addWidget(status)
@@ -86,7 +87,7 @@ def open_reviewed_mail_filing(owner):
         "company_id": None, "company_name": None,
         "tickets": {}, "company_loaded": False,
         "tickets_loaded": False, "attachments_loaded": False,
-        "busy": False, "steps": [],
+        "busy": False,
     }
 
     def active():
@@ -114,13 +115,11 @@ def open_reviewed_mail_filing(owner):
 
     def error_notice(message):
         state["busy"] = False
-        history = "; ".join(state["steps"])
         status.setText(
-            message + (" Already recorded: " + history + "."
-                       if history else " No new link confirmed.")
-            + " Inspect the dossier before any retry."
+            message + " No automatic retry. Inspect the existing "
+            "dossier references before trying again."
         )
-        # An uncertain multi-write must be read manually before a new attempt.
+        # An uncertain server response must be read manually before retrying.
         save.setEnabled(False)
         cancel.setText("Close")
 
@@ -174,8 +173,8 @@ def open_reviewed_mail_filing(owner):
             )
         state["tickets_loaded"] = True
         status.setText(
-            "Choose only records you recognise. Ticket/company membership "
-            "will be verified again before any write."
+            "Select the reviewed ticket and/or attachment, explain why, "
+            "then confirm. The server will check the exact identities."
         )
         update()
 
@@ -191,15 +190,21 @@ def open_reviewed_mail_filing(owner):
         for row in rows[:50]:
             if not isinstance(row, dict):
                 continue
+            # Real backend inventory returns "state", not "safety_state" or
+            # "ready". Blocked and unknown states must never be selectable.
+            safety_state = row.get("state")
             if (not row.get("message_id") or not row.get("attachment_id")
-                    or not (row.get("ready")
-                            or row.get("safety_state") == "metadata_only")):
+                    or safety_state not in (
+                        "quarantined_unscanned", "metadata_only")):
                 continue
-            suffix = ("quarantined_unscanned" if row.get("ready")
-                      else "retrieval requires confirmation")
+            selection = dict(row)
+            selection["ready"] = safety_state == "quarantined_unscanned"
+            suffix = ("Quarantined — not scanned"
+                      if selection["ready"]
+                      else "Retrieval to quarantine required")
             attachment.addItem(
                 str(row.get("filename") or "Attachment")[:120]
-                + " · " + suffix, row
+                + " · " + suffix, selection
             )
         state["attachments_loaded"] = True
         update()
@@ -259,21 +264,25 @@ def open_reviewed_mail_filing(owner):
                 )
                 return
             created = result.get("created")
-            if not isinstance(created, dict):
-                error_notice("Dossier filing response incomplete.")
+            required_keys = ("company_document", "ticket_document", "mail_ticket")
+            if (not isinstance(created, dict)
+                    or any(type(created.get(key)) is not bool
+                           for key in required_keys)):
+                error_notice("Filing response is incomplete.")
                 return
-            new_count = sum(value is True for value in created.values())
-            existing_count = sum(value is False for value in created.values())
-            if not tid:
-                existing_count -= 1
-            if not document:
-                existing_count -= (2 if tid else 1)
+            applicable = (["mail_ticket"] if tid else [])
+            if document:
+                applicable.append("company_document")
+                if tid:
+                    applicable.append("ticket_document")
+            new_count = sum(created[key] for key in applicable)
+            existing_count = len(applicable) - new_count
             status.setText(
-                "PASS: {} new association(s), {} already linked. "
-                "Exact CRM/Ticket/NEMORYTH readback verified in one database "
-                "transaction. {} No email was sent.".format(
-                    new_count, max(existing_count, 0),
-                    "Attachment remains quarantined and unscanned."
+                "Filed: {} new link(s); {} already linked. "
+                "Exact references verified in the database. {} "
+                "No email was sent.".format(
+                    new_count, existing_count,
+                    "Attachment remains quarantined (not scanned)."
                     if document else "No attachment was transferred."
                 )
             )
