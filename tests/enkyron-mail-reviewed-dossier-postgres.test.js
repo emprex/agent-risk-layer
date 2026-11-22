@@ -5,6 +5,7 @@ import pg from 'pg';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
 import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
 import {fileReviewedMailDossier} from '../desktop/enkyron-mail-reviewed-dossier.mjs';
+import {SYNTHETIC_SEED_READBACK_SQL,SYNTHETIC_IDS} from '../scripts/enkyron-enk06-uat-launch.mjs';
 
 const raw=process.env.ARL_CI_POSTGRES_URL||'';
 function disposable(){
@@ -180,4 +181,24 @@ test('reviewed Mail + one quarantined document + existing ticket: atomic synthet
   }finally{
     await pool.end();
   }
+});
+
+test('ENK-06 native launcher preflight SQL parses against actual PostgreSQL UUID/TEXT columns',{
+  skip:!raw&&'Disposable PostgreSQL CI only',timeout:30000
+},async()=>{
+  // No fixture mutation. PostgreSQL prepares the real readback SQL, including
+  // all its mixed UUID and TEXT comparison operators, without running it.
+  const pool=new pg.Pool({connectionString:disposable(),max:1});
+  try{
+    const actor='ci-readback',key='local:'+actor;
+    const ids=SYNTHETIC_IDS;
+    const params=[key,ids.company_id,
+      'ENK06 Synthetic Demo Company — NOT REAL',
+      ids.ticket_id,ids.thread_id,ids.attachment_id,ids.message_id];
+    const explained=await pool.query(
+      'EXPLAIN '+SYNTHETIC_SEED_READBACK_SQL,params
+    );
+    assert.ok(explained.rows.length>0);
+    assert.match(SYNTHETIC_SEED_READBACK_SQL,/crm_company_id::text=\$2/);
+  }finally{await pool.end();}
 });
