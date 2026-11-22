@@ -211,7 +211,8 @@ test('native launcher requires exact existing synthetic seed before any Qt proce
     queries.push({sql,args});
     return {rows:[values]};
   }});
-  const good={company:1,ticket:1,thread:1,attachment:1,access:1};
+  const good={company:1,ticket:1,thread:1,attachment:1,access:1,
+    support_access:1};
   assert.equal((await verifySyntheticSeed(fake(good),os.userInfo().username))
     .provider_disabled,true);
   assert.deepEqual(queries[0].args.slice(1),[
@@ -220,12 +221,18 @@ test('native launcher requires exact existing synthetic seed before any Qt proce
     SYNTHETIC_IDS.attachment_id,SYNTHETIC_IDS.message_id
   ]);
   assert.match(queries[0].sql,/can_send=false/);
+  assert.match(queries[0].sql,/mailbox_key='support'/);
   assert.ok(queries.every(x=>x.sql.startsWith('SELECT ')));
   for(const field of Object.keys(good)){
     await assert.rejects(()=>verifySyntheticSeed(
       fake({...good,[field]:0}),os.userInfo().username
     ),/synthetic seed missing/);
   }
+  const early={...good,support_access:0};
+  await assert.rejects(()=>verifySyntheticSeed(fake(early),
+    os.userInfo().username),/synthetic seed missing/);
+  assert.equal((await verifySyntheticSeed(fake(early),
+    os.userInfo().username,{allowMissingSupport:true})).support_ready,false);
   await assert.rejects(()=>verifySyntheticSeed(fake(good),'invalid actor!'),
     /invalid peer identity/);
 });
