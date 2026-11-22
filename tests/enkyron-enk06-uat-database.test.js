@@ -15,7 +15,8 @@ import {requireEnk06SeedIdentity,SYNTHETIC_IDS}
   from '../scripts/enkyron-enk06-uat-seed.mjs';
 import {validateEnk06LaunchEnv,verifySyntheticSeed}
   from '../scripts/enkyron-enk06-uat-launch.mjs';
-import {requireFreshEnk06Database,requirePrepareEnvironment}
+import {requireFreshEnk06Database,requirePrecreatedEnk06Database,
+  requirePrepareEnvironment}
   from '../scripts/enkyron-enk06-uat-prepare.mjs';
 
 const env={ENKYRON_UAT_DATABASE:'enkyron_uat_enk06',
@@ -257,4 +258,26 @@ test('single-step setup rejects inherited database, wrong marker and preview',()
     {ENKYRON_UAT_GUARD:'WRONG'},
     {ENKYRON_UX_PREVIEW_READ_ONLY:'1'},
   ])assert.throws(()=>requirePrepareEnvironment(env),/Refusing/);
+});
+
+test('DBA-precreated ENK-06 database must be exact, peer-owned and unique',()=>{
+  const actor=os.userInfo().username;
+  const identity={database:'postgres',role:actor,port:'5432'};
+  const existing=[{datname:ENKYRON_ENK06_UAT_DATABASE,owner:actor}];
+  assert.doesNotThrow(()=>requirePrecreatedEnk06Database(
+    identity,existing,actor));
+  for(const args of [
+    [identity,[],actor],
+    [identity,[...existing,...existing],actor],
+    [identity,[{datname:ENKYRON_ENK06_UAT_DATABASE,owner:'postgres'}],actor],
+    [identity,[{datname:'arl_local',owner:actor}],actor],
+    [{...identity,role:'postgres'},existing,actor],
+    [{...identity,database:'arl_local'},existing,actor],
+    [{...identity,port:'5433'},existing,actor],
+    [identity,existing,'invalid!'],
+    [identity,null,actor],
+  ])assert.throws(()=>requirePrecreatedEnk06Database(...args),/Refusing/);
+  // The original --apply path must continue to refuse an existing database.
+  assert.throws(()=>requireFreshEnk06Database(identity,existing,actor),
+    /database exists/);
 });
