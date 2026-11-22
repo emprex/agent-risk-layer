@@ -19,12 +19,13 @@ ATT = "44444444-5555-4666-8777-888888888888"
 
 class Bridge:
     def __init__(self, verified=True, existing=False, ready=True, uncertain=False,
-                 include_attachment=True, blocked=False):
+                 include_attachment=True, blocked=False, wrong_result=None):
         self.verified = verified
         self.existing = existing
         self.ready = ready
         self.include_attachment = include_attachment
         self.blocked = blocked
+        self.wrong_result = wrong_result
         self.uncertain = uncertain
         self.calls = []
         self.writes = []
@@ -67,10 +68,16 @@ class Bridge:
             self.requests.append(p)
             self.writes.append("mail-dossier-file")
             data = {
+                "available": True,
                 "verified": not self.uncertain,
+                "provider_unchanged": True,
+                "mailbox": "direction",
                 "thread_id": THREAD, "company_id": COMPANY,
                 "ticket_id": p.get("ticket_id"),
+                "message_id": p.get("message_id"),
                 "attachment_id": p.get("attachment_id"),
+                "safety_state": ("quarantined_unscanned"
+                                 if "attachment_id" in p else None),
                 "created": {
                     "company_document": ("attachment_id" in p and
                                          not self.existing),
@@ -81,6 +88,14 @@ class Bridge:
                                     not self.existing),
                 }
             }
+            if self.wrong_result == "mailbox":
+                data["mailbox"] = "support"
+            elif self.wrong_result == "message":
+                data["message_id"] = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+            elif self.wrong_result == "unsafe":
+                data["safety_state"] = "blocked"
+            elif self.wrong_result == "provider":
+                data["provider_unchanged"] = False
         else:
             raise AssertionError("Unexpected command: " + command)
         if callback:
@@ -236,6 +251,21 @@ class FilingTests(unittest.TestCase):
         attachment = dialog.findChild(QComboBox, "enkyronUnifiedFilingAttachment")
         self.assertEqual(attachment.count(), 1)
         self.assertEqual(self.owner.bridge.writes, [])
+
+    def test_mismatched_canonical_readback_must_never_show_success(self):
+        for field in ("mailbox", "message", "unsafe", "provider"):
+            with self.subTest(field=field):
+                self.owner.bridge = Bridge(wrong_result=field)
+                open_reviewed_mail_filing(self.owner)
+                _dialog, save = self.selected()
+                save.click()
+                self.assertEqual(self.owner.bridge.writes, ["mail-dossier-file"])
+                self.assertEqual(self.owner.refresh_count, 0)
+                self.assertIn("uncertain", self.status())
+                self.assertNotIn("Filed:", self.status())
+                self.assertFalse(save.isEnabled())
+                self.owner.mail_filing_dialog.close()
+                self.owner.mail_filing_dialog = None
 
     def test_uncertain_commit_never_shows_success_or_retries(self):
         self.owner.bridge = Bridge(uncertain=True)
