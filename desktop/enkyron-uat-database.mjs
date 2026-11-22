@@ -4,6 +4,8 @@
 export const ENKYRON_UAT_MARKER = 'ENK03_SYNTHETIC_ONLY';
 export const ENKYRON_ENK05_UAT_MARKER = 'ENK05_SYNTHETIC_ONLY';
 export const ENKYRON_ENK05_UAT_DATABASE = 'enkyron_uat_enk05';
+export const ENKYRON_ENK06_UAT_MARKER = 'ENK06_SYNTHETIC_ONLY';
+export const ENKYRON_ENK06_UAT_DATABASE = 'enkyron_uat_enk06';
 
 const DATABASE_PREFIX = /^enkyron_uat_[a-z0-9_]{1,40}$/;
 // Separate and exact ENK-05 acceptance scope. Never broaden the ENK-03
@@ -17,6 +19,20 @@ const ENK05_COMMANDS = new Set([
   'crm-company-history', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-options',
   'crm-ticket-company', 'crm-link-ticket'
 ]);
+// ENK-06: independent, synthetic-only Mail dossier acceptance scope.
+ // No provider fetch/quarantine, send, reply, archive sync, record movement,
+ // manual CRM linking, ARL assessment mutation or mail subscription API.
+ // Only the human-reviewed atomic dossier link is writable in this mode.
+const ENK06_COMMANDS = new Set([
+  'crm-companies', 'crm-company-tickets', 'crm-company-dossier',
+  'mail-status', 'mail-local-folders', 'mail-local-labels',
+  'mail-local-list', 'mail-local-messages', 'mail-thread-conversation',
+  'mail-local-company', 'mail-local-ticket-links',
+  'mail-document-list', 'mail-document-links', 'mail-ticket-conversations',
+  'mail-attachment-options', 'mail-dossier-file'
+]);
+const ENK06_MAIL_UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
 const UAT_COMMANDS = new Set([
   'tickets', 'tickets-mine', 'tickets-mine-archived', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-sales-pipeline-page',
   'crm-companies', 'crm-contacts',
@@ -66,6 +82,15 @@ export function resolveEnkyronDatabase(env = process.env) {
   if (!hasName && !hasGate) {
     return Object.freeze({ database: 'arl_local', uat: false });
   }
+  // ENK-06 has a dedicated database and marker. Never inherit ENK-03/05
+  // allowances: those test cases intentionally do not permit Mail filing.
+  if (env.ENKYRON_UAT_DATABASE === ENKYRON_ENK06_UAT_DATABASE) {
+    if (env.ENKYRON_UAT_GUARD !== ENKYRON_ENK06_UAT_MARKER) {
+      throw new Error('ENKYRON UAT requires the exact ENK-06 synthetic-only marker');
+    }
+    return Object.freeze({database:ENKYRON_ENK06_UAT_DATABASE,
+      uat:true,marker:ENKYRON_ENK06_UAT_MARKER});
+  }
   // ENK-05 name and marker are a reserved pair. A legacy ENK-03 marker
   // must never route the ENK-05 database into the old CRM UAT rules.
   if (env.ENKYRON_UAT_DATABASE === ENKYRON_ENK05_UAT_DATABASE) {
@@ -83,6 +108,13 @@ export function resolveEnkyronDatabase(env = process.env) {
 }
 
 export function requireEnkyronUatCommand(target, command) {
+  if (target.uat && target.database === ENKYRON_ENK06_UAT_DATABASE) {
+    if (target.marker !== ENKYRON_ENK06_UAT_MARKER ||
+        !ENK06_COMMANDS.has(command)) {
+      throw new Error('ENKYRON ENK-06 UAT blocks non-dossier operations');
+    }
+    return;
+  }
   if (target.uat && target.database === 'enkyron_uat_enk03' &&
       ENK05_COMMANDS.has(command)) return;
   if (target.uat && target.database === ENKYRON_ENK05_UAT_DATABASE) {
@@ -100,6 +132,26 @@ export function requireEnkyronUatCommand(target, command) {
 // ENK-04: a synthetic commercial edit may touch only a reviewed company-linked
 // opportunity. This supplements backend workspace, association and revision checks.
 export function requireEnkyronUatPayload(target, command, payload) {
+  if (target.uat && target.database === ENKYRON_ENK06_UAT_DATABASE) {
+    if (target.marker !== ENKYRON_ENK06_UAT_MARKER ||
+        !ENK06_COMMANDS.has(command)) {
+      throw new Error('ENKYRON ENK-06 UAT operation denied');
+    }
+    // The real backend independently validates names, ticket associations,
+    // mailbox ACL and exact attachment SHA-256 before the single COMMIT.
+    if (command === 'mail-dossier-file' &&
+        (payload?.confirmed !== true ||
+         !['direction','support'].includes(payload.mailbox) ||
+         !ENK06_MAIL_UUID.test(payload.thread_id || '') ||
+         !ENK06_MAIL_UUID.test(payload.company_id || '') ||
+         (payload.ticket_id == null && payload.attachment_id == null) ||
+         typeof payload.review_note !== 'string' ||
+         payload.review_note.trim().length < 30 ||
+         payload.review_note.trim().length > 1000)) {
+      throw new Error('ENKYRON ENK-06 UAT filing requires exact reviewed synthetic references');
+    }
+    return;
+  }
   // ENK-05 controls operate only through their existing backend validators,
   // local-operator checks and explicit human review. No mail or assessment IPC.
   if (target.uat && target.database === ENKYRON_ENK05_UAT_DATABASE) {
@@ -173,7 +225,8 @@ export async function verifyEnkyronUatDatabase(pool, target) {
   const result = await pool.query(
     'SELECT current_database() AS database, EXISTS(' +
     'SELECT 1 FROM public.enkyron_uat_guard WHERE marker = $1) AS verified',
-    [target.database === ENKYRON_ENK05_UAT_DATABASE
+    [target.database === ENKYRON_ENK05_UAT_DATABASE ||
+      target.database === ENKYRON_ENK06_UAT_DATABASE
       ? target.marker : ENKYRON_UAT_MARKER]
   );
   if (result.rows?.length !== 1

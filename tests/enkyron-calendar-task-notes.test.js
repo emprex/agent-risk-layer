@@ -66,5 +66,17 @@ test('My Work second-resolution London-offset window is accepted by Calendar',as
     start:'2026-10-22T19:18:00+00:00',
     end:'2027-01-20T19:18:00+00:00'
   });
-  assert.equal(f.statements.filter(x=>x.sql.startsWith('SELECT ')).length,2);
+  // Calendar now performs three read-only scoped lookups: events, tasks,
+  // and canonical CRM company follow-ups (without copying CRM reminders).
+  const reads=f.statements.filter(x=>x.sql.startsWith('SELECT '));
+  assert.equal(reads.length,3);
+  assert.ok(reads.some(x=>x.sql.includes('FROM enkyron_calendar_events')));
+  assert.ok(reads.some(x=>x.sql.includes('FROM enkyron_calendar_tasks')));
+  const crm=reads.find(x=>x.sql.includes('FROM enkyron_crm_company_followups'));
+  assert.ok(crm,'CRM follow-ups must be projected read-only');
+  assert.deepEqual(crm.params,[
+    'local:operator','2026-10-22T19:18:00.000Z','2027-01-20T19:18:00.000Z'
+  ]);
+  assert.match(crm.sql,/AT TIME ZONE 'Europe\/London'/);
+  assert.equal(f.statements.some(x=>/^\s*(INSERT|UPDATE|DELETE)\b/i.test(x.sql)),false);
 });

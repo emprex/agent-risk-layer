@@ -749,9 +749,13 @@ class MailInboxView(QWidget):
         self.followup_task_button.clicked.connect(self._request_followup_task)
         self.followup_task_button.hide()
         reply_toolbar.addWidget(self.followup_task_button)
-        self.document_dossier_button = QPushButton("Save to dossier…")
+        self.document_dossier_button = QPushButton("File in dossier…")
         self.document_dossier_button.setObjectName(
             "enkyronMailSaveToDossier"
+        )
+        self.document_dossier_button.setToolTip(
+            "One reviewed filing for a conversation already linked to a verified CRM company. "
+            "No email is sent; attachments remain unscanned in quarantine."
         )
         self.document_dossier_button.hide()
         reply_toolbar.addWidget(self.document_dossier_button)
@@ -2454,13 +2458,12 @@ class MailInboxView(QWidget):
             for record in self.items
         ):
             self.localReadRequested.emit(mailbox, thread_id, False)
+        # ENK-06 also files Mail ↔ Ticket without an attachment.
+        # The dialog itself requires a verified CRM company before any write.
         self.document_dossier_button.setVisible(
             self.local_mode and bool(messages)
-            and self.selected_folder not in ('sent', 'drafts')
-            and any(isinstance(m, dict) and
-                    (m.get('attachment_count') or
-                     m.get('attachment_previews'))
-                    for m in messages)
+            and self.selected_folder not in (
+                'sent', 'drafts', 'spam', 'trash')
         )
         return True
 

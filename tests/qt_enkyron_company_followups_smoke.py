@@ -1,10 +1,15 @@
 """UX-13 native company-first follow-up flow; no PostgreSQL or real prospect writes."""
 import os
 import unittest
+import gc
+import faulthandler
 from unittest.mock import patch
 
+# If native Qt teardown fails after assertions pass, preserve the Python stack.
+faulthandler.enable()
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QCoreApplication, QEvent
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QDateEdit, QLineEdit, QPushButton, QTableWidget, QMessageBox, QLabel
 )
@@ -16,6 +21,18 @@ class CompanyFollowupsSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def tearDown(self):
+        # Clear deferred QObject deletes while the offscreen QApplication lives.
+        # Qt otherwise may exit with code 139 even when every assertion passed.
+        self.app.processEvents()
+        QCoreApplication.sendPostedEvents(
+            None, QEvent.Type.DeferredDelete)
+        self.app.processEvents()
+        gc.collect()
+        QCoreApplication.sendPostedEvents(
+            None, QEvent.Type.DeferredDelete)
+        self.app.processEvents()
 
     def test_existing_followup_preloads_on_open_refresh_and_updates_without_duplicate(self):
         calls = []
@@ -100,7 +117,11 @@ class CompanyFollowupsSmoke(unittest.TestCase):
         finally:
             if window:
                 window.close()
+                window.deleteLater()
+                self.app.processEvents()
             DesktopBridge.call = previous
+            # Deferred callbacks must not keep closed widgets alive after test.
+            calls.clear()
 
     def test_company_create_and_global_view_are_native_and_separate(self):
         calls = []
@@ -154,7 +175,11 @@ class CompanyFollowupsSmoke(unittest.TestCase):
         finally:
             if window:
                 window.close()
+                window.deleteLater()
+                self.app.processEvents()
             DesktopBridge.call = previous
+            # Deferred callbacks must not keep closed widgets alive after test.
+            calls.clear()
     def test_sent_mail_prefills_manual_company_followup_without_creating_it(self):
         """Only selected, exact-company, accepted sent mail can propose text."""
         calls = []
@@ -248,6 +273,8 @@ class CompanyFollowupsSmoke(unittest.TestCase):
                 window.deleteLater()
                 self.app.processEvents()
             DesktopBridge.call = previous
+            # Deferred callbacks must not keep closed widgets alive after test.
+            calls.clear()
 
     def test_selected_followup_requires_edit_and_new_record_is_explicit(self):
         """Prevent a selected CRM reminder from accidentally being duplicated."""
@@ -326,6 +353,8 @@ class CompanyFollowupsSmoke(unittest.TestCase):
                 window.deleteLater()
                 self.app.processEvents()
             DesktopBridge.call = previous
+            # Deferred callbacks must not keep closed widgets alive after test.
+            calls.clear()
 
 
 if __name__ == "__main__":

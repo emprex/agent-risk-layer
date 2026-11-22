@@ -35,7 +35,13 @@ class MissionBoardWiringTests(unittest.TestCase):
         self.assertIn("Invalid planning request. Nothing was recorded.", text)
         self.assertIn("self.bridge.call(action, payload=details, callback=received)", text)
         self.assertIn('self.bridge.call("psa-board", "", callback=received)', text)
-        self.assertIn("go_projects.clicked.connect(lambda: self.navigation.setCurrentRow(5))", text)
+        # Projects is a native navigation-list entry; a dedicated go_projects
+        # button no longer exists. Guard the actual signal and route instead.
+        self.assertIn(
+            "self.navigation.currentRowChanged.connect(self.module_changed)", text
+        )
+        self.assertIn("self.load_mission_board_companies()", text)
+        self.assertIn("self.load_mission_board()", text)
 
     def test_example_never_uses_bridge_or_enables_actions(self):
         text = VIEW.read_text(encoding="utf-8")
