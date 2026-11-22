@@ -100,6 +100,12 @@ export async function seedUat(){
             'UAT synthetic company-ticket membership reviewed explicitly.',actor]
         );
         await client.query(
+          'INSERT INTO enkyron_crm_events '+
+          '(id,workspace_key,resource_kind,resource_id,event_type,actor_local) '+
+          "VALUES('eeeeeeee-bbbb-4eee-8bbb-bbbbbbbbbbbb',$1,'company',$2,'linked',$3)",
+          [key,ids.company_id,actor]
+        );
+        await client.query(
           'INSERT INTO enkyron_local_mail_access '+
           '(workspace_key,mailbox_key,role,can_read,can_send,granted_by) '+
           "VALUES($1,'direction','organization_owner_l5',true,false,$2)",
